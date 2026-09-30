@@ -99,8 +99,7 @@ function Lobby({
       consent: consent ?? undefined,
     });
     if ('error' in result) {
-      // meeting_not_started: meeting-service ответит 409, клиент повторяет запрос раз в 5 с
-      // (повтор – вместе с API в EMO-74; на тестовых данных встреча не начнется)
+      // meeting_not_started: meeting-service ответит 409; участник обновляет страницу сам
       if (result.error === 'meeting_not_started') setWaiting(true);
       return;
     }
@@ -182,9 +181,7 @@ function Lobby({
                 <LoaderCircle className="size-4 animate-spin" aria-hidden />
                 Встреча еще не началась
               </p>
-              <p className="text-muted-foreground">
-                Вы войдете автоматически, как только организатор ее начнет. Не закрывайте вкладку.
-              </p>
+              <p className="text-muted-foreground">Обновите страницу, когда встреча начнётся.</p>
               <Button
                 type="button"
                 variant="outline"

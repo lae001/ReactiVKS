@@ -95,6 +95,9 @@ describe('лобби участника', () => {
     await user.click(screen.getByRole('radio', { name: /Участвую без анализа/ }));
     await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
     expect(screen.getByRole('status')).toHaveTextContent('Встреча еще не началась');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Обновите страницу, когда встреча начнётся.',
+    );
   });
 
   it.each([
