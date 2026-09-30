@@ -21,6 +21,7 @@
 | [backend/](backend/) | Устройство бэкенд-сервисов | Халецкий Д. Е. | – |
 | [ml/](ml/) | ML-сервис и обучение модели | ML Engineer – Лесовой А. Е.; интеграция с шиной и LiveKit – архитектор | Архитектор (для интеграции) |
 | [frontend/](frontend/) | Клиентская часть | Frontend Developer – Зимирев К. М. | Архитектор (для контрактов и ADR) |
+| [testing/](testing/) | Журнал дефектов, план и сценарии тестирования | Тестировщик – Зимирев К. М. | Аналитик (сценарии) |
 | [plan/](plan/) | План по 7 спринтам, задачи и оценки | Руководитель проекта – Лесовой А. Е. | Команда на планировании спринта |
 
 ## Порядок чтения
@@ -64,7 +65,12 @@
 
 ### Frontend ([frontend/](frontend/README.md))
 
-[README.md](frontend/README.md) – исходное описание от архитектора; раздел развивает разработчик frontend.
+[README.md](frontend/README.md) – исходное описание от архитектора; раздел развивает разработчик frontend ·
+[webrtc-livekit-notes.md](frontend/webrtc-livekit-notes.md) · [ui-kit.md](frontend/ui-kit.md)
+
+### Тестирование ([testing/](testing/))
+
+[defect-log.md](testing/defect-log.md) – журнал дефектов: поля, серьезность, жизненный цикл · [defect-log.xlsx](testing/defect-log.xlsx)
 
 ### Архитектурные решения ([adr/](adr/))
 

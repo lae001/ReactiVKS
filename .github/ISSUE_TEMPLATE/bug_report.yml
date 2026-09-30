@@ -1,0 +1,67 @@
+name: Дефект
+description: Сообщить о дефекте (порядок ведения – docs/testing/defect-log.md)
+title: "[Компонент] Что не так и где"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Не прикладывайте записи и кадры с лицами людей, не давших согласия (152-ФЗ): используйте фейковое видео Chrome
+        или записи участников команды.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Компонент
+      options: [frontend, auth, meeting, realtime, analytics, ml, livekit, deploy, docs]
+    validations:
+      required: true
+  - type: input
+    id: usecase
+    attributes:
+      label: Прецедент / требование
+      description: UC-1…UC-7 или пункт ТЗ, который нарушен
+      placeholder: UC-2
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      description: Нумерованные, с исходными данными – так, чтобы повторил любой участник
+      placeholder: |
+        1. Открыть /register
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемый результат
+      description: Со ссылкой на ТЗ, прецедент или макет
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактический результат
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Окружение
+      description: Браузер и версия, ОС, сеть (прямое соединение / TURN / ограничение канала), commit или версия сборки
+      placeholder: Chrome 141, macOS 15, прямое соединение, commit abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Серьезность
+      description: Ставит тестировщик; соответствующую метку severity:* добавляется при разборе
+      options: [Блокирующий, Критический, Значительный, Незначительный, Тривиальный]
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Вложения
+      description: Скриншот, запись экрана, лог консоли; для видеосвязи – дамп chrome://webrtc-internals
