@@ -6,6 +6,16 @@ import type { EmotionLabel } from '@/shared/config/emotions';
  * типами, сгенерированными openapi-typescript (src/shared/api/schema.d.ts).
  */
 
+/** Роль учетной записи (схема `User`); у гостя учетной записи нет. */
+export type UserRole = 'organizer' | 'admin';
+
+export interface User {
+  id: string;
+  email: string;
+  display_name: string;
+  role: UserRole;
+}
+
 export type MeetingStatus = 'scheduled' | 'active' | 'ended' | 'cancelled';
 
 export type ConsentState = 'granted' | 'denied' | 'revoked' | 'not_required';
