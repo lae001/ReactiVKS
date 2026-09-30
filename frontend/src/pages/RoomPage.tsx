@@ -1,10 +1,11 @@
 import { X } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { EmotionIndicator } from '@/features/emotions/EmotionIndicator';
 import { EmotionPanel } from '@/features/emotions/EmotionPanel';
 import { type ChatMessage, ChatPanel } from '@/features/room/ChatPanel';
+import { ConfirmDialog } from '@/features/room/ConfirmDialog';
 import { ControlBar } from '@/features/room/ControlBar';
 import { ParticipantsPanel } from '@/features/room/ParticipantsPanel';
 import type { RoomParticipant, SidePanelTab } from '@/features/room/types';
@@ -143,6 +144,7 @@ function Room({
     isOrganizer && meeting.analysis_enabled && isWide() ? 'emotions' : null,
   );
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<RoomParticipant | null>(null);
   const [announcement, setAnnouncement] = useState('');
 
   const self: RoomParticipant = {
@@ -311,7 +313,7 @@ function Room({
                   onMute={(id) =>
                     setOthers((list) => list.map((p) => (p.id === id ? { ...p, micOn: false } : p)))
                   }
-                  onRemove={(id) => setOthers((list) => list.filter((p) => p.id !== id))}
+                  onRemove={(id) => setRemoveTarget(participants.find((p) => p.id === id) ?? null)}
                 />
               )}
               {panel === 'emotions' && <EmotionPanel participants={emotions} elapsed={elapsed} />}
@@ -336,10 +338,26 @@ function Room({
         )}
 
         {confirmEnd && (
-          <EndMeetingDialog
+          <ConfirmDialog
+            title="Завершить встречу для всех?"
+            text="Все участники будут отключены. Итоги встречи появятся в ее карточке."
+            confirmLabel="Завершить встречу"
             onCancel={() => setConfirmEnd(false)}
             // POST /meetings/{id}/end – EMO-75; после завершения – карточка встречи с отчетом
             onConfirm={() => navigate(paths.meeting(meeting.id))}
+          />
+        )}
+        {removeTarget && (
+          <ConfirmDialog
+            title={`Удалить из встречи: ${removeTarget.name}?`}
+            text="Участник будет отключен от встречи."
+            confirmLabel="Удалить из встречи"
+            onCancel={() => setRemoveTarget(null)}
+            // Модерация через REST meeting-service – EMO-75
+            onConfirm={() => {
+              setOthers((list) => list.filter((p) => p.id !== removeTarget.id));
+              setRemoveTarget(null);
+            }}
           />
         )}
       </div>
@@ -357,47 +375,6 @@ function Room({
         onTogglePanel={togglePanel}
         onLeave={leave}
       />
-    </div>
-  );
-}
-
-function EndMeetingDialog({
-  onCancel,
-  onConfirm,
-}: {
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => confirmRef.current?.focus(), []);
-
-  return (
-    <div
-      className="absolute inset-0 z-20 flex items-center justify-center bg-room/70 p-4"
-      onKeyDown={(e) => e.key === 'Escape' && onCancel()}
-    >
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="end-title"
-        aria-describedby="end-text"
-        className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-room-border bg-room-surface p-5"
-      >
-        <h2 id="end-title" className="text-lg font-semibold">
-          Завершить встречу для всех?
-        </h2>
-        <p id="end-text" className="text-sm text-room-muted">
-          Все участники будут отключены. Итоги встречи появятся в ее карточке.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button variant="room" onClick={onCancel}>
-            Отмена
-          </Button>
-          <Button ref={confirmRef} variant="destructive" onClick={onConfirm}>
-            Завершить встречу
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

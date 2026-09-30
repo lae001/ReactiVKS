@@ -38,11 +38,26 @@ describe('комната организатора', () => {
     expect(within(panel).getByText(/рекомендательный характер/)).toBeInTheDocument();
   });
 
-  it('модерация: удаляет участника', async () => {
+  it('модерация: удаление только после подтверждения', async () => {
     const user = userEvent.setup();
     renderRoom('m-active');
     await user.click(await screen.findByRole('button', { name: 'Участники' }));
-    await user.click(screen.getByRole('button', { name: 'Удалить из встречи: Олег Иванов' }));
+    const remove = () =>
+      user.click(screen.getByRole('button', { name: 'Удалить из встречи: Олег Иванов' }));
+
+    await remove();
+    let dialog = screen.getByRole('alertdialog', { name: 'Удалить из встречи: Олег Иванов?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Олег Иванов').length).toBeGreaterThan(0);
+
+    await remove();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    await remove();
+    dialog = screen.getByRole('alertdialog', { name: 'Удалить из встречи: Олег Иванов?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить из встречи' }));
     expect(screen.queryByText('Олег Иванов')).not.toBeInTheDocument();
   });
 
