@@ -33,6 +33,8 @@ describe('маршруты-заглушки', () => {
 
   it('комната загружается лениво', async () => {
     renderAt('/room/m1');
-    expect(await screen.findByText('Встреча m1')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Быстрая встреча' }),
+    ).toBeInTheDocument();
   });
 });

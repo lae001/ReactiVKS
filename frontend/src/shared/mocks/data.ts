@@ -87,6 +87,8 @@ export const MOCK_CONSENT_NOTICE = {
     'Результаты носят вероятностный характер и не являются оценкой личности.',
 };
 
+export const MOCK_ORGANIZER_NAME = 'Иван Петров';
+
 export function findMeetingById(id: string): Meeting | undefined {
   return MOCK_MEETINGS.find((m) => m.id === id);
 }
@@ -101,7 +103,7 @@ export function getJoinInfo(code: string): JoinInfo | undefined {
   if (!m) return undefined;
   return {
     title: m.title,
-    organizer_name: 'Иван Петров',
+    organizer_name: MOCK_ORGANIZER_NAME,
     status: m.status,
     scheduled_at: m.scheduled_at,
     analysis_enabled: m.analysis_enabled,
@@ -125,6 +127,24 @@ export function joinMeeting(
   if (m.status === 'scheduled') return { error: 'meeting_not_started' };
   if (m.status !== 'active') return { error: 'meeting_ended' };
   return { meetingId: m.id };
+}
+
+/** Встреча для комнаты; неизвестный id – «быстрая» встреча с главной («Начать сейчас»). */
+export function getRoomMeeting(id: string): Meeting {
+  return (
+    findMeetingById(id) ??
+    meeting({
+      id,
+      title: 'Быстрая встреча',
+      status: 'active',
+      invite_code: 'demoinstnt',
+      analysis_enabled: true,
+      scheduled_at: null,
+      started_at: null,
+      ended_at: null,
+      participants_count: 1,
+    })
+  );
 }
 
 /** Остальные участники комнаты (без текущего пользователя). */
@@ -204,3 +224,13 @@ export const MOCK_EMOTION_SNAPSHOT: Record<string, SnapshotParticipant> = {
     last: null,
   },
 };
+
+export const MOCK_CHAT = [
+  {
+    id: 'c1',
+    author: 'Анна Смирнова',
+    text: 'Всем привет! Слайды пришлю после встречи.',
+    at: '0:12',
+  },
+  { id: 'c2', author: 'Олег Иванов', text: 'Меня слышно?', at: '0:40' },
+];

@@ -6,8 +6,7 @@ import { paths } from '@/shared/config/routes';
 import { formatMeetingWhen } from '@/shared/lib/format';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
-
-import { CopyLinkButton } from './CopyLinkButton';
+import { CopyLinkButton } from '@/shared/ui/copy-link-button';
 
 const STATUS: Record<
   MeetingStatus,
