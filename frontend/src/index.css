@@ -1,0 +1,95 @@
+@import 'tailwindcss';
+
+/* Базовая палитра (EMO-18). Токены в формате shadcn/ui, светлая и тёмная темы. */
+:root {
+  --background: oklch(0.99 0.002 260);
+  --foreground: oklch(0.2 0.03 265);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --primary: oklch(0.51 0.23 277);
+  --primary-foreground: oklch(0.98 0.01 277);
+  --secondary: oklch(0.96 0.01 265);
+  --secondary-foreground: oklch(0.28 0.04 265);
+  --muted: oklch(0.96 0.008 265);
+  --muted-foreground: oklch(0.48 0.03 265);
+  --accent: oklch(0.94 0.03 277);
+  --accent-foreground: oklch(0.3 0.1 277);
+  --destructive: oklch(0.577 0.245 27);
+  --border: oklch(0.91 0.01 265);
+  --input: oklch(0.91 0.01 265);
+  --ring: oklch(0.51 0.23 277);
+  --radius: 0.625rem;
+
+  /* Эмоции (7 классов модели) — используются в панели эмоций и отчётах */
+  --emo-neutral: oklch(0.62 0.03 260);
+  --emo-happy: oklch(0.75 0.17 145);
+  --emo-surprise: oklch(0.78 0.15 85);
+  --emo-sadness: oklch(0.6 0.13 250);
+  --emo-anger: oklch(0.6 0.23 27);
+  --emo-disgust: oklch(0.55 0.15 130);
+  --emo-fear: oklch(0.55 0.2 310);
+}
+
+.dark {
+  --background: oklch(0.17 0.02 265);
+  --foreground: oklch(0.96 0.005 265);
+  --card: oklch(0.21 0.025 265);
+  --card-foreground: var(--foreground);
+  --primary: oklch(0.68 0.19 277);
+  --primary-foreground: oklch(0.15 0.03 277);
+  --secondary: oklch(0.27 0.03 265);
+  --secondary-foreground: oklch(0.96 0.005 265);
+  --muted: oklch(0.27 0.03 265);
+  --muted-foreground: oklch(0.7 0.03 265);
+  --accent: oklch(0.3 0.06 277);
+  --accent-foreground: oklch(0.96 0.005 265);
+  --destructive: oklch(0.7 0.19 22);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.68 0.19 277);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --color-emo-neutral: var(--emo-neutral);
+  --color-emo-happy: var(--emo-happy);
+  --color-emo-surprise: var(--emo-surprise);
+  --color-emo-sadness: var(--emo-sadness);
+  --color-emo-anger: var(--emo-anger);
+  --color-emo-disgust: var(--emo-disgust);
+  --color-emo-fear: var(--emo-fear);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family:
+      'Inter',
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+  }
+}
