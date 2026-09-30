@@ -109,6 +109,24 @@ export function getJoinInfo(code: string): JoinInfo | undefined {
   };
 }
 
+export type JoinError = 'not_found' | 'meeting_not_started' | 'meeting_ended' | 'consent_required';
+
+/**
+ * Аналог POST /join/{invite_code}: те же проверки и коды ошибок, что у meeting-service.
+ * Возвращает id встречи для перехода в комнату.
+ */
+export function joinMeeting(
+  code: string,
+  body: { display_name: string; consent?: 'granted' | 'denied' },
+): { meetingId: string } | { error: JoinError } {
+  const m = findMeetingByInvite(code);
+  if (!m) return { error: 'not_found' };
+  if (m.analysis_enabled && !body.consent) return { error: 'consent_required' };
+  if (m.status === 'scheduled') return { error: 'meeting_not_started' };
+  if (m.status !== 'active') return { error: 'meeting_ended' };
+  return { meetingId: m.id };
+}
+
 /** Остальные участники комнаты (без текущего пользователя). */
 export const MOCK_ROOM_PARTICIPANTS: Participant[] = [
   {
