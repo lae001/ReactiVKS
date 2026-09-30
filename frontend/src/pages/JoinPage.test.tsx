@@ -51,6 +51,25 @@ describe('лобби участника', () => {
     });
   });
 
+  it('ни один вариант согласия не выбран по умолчанию; «без анализа» – тоже явный выбор', async () => {
+    const user = userEvent.setup();
+    const router = renderLobby('demoactive');
+    await user.type(await screen.findByLabelText('Как вас представить'), 'Олег');
+    expect(screen.queryByRole('radio', { checked: true })).not.toBeInTheDocument();
+
+    // повторная попытка без выбора тоже не пускает
+    await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+    await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+    expect(screen.getByText(/Без выбора войти нельзя/)).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/j/demoactive');
+
+    await user.click(screen.getByRole('radio', { name: /Участвую без анализа/ }));
+    expect(screen.queryByText(/Без выбора войти нельзя/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/room/m-active'));
+    expect(router.state.location.state).toMatchObject({ consent: 'denied' });
+  });
+
   it('без имени войти нельзя', async () => {
     const user = userEvent.setup();
     renderLobby('demoactive');
