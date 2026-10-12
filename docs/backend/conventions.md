@@ -5,20 +5,25 @@
 
 ## 1. Библиотека `vks_common`
 
-| Модуль | Содержимое |
-|---|---|
-| `vks_common.app` | Фабрика `create_app(settings, routers, lifespan_hooks)`: middleware, обработчики ошибок, `/health`, `/ready`, `/metrics`, OpenAPI |
-| `vks_common.config` | Базовый класс `BaseServiceSettings` (pydantic-settings) |
-| `vks_common.auth` | Проверка JWT по JWKS, зависимости FastAPI `require_user`, `require_admin`, `require_service` |
-| `vks_common.errors` | Иерархия исключений, реестр кодов ошибок, преобразование в Problem Details |
-| `vks_common.http` | Фабрика `httpx.AsyncClient` для внутренних вызовов (таймауты, повторы, заголовки) |
-| `vks_common.db` | Движок и фабрика сессий SQLAlchemy 2.0 (async), Unit of Work, базовый репозиторий |
-| `vks_common.kafka` | Публикация (`OutboxRelay`, `EventProducer`) и потребление (`EventConsumer`) событий Kafka на `aiokafka` |
-| `vks_common.jobs` | Периодические задачи с распределенной блокировкой (см. [background-jobs.md](background-jobs.md)) |
-| `vks_common.logging` | Настройка structlog (JSON), контекст `request_id`/`meeting_id` |
-| `vks_common.clock` | `Clock` (`now()` в UTC) – подменяется в тестах |
-| `vks_common.ids` | `new_id()` → UUIDv7, генерация случайных токенов и `invite_code` |
-| `vks_contracts` (отдельный пакет) | Pydantic-модели событий и внутренних API ([events.md](../api/events.md)) |
+| Модуль | Содержимое | Есть |
+|---|---|---|
+| `vks_common.app` | Фабрика `create_app(settings, routers, lifespan)`: middleware, обработчики ошибок, `/health`, `/ready`, OpenAPI; `use_database` | ✓ |
+| `vks_common.config` | `BaseServiceSettings`, `DatabaseServiceSettings` (pydantic-settings), секреты из файлов `<ИМЯ>_FILE` | ✓ |
+| `vks_common.auth` | Проверка JWT RS256 (`TokenVerifier`), ключи `StaticKeys` / `JwksKeys`, зависимости `require_user`, `require_admin` | ✓ |
+| `vks_common.errors` | Базовые классы ошибок `AppError` и наследники – без зависимостей, их импортирует домен | ✓ |
+| `vks_common.problem_details` | Преобразование ошибок в RFC 9457, описание ошибок в OpenAPI | ✓ |
+| `vks_common.middleware` | `request_id` из `X-Request-ID`, журнал доступа | ✓ |
+| `vks_common.db` | Движок и сессии SQLAlchemy 2.0 (async), `transaction()`, соглашение об именах, SQLSTATE, миграции и сверка версии схемы | ✓ |
+| `vks_common.logging` | Настройка structlog (JSON), контекст `request_id`/`user_id`/`meeting_id` | ✓ |
+| `vks_common.clock` | `Clock` (`now()` в UTC), `FixedClock` для тестов | ✓ |
+| `vks_common.ids` | `new_id()` → UUIDv7, случайные токены | ✓ |
+| `vks_common.testing` | PostgreSQL в testcontainers с init-скриптом `deploy/`, изоляция откатом, `TokenFactory`, клиент приложения | ✓ |
+| `vks_common.auth` (дополнение) | `require_service` (`X-Service-Token`) | с первым `/internal/*` |
+| `vks_common.http` | Фабрика `httpx.AsyncClient` для внутренних вызовов (таймауты, повторы, заголовки) | с meeting-service |
+| `vks_common.kafka` | Публикация (`OutboxRelay`, `EventProducer`) и потребление (`EventConsumer`) событий Kafka на `aiokafka` | с первым событием |
+| `vks_common.jobs` | Периодические задачи с распределенной блокировкой (см. [background-jobs.md](background-jobs.md)) | с первой задачей |
+| `/metrics` в `vks_common.app` | Метрики Prometheus | с мониторингом (спринт 6) |
+| `vks_contracts` (отдельный пакет) | Pydantic-модели событий и внутренних API ([events.md](../api/events.md)) | с первым событием |
 
 ## 2. Устройство сервиса
 
