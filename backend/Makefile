@@ -27,6 +27,8 @@ type: ## mypy --strict по каждому пакету
 		echo "==> $$package"; \
 		$(UV) run mypy $$(ls -d $$package/src $$package/tests 2>/dev/null) || exit 1; \
 	done
+	@echo "==> scripts"
+	@$(UV) run mypy scripts
 
 imports: ## import-linter: границы слоев
 	$(UV) run lint-imports

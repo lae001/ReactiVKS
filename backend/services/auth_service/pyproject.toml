@@ -3,7 +3,13 @@ name = "auth-service"
 version = "0.1.0"
 description = "ReactiVKS auth-service: учетные записи, вход, JWT RS256 и JWKS"
 requires-python = ">=3.12,<3.13"
-dependencies = ["vks-common"]
+dependencies = [
+    "vks-common",
+    # Argon2id – эталонная реализация победителя Password Hashing Competition.
+    "argon2-cffi==25.1.0",
+    # Подпись access-токенов RS256; extra crypto читает PEM и считает отпечаток ключа (kid).
+    "pyjwt[crypto]==2.13.0",
+]
 
 [tool.uv.sources]
 vks-common = { workspace = true }

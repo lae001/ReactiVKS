@@ -50,6 +50,8 @@ ignore = ["N818"]
 # Помощники тестов шасси: одноразовые пароли контейнеров.
 "**/vks_common/testing/**" = ["S105", "S106"]
 "**/migrations/**" = ["I001"]
+# Скрипты и CLI пишут в консоль – это их назначение.
+"scripts/**" = ["T201"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["vks_common", "auth_service"]
@@ -126,7 +128,7 @@ layers = [
     "(main)",
     "(api) | (cli)",
     "(schemas) | (services)",
-    "(repositories) | (adapters)",
+    "(repositories) | adapters",
     "models",
     "domain",
 ]
