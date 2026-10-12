@@ -126,7 +126,7 @@ type = "layers"
 containers = ["auth_service"]
 layers = [
     "main",
-    "api | (cli)",
+    "api | cli",
     "schemas | services",
     "repositories | adapters",
     "models",

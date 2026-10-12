@@ -12,6 +12,9 @@ dependencies = [
     "uvicorn[standard]==0.52.4",
 ]
 
+[project.scripts]
+vks-auth = "auth_service.cli:main"
+
 [tool.uv.sources]
 vks-common = { workspace = true }
 
