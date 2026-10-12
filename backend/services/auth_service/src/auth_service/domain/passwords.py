@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from auth_service.domain.errors import WeakPassword
 
@@ -17,6 +17,7 @@ MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
 
 
+@runtime_checkable
 class PasswordHasher(Protocol):
     """Что сценариям нужно от хеша пароля."""
 

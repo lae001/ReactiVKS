@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 __all__ = ["PublicJwk", "TokenSigner"]
 
@@ -13,6 +13,7 @@ __all__ = ["PublicJwk", "TokenSigner"]
 PublicJwk = dict[str, str]
 
 
+@runtime_checkable
 class TokenSigner(Protocol):
     """Текущий ключ подписи и публичные ключи, которые нужно опубликовать в JWKS."""
 

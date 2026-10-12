@@ -9,6 +9,7 @@ dependencies = [
     "argon2-cffi==25.1.0",
     # Подпись access-токенов RS256; extra crypto читает PEM и считает отпечаток ключа (kid).
     "pyjwt[crypto]==2.13.0",
+    "uvicorn[standard]==0.52.4",
 ]
 
 [tool.uv.sources]
