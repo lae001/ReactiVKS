@@ -28,7 +28,9 @@ from vks_common.config import DatabaseServiceSettings
 from vks_common.logging import get_logger
 
 __all__ = [
+    "MIGRATION_CONNECT_ARGS",
     "SchemaVersionMismatch",
+    "autogenerate_options",
     "check_schema_is_current",
     "current_revisions",
     "head_revisions",
@@ -84,7 +86,7 @@ def run_migrations(*, target_metadata: MetaData, schema: str) -> None:
 
 async def _run_online(url: str, target_metadata: MetaData, schema: str) -> None:
     # NullPool: запуск миграций – одно соединение на несколько секунд, держать пул незачем.
-    engine = create_async_engine(url, poolclass=NullPool)
+    engine = create_async_engine(url, poolclass=NullPool, connect_args=MIGRATION_CONNECT_ARGS)
     try:
         async with engine.connect() as connection:
             await connection.run_sync(_apply, target_metadata, schema)
@@ -92,20 +94,38 @@ async def _run_online(url: str, target_metadata: MetaData, schema: str) -> None:
         await engine.dispose()
 
 
-def _apply(connection: Connection, target_metadata: MetaData, schema: str) -> None:
+# Соединения миграций работают с search_path = public. У роли сервиса схема по умолчанию – его собственная
+# (search_path = auth, public), и тогда Alembic отражает ее таблицы и внешние ключи без схемы, а модели объявляют
+# схему явно: сравнение видело бы расхождения там, где их нет. Так схема сервиса всегда названа явно – и в
+# миграциях, и в отражении.
+MIGRATION_CONNECT_ARGS: dict[str, object] = {"server_settings": {"search_path": "public"}}
+
+
+def autogenerate_options(schema: str) -> dict[str, object]:
+    """Параметры сравнения моделей с БД – общие для ``env.py`` и теста «модели = миграции».
+
+    Сравнивается только схема сервиса: чужие ему не принадлежат.
+    """
+
     def include_name(name: str | None, type_: str, parent_names: object) -> bool:
-        # Автогенерация смотрит только на схему сервиса: чужие схемы ему и не видны, и не принадлежат.
         return type_ != "schema" or name == schema
 
+    return {
+        # alembic_version – в схеме сервиса (database.md), и сравнение не должно считать ее лишней таблицей.
+        "version_table_schema": schema,
+        "include_schemas": True,
+        "include_name": include_name,
+        # Без compare_type изменение типа колонки автогенерация молча пропускает.
+        "compare_type": True,
+        "compare_server_default": True,
+    }
+
+
+def _apply(connection: Connection, target_metadata: MetaData, schema: str) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        version_table_schema=schema,
-        include_schemas=True,
-        include_name=include_name,
-        # Без compare_type изменение типа колонки автогенерация молча пропускает.
-        compare_type=True,
-        compare_server_default=True,
+        **autogenerate_options(schema),  # type: ignore[arg-type]  # configure принимает **kw без типов
     )
     with context.begin_transaction():
         context.run_migrations()
