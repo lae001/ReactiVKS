@@ -90,15 +90,19 @@ async def test_schema_check_passes_at_head(engine: AsyncEngine, auth_role_url: s
     await check_schema_is_current(engine, config, schema="auth")
 
 
-async def test_schema_check_fails_where_migrations_were_not_applied(postgres: PostgresServer) -> None:
-    # У meeting_svc миграции примера не применялись: в его схеме нет alembic_version.
-    url = postgres.role_url("meeting_svc")
-    engine = create_engine(url)
-    config = load_alembic_config(EXAMPLE_ALEMBIC_INI, database_url=url)
+@pytest.fixture(scope="module")
+def unmigrated_url(postgres: PostgresServer) -> str:
+    """База, где миграции примера не применялись: в схеме нет alembic_version."""
+    return postgres.role_url("auth_svc", database=postgres.create_database("chassis_unmigrated"))
+
+
+async def test_schema_check_fails_where_migrations_were_not_applied(unmigrated_url: str) -> None:
+    engine = create_engine(unmigrated_url)
+    config = load_alembic_config(EXAMPLE_ALEMBIC_INI, database_url=unmigrated_url)
 
     try:
         with pytest.raises(SchemaVersionMismatch, match="<нет>"):
-            await check_schema_is_current(engine, config, schema="meeting")
+            await check_schema_is_current(engine, config, schema="auth")
     finally:
         await engine.dispose()
 

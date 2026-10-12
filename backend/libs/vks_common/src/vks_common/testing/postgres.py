@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from pathlib import Path
 
 import docker
 from docker.errors import DockerException
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
 __all__ = [
@@ -46,16 +49,34 @@ class PostgresServer:
     host: str
     port: int
 
-    def url(self, role: str, password: str) -> str:
-        return f"postgresql+asyncpg://{role}:{password}@{self.host}:{self.port}/{DATABASE_NAME}"
+    def url(self, role: str, password: str, *, database: str = DATABASE_NAME) -> str:
+        return f"postgresql+asyncpg://{role}:{password}@{self.host}:{self.port}/{database}"
 
     @property
     def superuser_url(self) -> str:
         return self.url(SUPERUSER, SUPERUSER_PASSWORD)
 
-    def role_url(self, role: str) -> str:
+    def role_url(self, role: str, *, database: str = DATABASE_NAME) -> str:
         """Адрес для роли сервиса (``auth_svc``) – с ее правами, как у сервиса в работе."""
-        return self.url(role, SERVICE_ROLE_PASSWORDS[role])
+        return self.url(role, SERVICE_ROLE_PASSWORDS[role], database=database)
+
+    def create_database(self, name: str) -> str:
+        """Создать базу ``name`` копией ``vks`` после init-скрипта и вернуть ее имя.
+
+        У каждого тестового пакета своя база: миграции разных пакетов (и их ``alembic_version``) не мешают друг
+        другу, а роли, схемы и расширения те же, что в работе. ``CREATE DATABASE … TEMPLATE`` копирует их целиком.
+        """
+        asyncio.run(self._recreate(name))
+        return name
+
+    async def _recreate(self, name: str) -> None:
+        engine = create_async_engine(self.superuser_url, isolation_level="AUTOCOMMIT")
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
+                await connection.execute(text(f'CREATE DATABASE "{name}" TEMPLATE {DATABASE_NAME}'))
+        finally:
+            await engine.dispose()
 
 
 def docker_is_available() -> bool:
