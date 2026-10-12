@@ -14,10 +14,16 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth_service.domain.errors import InvalidCredentials, InvalidEmail
+from auth_service.domain.errors import InvalidCredentials, InvalidEmail, SessionInvalid
 from auth_service.domain.identifiers import RefreshTokenId, SessionFamilyId
 from auth_service.domain.passwords import PasswordHasher
-from auth_service.domain.sessions import RefreshToken, build_access_claims, hash_refresh_token
+from auth_service.domain.sessions import (
+    RefreshOutcome,
+    RefreshToken,
+    build_access_claims,
+    hash_refresh_token,
+    judge_refresh,
+)
 from auth_service.domain.signing import TokenSigner
 from auth_service.domain.users import User, normalize_email
 from auth_service.repositories.refresh_tokens import RefreshTokenRepository
@@ -27,7 +33,7 @@ from vks_common.db import transaction
 from vks_common.ids import new_id, new_token
 from vks_common.logging import get_logger
 
-__all__ = ["IssuedSession", "Login", "TokenPolicy"]
+__all__ = ["IssuedSession", "Login", "Logout", "RefreshSession", "TokenPolicy"]
 
 _logger = get_logger(__name__)
 
@@ -156,3 +162,74 @@ class Login:
         except InvalidEmail:
             return None
         return await self._users.get_by_email(normalized)
+
+
+class RefreshSession:
+    """Обмен refresh-токена на новую пару в той же семье (ротация)."""
+
+    def __init__(self, *, session: AsyncSession, signer: TokenSigner, clock: Clock, policy: TokenPolicy) -> None:
+        self._session = session
+        self._users = UserRepository(session)
+        self._tokens = RefreshTokenRepository(session)
+        self._clock = clock
+        self._issuer = _SessionIssuer(session=session, signer=signer, policy=policy)
+
+    async def execute(self, *, refresh_token: str | None, user_agent: str | None = None) -> IssuedSession:
+        """Поиск, решение, отзыв и выпуск преемника – в одной транзакции под блокировкой строки токена. Отказ
+        возбуждается после ее фиксации: семья, отозванная из-за повторного использования, должна остаться
+        отозванной."""
+        if not refresh_token:
+            raise SessionInvalid()
+        now = self._clock.now()
+        async with transaction(self._session):
+            stored = await self._tokens.lock_by_hash(hash_refresh_token(refresh_token))
+            issued = await self._rotate(stored, now=now, user_agent=user_agent) if stored is not None else None
+        if issued is None:
+            raise SessionInvalid()
+        return issued
+
+    async def _rotate(self, stored: RefreshToken, *, now: datetime, user_agent: str | None) -> IssuedSession | None:
+        user = await self._users.get_by_id(stored.user_id)
+        outcome = judge_refresh(stored, user=user, now=now)
+        if outcome is RefreshOutcome.REVOKE_FAMILY:
+            revoked = await self._tokens.revoke_family(stored.family_id, at=now)
+            if stored.is_spent:
+                # warning: система справилась сама, но это возможная кража – повод посмотреть журнал.
+                _logger.warning(
+                    "refresh token reuse detected, family revoked",
+                    user_id=str(stored.user_id),
+                    family_id=str(stored.family_id),
+                    sessions_ended=revoked,
+                )
+            return None
+        if outcome is RefreshOutcome.REJECT or user is None:
+            return None
+
+        issued, successor = await self._issuer.issue(
+            user=user,
+            family_id=stored.family_id,
+            now=now,
+            user_agent=user_agent,
+        )
+        await self._tokens.save_rotation(stored.rotated(successor=successor, now=now))
+        _logger.info("session refreshed", user_id=str(user.id))
+        return issued
+
+
+class Logout:
+    """Выход: отзыв семьи текущего токена. Неизвестный или уже отозванный токен – не ошибка, выход повторяем."""
+
+    def __init__(self, *, session: AsyncSession, clock: Clock) -> None:
+        self._session = session
+        self._tokens = RefreshTokenRepository(session)
+        self._clock = clock
+
+    async def execute(self, *, refresh_token: str | None) -> None:
+        if not refresh_token:
+            return
+        async with transaction(self._session):
+            stored = await self._tokens.get_by_hash(hash_refresh_token(refresh_token))
+            if stored is None:
+                return
+            await self._tokens.revoke_family(stored.family_id, at=self._clock.now())
+        _logger.info("user signed out", user_id=str(stored.user_id))

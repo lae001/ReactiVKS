@@ -10,7 +10,13 @@ from datetime import datetime
 
 from fastapi import Response
 
-__all__ = ["REFRESH_COOKIE", "REFRESH_COOKIE_PATH", "clear_refresh_cookie", "set_refresh_cookie"]
+__all__ = [
+    "REFRESH_COOKIE",
+    "REFRESH_COOKIE_PATH",
+    "clear_refresh_cookie",
+    "cleared_refresh_cookie_header",
+    "set_refresh_cookie",
+]
 
 REFRESH_COOKIE = "vks_refresh"
 REFRESH_COOKIE_PATH = "/api/v1/auth"
@@ -30,3 +36,10 @@ def set_refresh_cookie(response: Response, token: str, *, expires_at: datetime, 
 
 def clear_refresh_cookie(response: Response, *, secure: bool) -> None:
     response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, secure=secure, httponly=True, samesite="strict")
+
+
+def cleared_refresh_cookie_header(*, secure: bool) -> str:
+    """Значение ``Set-Cookie``, стирающее cookie, – для ответа об ошибке, который строит обработчик шасси."""
+    response = Response()
+    clear_refresh_cookie(response, secure=secure)
+    return response.headers["set-cookie"]

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from enum import StrEnum
 from uuid import UUID
 
 from auth_service.domain.identifiers import RefreshTokenId, SessionFamilyId, UserId
@@ -18,9 +19,11 @@ from auth_service.domain.users import User
 __all__ = [
     "ACCESS_TOKEN_TTL",
     "REFRESH_TOKEN_TTL",
+    "RefreshOutcome",
     "RefreshToken",
     "build_access_claims",
     "hash_refresh_token",
+    "judge_refresh",
 ]
 
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
@@ -52,6 +55,32 @@ class RefreshToken:
         return replace(self, revoked_at=now, replaced_by=successor)
 
 
+class RefreshOutcome(StrEnum):
+    """Что делать с предъявленным refresh-токеном."""
+
+    ROTATE = "rotate"
+    REJECT = "reject"
+    REVOKE_FAMILY = "revoke_family"
+
+
+def judge_refresh(token: RefreshToken, *, user: User | None, now: datetime) -> RefreshOutcome:
+    """Решение по обмену токена.
+
+    - Уже обмененный или отозванный токен – признак кражи: отзывается вся семья (одно устройство разлогинено,
+      остальные сессии пользователя живут).
+    - Истекший – сессия кончилась сама, семью трогать незачем.
+    - Учетной записи нет или она заблокирована – семья закрывается, чтобы оставшиеся у пользователя токены
+      перестали работать.
+    """
+    if token.is_spent:
+        return RefreshOutcome.REVOKE_FAMILY
+    if token.is_expired(now):
+        return RefreshOutcome.REJECT
+    if user is None or user.is_blocked:
+        return RefreshOutcome.REVOKE_FAMILY
+    return RefreshOutcome.ROTATE
+
+
 def build_access_claims(
     *,
     user: User,
@@ -77,4 +106,5 @@ def build_access_claims(
 
 def hash_refresh_token(token: str) -> bytes:
     """Значение ``refresh_tokens.token_hash``. SHA-256 достаточно: токен – 256 случайных бит, перебора нет."""
-    return hashlib.sha256(token.encode("ascii")).digest()
+    # utf-8, а не ascii: значение приходит из cookie клиента и может оказаться любым.
+    return hashlib.sha256(token.encode("utf-8")).digest()

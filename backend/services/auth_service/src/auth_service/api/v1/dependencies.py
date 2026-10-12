@@ -17,12 +17,20 @@ from auth_service.domain.passwords import PasswordHasher
 from auth_service.domain.signing import TokenSigner
 from auth_service.services.accounts import RegisterOrganizer
 from auth_service.services.keys import PublishedKeys
-from auth_service.services.sessions import Login, TokenPolicy
+from auth_service.services.sessions import Login, Logout, RefreshSession, TokenPolicy
 from auth_service.settings import AuthSettings
 from vks_common.clock import Clock
 from vks_common.db import get_session
 
-__all__ = ["CurrentClock", "LoginScenario", "PublishedKeysScenario", "RegisterOrganizerScenario", "Settings"]
+__all__ = [
+    "CurrentClock",
+    "LoginScenario",
+    "LogoutScenario",
+    "PublishedKeysScenario",
+    "RefreshSessionScenario",
+    "RegisterOrganizerScenario",
+    "Settings",
+]
 
 
 def get_settings(request: Request) -> AuthSettings:
@@ -98,3 +106,15 @@ def build_login(session: Session, hasher: Hasher, signer: Signer, clock: Current
 
 
 LoginScenario = Annotated[Login, Depends(build_login)]
+
+
+def build_refresh_session(session: Session, signer: Signer, clock: CurrentClock, policy: Policy) -> RefreshSession:
+    return RefreshSession(session=session, signer=signer, clock=clock, policy=policy)
+
+
+def build_logout(session: Session, clock: CurrentClock) -> Logout:
+    return Logout(session=session, clock=clock)
+
+
+RefreshSessionScenario = Annotated[RefreshSession, Depends(build_refresh_session)]
+LogoutScenario = Annotated[Logout, Depends(build_logout)]

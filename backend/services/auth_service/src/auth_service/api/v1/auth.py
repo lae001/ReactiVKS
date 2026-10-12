@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response, status
+from typing import Annotated
 
-from auth_service.api.v1.cookies import set_refresh_cookie
+from fastapi import APIRouter, Cookie, Request, Response, status
+
+from auth_service.api.v1.cookies import (
+    REFRESH_COOKIE,
+    clear_refresh_cookie,
+    cleared_refresh_cookie_header,
+    set_refresh_cookie,
+)
 from auth_service.api.v1.dependencies import (
     CurrentClock,
     LoginScenario,
+    LogoutScenario,
     PublishedKeysScenario,
+    RefreshSessionScenario,
     RegisterOrganizerScenario,
     Settings,
 )
+from auth_service.domain.errors import SessionInvalid
 from auth_service.schemas.auth import (
     AuthConfigResponse,
     JsonWebKey,
@@ -26,6 +36,8 @@ from auth_service.services.sessions import IssuedSession
 __all__ = ["router"]
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+RefreshCookie = Annotated[str | None, Cookie(alias=REFRESH_COOKIE, include_in_schema=False)]
 
 # Ключи меняются при ротации раз в месяцы, а сервисы перечитывают JWKS при неизвестном kid: кеш на 5 минут безопасен.
 _JWKS_CACHE_CONTROL = "public, max-age=300"
@@ -73,6 +85,45 @@ async def login(
         user_agent=request.headers.get("user-agent"),
     )
     return _session_response(issued, response, settings=settings, clock=clock)
+
+
+@router.post(
+    "/refresh",
+    summary="Обновление токенов",
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Нет cookie, токен неизвестен, истек или отозван"}},
+)
+async def refresh(
+    request: Request,
+    response: Response,
+    scenario: RefreshSessionScenario,
+    settings: Settings,
+    clock: CurrentClock,
+    refresh_token: RefreshCookie = None,
+) -> TokenResponse:
+    """Ротация: старый refresh-токен больше не действует, в cookie – новый.
+
+    Повторное предъявление уже обмененного токена отзывает всю его семью (это устройство разлогинено). Причина
+    `401` не раскрывается; негодная cookie стирается.
+    """
+    try:
+        issued = await scenario.execute(refresh_token=refresh_token, user_agent=request.headers.get("user-agent"))
+    except SessionInvalid as error:
+        raise SessionInvalid(
+            headers={"set-cookie": cleared_refresh_cookie_header(secure=settings.auth_refresh_cookie_secure)}
+        ) from error
+    return _session_response(issued, response, settings=settings, clock=clock)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Выход")
+async def logout(
+    response: Response, scenario: LogoutScenario, settings: Settings, refresh_token: RefreshCookie = None
+) -> None:
+    """Отзывает семью текущего refresh-токена и стирает cookie. `204` всегда – выход можно повторять.
+
+    Выданный access-токен действует до истечения срока (до 15 минут): клиент просто забывает его.
+    """
+    await scenario.execute(refresh_token=refresh_token)
+    clear_refresh_cookie(response, secure=settings.auth_refresh_cookie_secure)
 
 
 @router.get("/config", summary="Публичные флаги")
