@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from auth_service.adapters.argon2_hasher import Argon2Hasher
 from auth_service.adapters.rsa_keys import RsaKeyRing
-from auth_service.api.v1 import auth
+from auth_service.api.v1 import auth, users
 from auth_service.settings import ALEMBIC_INI, AuthSettings
 from vks_common.app import create_app, use_database
 from vks_common.auth import StaticKeys, TokenVerifier, use_authentication
@@ -43,7 +43,7 @@ def create_application(settings: AuthSettings | None = None) -> FastAPI:
         await check_schema_is_current(database.engine, load_alembic_config(ALEMBIC_INI), schema=SCHEMA)
         yield
 
-    app = create_app(resolved, routers=[auth.router], lifespan=lifespan, title="ReactiVKS auth-service")
+    app = create_app(resolved, routers=[auth.router, users.router], lifespan=lifespan, title="ReactiVKS auth-service")
     app.state.password_hasher = Argon2Hasher(
         time_cost=resolved.auth_argon2_time_cost,
         memory_kib=resolved.auth_argon2_memory_kib,

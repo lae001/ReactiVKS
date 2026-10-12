@@ -5,11 +5,15 @@ from __future__ import annotations
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from auth_service.domain.users import User
+from auth_service.domain.users import MAX_DISPLAY_NAME_LENGTH, User
 
-__all__ = ["UserResponse"]
+__all__ = ["RenameRequest", "UserResponse"]
+
+
+class RenameRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=MAX_DISPLAY_NAME_LENGTH, examples=["Иван Петров"])
 
 
 class UserResponse(BaseModel):

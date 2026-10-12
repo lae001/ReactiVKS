@@ -3,6 +3,7 @@
 from vks_common.errors import Conflict, Forbidden, NotFound, Unauthorized, ValidationFailed
 
 __all__ = [
+    "AccountGone",
     "EmailTaken",
     "InvalidCredentials",
     "InvalidDisplayName",
@@ -63,3 +64,7 @@ class SessionInvalid(Unauthorized):
 
 class RegistrationClosed(NotFound):
     """Открытая регистрация выключена (``AUTH_REGISTRATION_ENABLED=false``): эндпоинта как будто нет."""
+
+
+class AccountGone(Unauthorized):
+    """Access-токен еще действует, а учетной записи уже нет: для сервиса такой вызывающий не аутентифицирован."""
