@@ -113,5 +113,5 @@ layers = [
     "(auth) | (db)",
     "(errors) | (middleware)",
     "(logging)",
-    "(config) | (clock) | (ids)",
+    "config | clock | ids",
 ]
