@@ -111,7 +111,7 @@ layers = [
     "(testing)",
     "(app)",
     "(auth) | (db)",
-    "(errors) | middleware",
+    "problem_details | middleware",
     "logging",
-    "config | clock | ids",
+    "config | clock | ids | errors",
 ]
