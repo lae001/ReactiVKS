@@ -22,14 +22,15 @@
 
 ## 2. Устройство сервиса
 
-Слои и каталоги – [architecture/07-development.md](../architecture/07-development.md#72-внутренняя-структура-python-сервиса).
-Дополнительные правила:
+Слои, каталоги и правила импорта – [coding-standards.md](coding-standards.md#2-структура),
+схема – [architecture/07-development.md](../architecture/07-development.md#72-внутренняя-структура-python-сервиса).
+Кратко:
 
 - `api/` не содержит бизнес-логики: разбор запроса → вызов сценария из `services/` → формирование ответа.
-- Схемы запросов/ответов (`api/schemas.py`) отделены от доменных сущностей (`domain/`) и от моделей ORM (`infra/db/models.py`).
-- Сценарий использования = один публичный метод класса в `services/`, одна транзакция.
-- Внешние системы (LiveKit, Redis, SMTP, другие сервисы) – только через интерфейсы (`Protocol`) из `services/ports.py`;
-  реализации в `infra/`. В тестах – фейки.
+- Схемы запросов/ответов (`schemas/`) отделены от доменных сущностей (`domain/`) и от моделей ORM (`models/`).
+- Сценарий использования – класс в `services/` с единственным методом `execute`; транзакцию открывает и фиксирует он.
+- Внешние системы (LiveKit, Redis, SMTP, криптография) – только через порты (`Protocol`) из `domain/`; реализации –
+  в `adapters/`, вызовы других сервисов – в `clients/`. В модульных тестах – фейки портов.
 - Запуск: `uvicorn <service>.main:app` (1 процесс, асинхронно); фоновые задачи и потребители стартуют в `lifespan`
   того же процесса.
 
@@ -167,7 +168,7 @@ sequenceDiagram
 ## 8. Доступ к БД
 
 - SQLAlchemy 2.0, `AsyncSession`, драйвер `asyncpg`; пул 5–10 соединений на сервис.
-- Сессия на запрос/сообщение; транзакция открывается и фиксируется в сценарии (`async with uow:`).
+- Сессия на запрос/сообщение; транзакция открывается и фиксируется в сценарии (`async with transaction(session):`).
 - Ленивые загрузки запрещены (`lazy="raise"`), связи загружаются явно.
 - Репозитории возвращают доменные сущности, а не ORM-объекты.
 - Блокировки: изменение статуса встречи – `SELECT … FOR UPDATE` строки встречи (гонки «завершить» vs «вебхук room_finished»).
@@ -202,9 +203,13 @@ sequenceDiagram
 
 ```python
 @router.post("/meetings/{meeting_id}/end")
-async def end_meeting(meeting_id: UUID, user: CurrentUser = Depends(require_user), svc: MeetingService = Depends()):
-    return await svc.end(meeting_id, actor=user)
+async def end_meeting(meeting_id: UUID, user: CurrentUser, scenario: EndMeetingScenario) -> MeetingResponse:
+    meeting = await scenario.execute(meeting_id=MeetingId(meeting_id), actor=user)
+    return MeetingResponse.from_domain(meeting)
 ```
+
+`CurrentUser` – `Annotated[AuthenticatedUser, Depends(require_user)]` из `vks_common.auth`; `EndMeetingScenario` –
+`Annotated[EndMeeting, Depends(build_end_meeting)]` из `api/v1/dependencies.py` сервиса.
 
 | Зависимость | Проверяет |
 |---|---|
