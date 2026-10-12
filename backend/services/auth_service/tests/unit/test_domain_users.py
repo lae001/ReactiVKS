@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from auth_service.domain.errors import InvalidDisplayName, InvalidEmail
+from auth_service.domain.errors import InvalidDisplayName, InvalidEmail, UserBlocked
 from auth_service.domain.identifiers import UserId
 from auth_service.domain.users import Role, User, UserStatus, normalize_display_name, normalize_email
 
@@ -66,3 +66,10 @@ def test_renamed_user_keeps_everything_else() -> None:
     assert renamed.display_name == "Анна"
     assert renamed.id == user.id
     assert user.display_name == "Иван Петров"
+
+
+def test_blocked_user_cannot_sign_in() -> None:
+    make_user().ensure_can_sign_in()
+
+    with pytest.raises(UserBlocked):
+        make_user(status=UserStatus.BLOCKED).ensure_can_sign_in()

@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 
-from auth_service.domain.errors import InvalidDisplayName, InvalidEmail
+from auth_service.domain.errors import InvalidDisplayName, InvalidEmail, UserBlocked
 from auth_service.domain.identifiers import UserId
 
 __all__ = [
@@ -54,6 +54,11 @@ class User:
     @property
     def is_blocked(self) -> bool:
         return self.status is UserStatus.BLOCKED
+
+    def ensure_can_sign_in(self) -> None:
+        """Войти может только активная учетная запись. Вызывается после проверки пароля."""
+        if self.is_blocked:
+            raise UserBlocked()
 
     def renamed(self, display_name: str) -> User:
         """Та же учетная запись с новым отображаемым именем (уже нормализованным)."""

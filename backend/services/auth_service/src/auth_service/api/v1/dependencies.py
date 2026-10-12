@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends
@@ -16,11 +17,12 @@ from auth_service.domain.passwords import PasswordHasher
 from auth_service.domain.signing import TokenSigner
 from auth_service.services.accounts import RegisterOrganizer
 from auth_service.services.keys import PublishedKeys
+from auth_service.services.sessions import Login, TokenPolicy
 from auth_service.settings import AuthSettings
 from vks_common.clock import Clock
 from vks_common.db import get_session
 
-__all__ = ["PublishedKeysScenario", "RegisterOrganizerScenario", "Settings"]
+__all__ = ["CurrentClock", "LoginScenario", "PublishedKeysScenario", "RegisterOrganizerScenario", "Settings"]
 
 
 def get_settings(request: Request) -> AuthSettings:
@@ -77,3 +79,22 @@ def build_register_organizer(
 
 
 RegisterOrganizerScenario = Annotated[RegisterOrganizer, Depends(build_register_organizer)]
+
+
+def get_token_policy(settings: Settings) -> TokenPolicy:
+    return TokenPolicy(
+        issuer=settings.jwt_issuer,
+        audience=settings.jwt_audience,
+        access_ttl=timedelta(seconds=settings.auth_access_token_ttl_seconds),
+        refresh_ttl=timedelta(days=settings.auth_refresh_token_ttl_days),
+    )
+
+
+Policy = Annotated[TokenPolicy, Depends(get_token_policy)]
+
+
+def build_login(session: Session, hasher: Hasher, signer: Signer, clock: CurrentClock, policy: Policy) -> Login:
+    return Login(session=session, hasher=hasher, signer=signer, clock=clock, policy=policy)
+
+
+LoginScenario = Annotated[Login, Depends(build_login)]

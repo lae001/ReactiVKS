@@ -4,7 +4,7 @@
 Каждый тест работает в транзакции, которая откатывается по его окончании.
 """
 
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,14 +15,23 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from auth_service.adapters.argon2_hasher import Argon2Hasher
+from auth_service.domain.identifiers import UserId
+from auth_service.domain.users import Role, User, UserStatus
 from auth_service.main import create_application
+from auth_service.repositories.users import UserRepository
 from auth_service.settings import AuthSettings
 from vks_common.clock import FixedClock
 from vks_common.config import Environment
-from vks_common.db import create_engine, get_session
+from vks_common.db import create_engine, get_session, transaction
+from vks_common.ids import new_id, new_token
 from vks_common.testing import PostgresServer, app_client, apply_migrations, isolated_session_factory
 
 ALEMBIC_INI = Path(__file__).parents[1] / "alembic.ini"
+DEFAULT_PASSWORD = "correct-horse-7"
+
+# Создает учетную запись напрямую; тест задает только значимые для него поля.
+UserFactory = Callable[..., Awaitable[User]]
 
 
 @pytest.fixture(scope="session")
@@ -131,3 +140,40 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     """Клиент по https: refresh-cookie с атрибутом Secure по http клиент не отправил бы."""
     async with app_client(app, base_url="https://testserver") as http:
         yield http
+
+
+@pytest.fixture
+def hasher(settings: AuthSettings) -> Argon2Hasher:
+    return Argon2Hasher(
+        time_cost=settings.auth_argon2_time_cost,
+        memory_kib=settings.auth_argon2_memory_kib,
+        parallelism=settings.auth_argon2_parallelism,
+    )
+
+
+@pytest.fixture
+def make_user(session: AsyncSession, hasher: Argon2Hasher, clock: FixedClock) -> UserFactory:
+    """Учетная запись в обход регистрации: у регистрации свои тесты, а заблокированного пользователя она не создаст."""
+
+    async def factory(
+        *,
+        email: str | None = None,
+        password: str = DEFAULT_PASSWORD,
+        display_name: str = "Иван Петров",
+        role: Role = Role.ORGANIZER,
+        status: UserStatus = UserStatus.ACTIVE,
+    ) -> User:
+        user = User(
+            id=UserId(new_id()),
+            email=email or f"user-{new_token(6).lower()}@example.ru",
+            password_hash=hasher.hash(password),
+            display_name=display_name,
+            role=role,
+            status=status,
+            created_at=clock.now(),
+        )
+        async with transaction(session):
+            await UserRepository(session).add(user)
+        return user
+
+    return factory

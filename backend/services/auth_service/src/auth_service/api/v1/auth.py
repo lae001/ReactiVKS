@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 
-from auth_service.api.v1.dependencies import PublishedKeysScenario, RegisterOrganizerScenario, Settings
-from auth_service.schemas.auth import AuthConfigResponse, JsonWebKey, JwksResponse, RegisterRequest
+from auth_service.api.v1.cookies import set_refresh_cookie
+from auth_service.api.v1.dependencies import (
+    CurrentClock,
+    LoginScenario,
+    PublishedKeysScenario,
+    RegisterOrganizerScenario,
+    Settings,
+)
+from auth_service.schemas.auth import (
+    AuthConfigResponse,
+    JsonWebKey,
+    JwksResponse,
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+)
 from auth_service.schemas.users import UserResponse
+from auth_service.services.sessions import IssuedSession
 
 __all__ = ["router"]
 
@@ -32,6 +47,34 @@ async def register(body: RegisterRequest, scenario: RegisterOrganizerScenario) -
     return UserResponse.from_domain(user)
 
 
+@router.post(
+    "/login",
+    summary="Вход",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"description": "invalid_credentials"},
+        status.HTTP_403_FORBIDDEN: {"description": "user_blocked – только при верном пароле"},
+    },
+)
+async def login(
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    scenario: LoginScenario,
+    settings: Settings,
+    clock: CurrentClock,
+) -> TokenResponse:
+    """Access-токен – в теле, refresh-токен – в cookie `vks_refresh`.
+
+    Неизвестный адрес и неверный пароль отвечают одинаково – и телом, и временем ответа.
+    """
+    issued = await scenario.execute(
+        email=body.email,
+        password=body.password,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return _session_response(issued, response, settings=settings, clock=clock)
+
+
 @router.get("/config", summary="Публичные флаги")
 async def read_config(settings: Settings) -> AuthConfigResponse:
     """Что включено: фронтенд по флагам прячет регистрацию и ссылку «Забыли пароль?»."""
@@ -47,3 +90,21 @@ async def read_jwks(scenario: PublishedKeysScenario, response: Response) -> Jwks
     """Ключи, по которым сервисы проверяют access-токены RS256."""
     response.headers["Cache-Control"] = _JWKS_CACHE_CONTROL
     return JwksResponse(keys=[JsonWebKey.model_validate(jwk) for jwk in scenario.execute()])
+
+
+def _session_response(
+    issued: IssuedSession, response: Response, *, settings: Settings, clock: CurrentClock
+) -> TokenResponse:
+    """Одно место, где выпущенная пара становится телом и cookie: вход и обмен отвечают одинаково."""
+    set_refresh_cookie(
+        response,
+        issued.refresh_token,
+        expires_at=issued.refresh_expires_at,
+        now=clock.now(),
+        secure=settings.auth_refresh_cookie_secure,
+    )
+    return TokenResponse(
+        access_token=issued.access_token,
+        expires_in=issued.access_expires_in,
+        user=UserResponse.from_domain(issued.user),
+    )

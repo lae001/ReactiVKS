@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from auth_service.domain.passwords import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from auth_service.domain.users import MAX_DISPLAY_NAME_LENGTH, MAX_EMAIL_LENGTH
+from auth_service.schemas.users import UserResponse
 
-__all__ = ["AuthConfigResponse", "JsonWebKey", "JwksResponse", "RegisterRequest"]
+__all__ = ["AuthConfigResponse", "JsonWebKey", "JwksResponse", "LoginRequest", "RegisterRequest", "TokenResponse"]
+
+# Вход принимает пароль любой длины до этой границы: политика могла измениться после того, как пароль задали, а
+# граница лишь не дает прислать мегабайт.
+_MAX_LOGIN_PASSWORD_LENGTH = 1024
 
 
 class RegisterRequest(BaseModel):
@@ -17,6 +24,20 @@ class RegisterRequest(BaseModel):
     email: str = Field(max_length=MAX_EMAIL_LENGTH, examples=["ivan@example.ru"])
     password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
     display_name: str = Field(min_length=1, max_length=MAX_DISPLAY_NAME_LENGTH, examples=["Иван Петров"])
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(max_length=MAX_EMAIL_LENGTH, examples=["ivan@example.ru"])
+    password: str = Field(max_length=_MAX_LOGIN_PASSWORD_LENGTH)
+
+
+class TokenResponse(BaseModel):
+    """Access-токен – в теле (клиент держит его в памяти), refresh-токен – только в httpOnly-cookie."""
+
+    access_token: str
+    token_type: Literal["Bearer"] = "Bearer"  # noqa: S105 - схема авторизации, а не пароль
+    expires_in: int = Field(description="Срок access-токена, с", examples=[900])
+    user: UserResponse
 
 
 class AuthConfigResponse(BaseModel):
