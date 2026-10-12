@@ -128,7 +128,7 @@ layers = [
     "(main)",
     "(api) | (cli)",
     "(schemas) | (services)",
-    "(repositories) | adapters",
+    "repositories | adapters",
     "models",
     "domain",
 ]
