@@ -108,10 +108,9 @@ include_external_packages = true
 name = "Шасси: нижние модули не зависят от верхних"
 type = "layers"
 containers = ["vks_common"]
-# В скобках – слои, которых еще нет: модули шасси появляются по одному.
 layers = [
     "testing",
-    "(app)",
+    "app",
     "auth | db",
     "problem_details | middleware",
     "logging",
