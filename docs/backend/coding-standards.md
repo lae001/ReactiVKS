@@ -100,8 +100,8 @@ services/auth_service/
 | `adapters` | `domain`, `settings`, внешние библиотеки, `vks_common` | `services`, `api`, `repositories`, `models` |
 | `clients` | `domain`, `vks_common`, `vks_contracts` | `services`, `api`, `repositories`, `models` |
 | `services` | `domain`, `repositories`, `clients`, `vks_common`, `vks_contracts` | `api`, `cli`, `consumers`, `workers`, `adapters`, `models` |
-| `api`, `cli`, `consumers`, `workers` | `services`, `schemas`, `domain`, `vks_common` | `repositories`, `models`, `clients` |
-| `main.py` | всё (корень сборки: создает адаптеры и передает их в сценарии) | – |
+| `api`, `consumers`, `workers` | `services`, `schemas`, `domain`, `vks_common` | `repositories`, `models`, `clients`, `adapters` |
+| `main.py`, `cli.py` | всё: корни сборки своих процессов (HTTP и командная строка) создают адаптеры и передают их в сценарии | – |
 
 Сценарий получает адаптер через конструктор, типизированный портом из `domain` (`PasswordHasher`, `TokenSigner`),
 поэтому `services` не импортирует `adapters`: конкретную реализацию выбирает `main.py`, в тестах – фикстура.
@@ -153,8 +153,9 @@ HTTP-клиент ([conventions.md](conventions.md#1-библиотека-vks_co
 
 ---
 
-## 4. Типизация
+## 4. Типизация и форматирование
 
+- Форматирование – `ruff format`, длина строки – 120 символов (как перенос текста в `docs/`).
 - `mypy --strict` без исключений по модулям. Послабления – только для `migrations/` и `tests/`, и они прописаны
   в `pyproject.toml`.
 - `Any` запрещен (ruff `ANN401`). Неизвестный тип – `object` с явным сужением.
