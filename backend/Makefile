@@ -5,7 +5,7 @@ UV ?= uv
 # Пакеты workspace: mypy проверяет их по одному – у каждого свой tests/conftest.py.
 PACKAGES := $(wildcard libs/*) $(wildcard services/*)
 
-.PHONY: help sync lint format type imports test test-unit cov check migrate
+.PHONY: help sync lint format type imports test test-unit cov check migrate jwt-key run-auth
 
 help: ## Список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -50,3 +50,14 @@ AUTH_DATABASE_URL ?= postgresql+asyncpg://auth_svc:auth-dev-password@localhost:5
 
 migrate: ## Применить миграции auth-service к локальной БД
 	DATABASE_URL=$(AUTH_DATABASE_URL) $(UV) run alembic -c services/auth_service/alembic.ini upgrade head
+
+jwt-key: ## Ключ подписи JWT для локального запуска (secrets/jwt-private.pem, если его еще нет)
+	@test -f secrets/jwt-private.pem || $(UV) run python scripts/gen_jwt_key.py --out secrets/jwt-private.pem
+
+AUTH_ENV_FILE ?= services/auth_service/.env
+AUTH_PORT ?= 8001
+
+run-auth: ## auth-service на http://127.0.0.1:$(AUTH_PORT) (нужны make migrate, make jwt-key и .env)
+	@test -f $(AUTH_ENV_FILE) || { echo "нет $(AUTH_ENV_FILE): cp services/auth_service/.env.example $(AUTH_ENV_FILE)"; exit 1; }
+	$(UV) run --env-file $(AUTH_ENV_FILE) uvicorn auth_service.main:create_application --factory \
+		--host 127.0.0.1 --port $(AUTH_PORT)

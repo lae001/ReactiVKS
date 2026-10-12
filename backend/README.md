@@ -22,6 +22,20 @@ Python-сервисы и общая библиотека в одном uv worksp
 | `make cov` | Тесты с покрытием, порог 60 % |
 | `make check` | Все проверки, как в CI |
 | `make migrate` | Миграции auth-service к БД из `deploy/docker-compose.dev.yml` |
+| `make jwt-key` | Ключ подписи JWT для локального запуска (`secrets/`, в git не попадает) |
+| `make run-auth` | auth-service на http://127.0.0.1:8001 (`AUTH_PORT=…` – другой порт) |
+
+## Локальный запуск auth-service
+
+```bash
+docker compose -f ../deploy/docker-compose.dev.yml up -d --wait   # PostgreSQL и Redis
+cp services/auth_service/.env.example services/auth_service/.env
+make sync migrate jwt-key run-auth
+uv run --env-file services/auth_service/.env vks-auth create-admin --email admin@example.ru --display-name "Администратор"
+```
+
+Swagger UI – http://127.0.0.1:8001/docs. Dev-сервер фронтенда проксирует `/api` на `localhost:8080`: до появления
+Nginx в compose запускайте `make run-auth AUTH_PORT=8080`.
 
 Pre-commit (из корня репозитория, один раз на клон): `uv run --directory backend pre-commit install`.
 
