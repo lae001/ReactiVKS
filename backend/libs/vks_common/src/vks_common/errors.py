@@ -49,11 +49,25 @@ class AppError(Exception):
 
 
 class ValidationFailed(AppError):
-    """Запрос не соответствует контракту или бизнес-правилу формата (например, политике пароля)."""
+    """Запрос не соответствует контракту или бизнес-правилу формата (например, политике пароля).
+
+    ``field`` – имя поля тела запроса: ответ получит ``errors[]`` с ``loc``, как у ошибок схемы, и клиент подсветит
+    нужное поле, не разбирая текст.
+    """
 
     code = "validation_error"
     status = 422
     title = "Request is not valid"
+
+    def __init__(
+        self,
+        detail: str | None = None,
+        *,
+        field: str | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(detail, headers=headers)
+        self.field = field
 
 
 class Unauthorized(AppError):

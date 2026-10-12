@@ -93,9 +93,12 @@ async def _app_error_handler(request: Request, exc: Exception) -> Response:
         _logger.error("request failed", exc_info=exc, http_method=request.method, error_code=exc.code)
     else:
         _log_client_error(request, exc.status, exc.code)
+    errors: list[dict[str, object]] | None = None
+    if isinstance(exc, ValidationFailed) and exc.field is not None:
+        errors = [{"loc": ["body", exc.field], "msg": exc.detail, "type": "value_error"}]
     return _response(
         exc.status,
-        problem_document(code=exc.code, status=exc.status, title=exc.title, detail=exc.detail),
+        problem_document(code=exc.code, status=exc.status, title=exc.title, detail=exc.detail, errors=errors),
         exc.headers,
     )
 

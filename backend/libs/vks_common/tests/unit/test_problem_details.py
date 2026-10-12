@@ -2,7 +2,7 @@ import httpx
 from fastapi import FastAPI, status
 from pydantic import BaseModel
 
-from vks_common.errors import Conflict, RateLimited
+from vks_common.errors import Conflict, RateLimited, ValidationFailed
 from vks_common.middleware import RequestIdMiddleware
 from vks_common.problem_details import (
     PROBLEM_CONTENT_TYPE,
@@ -33,6 +33,10 @@ def build_app() -> FastAPI:
     @app.get("/limited")
     async def limited() -> None:
         raise RateLimited(headers={"Retry-After": "30"})
+
+    @app.post("/password")
+    async def change_password() -> None:
+        raise ValidationFailed("Password must contain a digit", field="new_password")
 
     @app.get("/broken")
     async def broken() -> None:
@@ -119,3 +123,13 @@ async def test_openapi_describes_errors_as_problem_documents() -> None:
     assert responses["422"]["content"] == responses["409"]["content"]
     assert "HTTPValidationError" not in document["components"]["schemas"]
     assert "Problem" in document["components"]["schemas"]
+
+
+async def test_domain_validation_error_points_to_field() -> None:
+    async with client() as http:
+        response = await http.post("/password")
+
+    assert response.status_code == 422
+    assert response.json()["errors"] == [
+        {"loc": ["body", "new_password"], "msg": "Password must contain a digit", "type": "value_error"}
+    ]
