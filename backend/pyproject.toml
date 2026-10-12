@@ -128,5 +128,33 @@ layers = [
     "(schemas) | (services)",
     "(repositories) | (adapters)",
     "models",
-    "(domain)",
+    "domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "auth-service: домен без фреймворков и инфраструктуры (разрешен только vks_common.errors)"
+type = "forbidden"
+source_modules = ["auth_service.domain"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "pydantic",
+    "pydantic_settings",
+    "sqlalchemy",
+    "alembic",
+    "jwt",
+    "argon2",
+    "cryptography",
+    "httpx",
+    "structlog",
+    "vks_common.app",
+    "vks_common.auth",
+    "vks_common.clock",
+    "vks_common.config",
+    "vks_common.db",
+    "vks_common.ids",
+    "vks_common.logging",
+    "vks_common.middleware",
+    "vks_common.problem_details",
+    "vks_common.testing",
 ]
