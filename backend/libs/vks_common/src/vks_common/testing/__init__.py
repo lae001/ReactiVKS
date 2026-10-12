@@ -11,10 +11,12 @@ from vks_common.testing.postgres import (
     docker_is_available,
     start_postgres,
 )
+from vks_common.testing.tokens import TokenFactory
 
 __all__ = [
     "SERVICE_ROLE_PASSWORDS",
     "PostgresServer",
+    "TokenFactory",
     "app_client",
     "apply_migrations",
     "docker_is_available",

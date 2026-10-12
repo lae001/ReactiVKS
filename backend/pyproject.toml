@@ -112,7 +112,7 @@ containers = ["vks_common"]
 layers = [
     "testing",
     "(app)",
-    "(auth) | db",
+    "auth | db",
     "problem_details | middleware",
     "logging",
     "config | clock | ids | errors",
