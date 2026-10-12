@@ -20,10 +20,12 @@ DDL ниже – целевое состояние начальных мигра
 
 ## Инициализация БД
 
-Скрипт `deploy/postgres/init/00-init.sql` выполняется суперпользователем один раз при создании тома:
+Скрипт `deploy/postgres/init/00-init.sh` выполняется официальным образом PostgreSQL один раз при создании тома и
+запускает `deploy/postgres/init/sql/roles-and-schemas.sql` с паролями ролей из переменных `AUTH_DB_PASSWORD`,
+`MEETING_DB_PASSWORD`, `ANALYTICS_DB_PASSWORD`. Тот же скрипт инициализирует контейнер PostgreSQL в
+интеграционных тестах, поэтому права ролей проверяются тестами. Содержимое SQL:
 
 ```sql
--- Выполняется один раз суперпользователем при создании БД (deploy/postgres/init/).
 -- Пароли подставляются psql-переменными: psql -v auth_password=... -v meeting_password=... -v analytics_password=...
 
 CREATE EXTENSION IF NOT EXISTS citext;
