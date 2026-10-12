@@ -193,7 +193,7 @@ class RefreshSession:
         outcome = judge_refresh(stored, user=user, now=now)
         if outcome is RefreshOutcome.REVOKE_FAMILY:
             revoked = await self._tokens.revoke_family(stored.family_id, at=now)
-            if stored.is_spent:
+            if stored.is_rotated:
                 # warning: система справилась сама, но это возможная кража – повод посмотреть журнал.
                 _logger.warning(
                     "refresh token reuse detected, family revoked",

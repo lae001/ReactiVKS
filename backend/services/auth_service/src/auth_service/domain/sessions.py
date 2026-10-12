@@ -44,8 +44,13 @@ class RefreshToken:
 
     @property
     def is_spent(self) -> bool:
-        """Токен уже обменян или отозван. Предъявить его снова – значит, у кого-то осталась копия."""
+        """Токен больше не действует: обменян или отозван."""
         return self.revoked_at is not None
+
+    @property
+    def is_rotated(self) -> bool:
+        """Токен уже обменян на преемника. Предъявить его снова – значит, у кого-то осталась копия."""
+        return self.replaced_by is not None
 
     def is_expired(self, now: datetime) -> bool:
         return self.expires_at <= now
@@ -66,15 +71,15 @@ class RefreshOutcome(StrEnum):
 def judge_refresh(token: RefreshToken, *, user: User | None, now: datetime) -> RefreshOutcome:
     """Решение по обмену токена.
 
-    - Уже обмененный или отозванный токен – признак кражи: отзывается вся семья (одно устройство разлогинено,
-      остальные сессии пользователя живут).
-    - Истекший – сессия кончилась сама, семью трогать незачем.
+    - Уже обмененный токен – признак кражи: отзывается вся семья (одно устройство разлогинено, остальные сессии
+      пользователя живут).
+    - Отозванный (выходом или вместе с семьей) или истекший – сессия уже закончена, отказ без последствий.
     - Учетной записи нет или она заблокирована – семья закрывается, чтобы оставшиеся у пользователя токены
       перестали работать.
     """
-    if token.is_spent:
+    if token.is_rotated:
         return RefreshOutcome.REVOKE_FAMILY
-    if token.is_expired(now):
+    if token.is_spent or token.is_expired(now):
         return RefreshOutcome.REJECT
     if user is None or user.is_blocked:
         return RefreshOutcome.REVOKE_FAMILY

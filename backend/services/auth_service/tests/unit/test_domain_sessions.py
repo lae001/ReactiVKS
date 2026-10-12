@@ -80,6 +80,7 @@ def test_rotated_token_is_spent_and_points_to_successor() -> None:
     rotated = make_token().rotated(successor=successor, now=NOW)
 
     assert rotated.is_spent
+    assert rotated.is_rotated
     assert rotated.replaced_by == successor
     assert rotated.revoked_at == NOW
 
@@ -102,10 +103,17 @@ def test_live_token_of_active_user_is_rotated() -> None:
     assert judge_refresh(make_token(), user=make_user(), now=NOW) is RefreshOutcome.ROTATE
 
 
-def test_spent_token_revokes_family() -> None:
-    spent = make_token().rotated(successor=RefreshTokenId(uuid4()), now=NOW)
+def test_rotated_token_presented_again_revokes_family() -> None:
+    rotated = make_token().rotated(successor=RefreshTokenId(uuid4()), now=NOW)
 
-    assert judge_refresh(spent, user=make_user(), now=NOW) is RefreshOutcome.REVOKE_FAMILY
+    assert judge_refresh(rotated, user=make_user(), now=NOW) is RefreshOutcome.REVOKE_FAMILY
+
+
+def test_revoked_token_is_rejected_without_alarm() -> None:
+    # Отозван выходом или вместе с семьей: сессия закончена, но кражи в этом нет.
+    revoked = make_token(revoked_at=NOW - timedelta(minutes=1))
+
+    assert judge_refresh(revoked, user=make_user(), now=NOW) is RefreshOutcome.REJECT
 
 
 def test_expired_token_is_rejected_without_touching_family() -> None:
