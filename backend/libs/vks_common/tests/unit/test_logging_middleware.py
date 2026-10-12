@@ -1,4 +1,6 @@
 import json
+import logging
+from collections.abc import Iterator
 
 import httpx
 import pytest
@@ -7,6 +9,13 @@ from fastapi import FastAPI
 from vks_common.config import Environment
 from vks_common.logging import bind_context, configure_logging, current_request_id, get_logger
 from vks_common.middleware import AccessLogMiddleware, RequestIdMiddleware
+
+
+@pytest.fixture(autouse=True)
+def detach_log_handlers() -> Iterator[None]:
+    """configure_logging привязывает обработчик к sys.stdout теста – capsys закроет этот поток после теста."""
+    yield
+    logging.getLogger().handlers.clear()
 
 
 def build_app() -> FastAPI:
