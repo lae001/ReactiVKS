@@ -1,0 +1,28 @@
+[project]
+name = "vks-common"
+version = "0.1.0"
+description = "Шасси бэкенд-сервисов ReactiVKS"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.141.1",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.15.0",
+    "structlog==26.1.0",
+    "sqlalchemy[asyncio]==2.0.52",
+    "asyncpg==0.31.0",
+    "greenlet==3.5.5",
+    "alembic==1.18.1",
+    "httpx==0.28.1",
+    # Проверка access-токенов: каждый сервис проверяет подпись сам по JWKS (ADR-005).
+    # Extra crypto превращает опубликованный JWK обратно в ключ.
+    "pyjwt[crypto]==2.13.0",
+    # UUIDv7 для идентификаторов (database.md): в стандартной библиотеке 3.12 его нет.
+    "uuid6==2025.0.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vks_common"]

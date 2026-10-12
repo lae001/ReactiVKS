@@ -1,0 +1,117 @@
+[project]
+name = "vks-backend"
+version = "0.1.0"
+description = "ReactiVKS backend: корень uv workspace"
+requires-python = ">=3.12,<3.13"
+# Все пакеты workspace: тогда `uv sync` и `uv run` в свежем клоне ставят их без --all-packages.
+dependencies = ["vks-common"]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.5",
+    "mypy==2.3.1",
+    "import-linter==2.15",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "testcontainers[postgres]==4.15.0",
+    "pre-commit==4.6.2",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
+[tool.uv.sources]
+vks-common = { workspace = true }
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["**/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "S", "ASYNC", "DTZ", "T20"]
+# ANN401 – проверка запрета Any: mypy ее не делает, потому что плагин pydantic синтезирует __init__ с Any.
+extend-select = ["ANN401"]
+# N818 требует суффикс Error у исключений; доменные ошибки называются по факту: EmailTaken, UserBlocked.
+ignore = ["N818"]
+
+[tool.ruff.lint.per-file-ignores]
+# Тесты используют assert и одноразовые пароли.
+"**/tests/**" = ["S101", "S105", "S106", "S107", "S311"]
+"**/migrations/**" = ["I001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vks_common", "auth_service"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------
+# mypy: запускается по одному пакету за раз (см. Makefile, цель type) – у каждого
+# пакета свой tests/conftest.py, и в одном запуске mypy они конфликтуют по имени.
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+exclude = ["(^|/)migrations/"]
+
+[[tool.mypy.overrides]]
+# Пакеты без маркера py.typed.
+module = ["testcontainers.*", "docker.*", "asyncpg.*", "uuid6.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+# importlib: у каждого пакета свой tests/conftest.py, классический режим импорта путает их по имени.
+addopts = "--strict-markers --strict-config --import-mode=importlib"
+testpaths = ["libs", "services"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "function"
+markers = ["integration: нужен Docker (testcontainers)"]
+
+[tool.coverage.run]
+branch = true
+source = ["libs/vks_common/src", "services"]
+omit = ["**/migrations/**", "**/tests/**"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
+
+# ---------------------------------------------------------------------------
+# import-linter: границы слоев (docs/backend/coding-standards.md, §2.3)
+# ---------------------------------------------------------------------------
+
+[tool.importlinter]
+root_packages = ["vks_common"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Шасси: нижние модули не зависят от верхних"
+type = "layers"
+containers = ["vks_common"]
+# В скобках – слои, которых еще нет: модули шасси появляются по одному.
+layers = [
+    "(testing)",
+    "(app)",
+    "(auth) | (db)",
+    "(errors) | (middleware)",
+    "(logging)",
+    "(config) | (clock) | (ids)",
+]
