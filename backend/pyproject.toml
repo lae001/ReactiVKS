@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "ReactiVKS backend: корень uv workspace"
 requires-python = ">=3.12,<3.13"
 # Все пакеты workspace: тогда `uv sync` и `uv run` в свежем клоне ставят их без --all-packages.
-dependencies = ["vks-common"]
+dependencies = ["vks-common", "auth-service"]
 
 [dependency-groups]
 dev = [
@@ -26,6 +26,7 @@ members = ["libs/*", "services/*"]
 
 [tool.uv.sources]
 vks-common = { workspace = true }
+auth-service = { workspace = true }
 
 # ---------------------------------------------------------------------------
 # ruff
@@ -101,7 +102,7 @@ exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
 # ---------------------------------------------------------------------------
 
 [tool.importlinter]
-root_packages = ["vks_common"]
+root_packages = ["vks_common", "auth_service"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -115,4 +116,17 @@ layers = [
     "problem_details | middleware",
     "logging",
     "config | clock | ids | errors",
+]
+
+[[tool.importlinter.contracts]]
+name = "auth-service: слои сверху вниз (в скобках – слои, которых еще нет)"
+type = "layers"
+containers = ["auth_service"]
+layers = [
+    "(main)",
+    "(api) | (cli)",
+    "(schemas) | (services)",
+    "(repositories) | (adapters)",
+    "models",
+    "(domain)",
 ]

@@ -12,10 +12,10 @@ DDL ниже – целевое состояние начальных мигра
 | Идентификаторы | UUIDv7, генерируются в приложении (`uuid6.uuid7()`), кроме журналов (`bigint identity`) |
 | Время | `timestamptz`, UTC; `created_at`/`updated_at` на всех изменяемых таблицах (`updated_at` выставляет приложение) |
 | Перечисления | `text` + `CHECK` (а не тип `ENUM`: проще миграции) |
-| Имена ограничений | `<таблица>_<поле>_ck`, `_uk`, `_idx`, FK – по умолчанию PostgreSQL |
+| Имена ограничений | `<таблица>_<поле>_ck`, `_uk`, `_idx` (поле – полное имя колонки), FK – `<таблица>_<поле>_fkey`, PK – `<таблица>_pkey` (как по умолчанию в PostgreSQL); задаются соглашением `vks_common.db.NAMING_CONVENTION` |
 | Связи между схемами | Запрещены: ни FK, ни JOIN, ни `SELECT` из чужой схемы (обеспечено правами) |
 | Удаление | Встречи – мягкое (`deleted_at`) с физической очисткой через 30 дней; аналитика – физическое |
-| Миграции | Alembic, одна ветка на сервис, `alembic_version` в схеме сервиса (`version_table_schema`); только вперед, без ручных правок |
+| Миграции | Alembic, одна ветка на сервис, `alembic_version` в схеме сервиса (`version_table_schema`); без ручных правок схемы; каждая миграция обратима, тест сверяет модели с миграциями |
 | Роли | Одна роль на сервис – владелец своей схемы; миграции выполняет та же роль (сервис `migrate` в compose) |
 
 ## Инициализация БД
@@ -49,8 +49,11 @@ ALTER ROLE analytics_svc SET search_path = analytics, public;
 
 ## Схема `auth`
 
+Миграция `0001_users_and_refresh_tokens` создает `users` и `refresh_tokens`; `password_reset_tokens` и `outbox`
+создаются миграциями задач восстановления пароля и событий `user.events`.
+
 ```sql
--- Схема auth (владелец auth_svc). Начальная миграция Alembic auth-service.
+-- Схема auth (владелец auth_svc).
 SET ROLE auth_svc;
 
 CREATE TABLE auth.users (
@@ -80,11 +83,11 @@ CREATE TABLE auth.refresh_tokens (
     replaced_by  uuid,
     user_agent   text,
     created_at   timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT refresh_tokens_hash_uk UNIQUE (token_hash)
+    CONSTRAINT refresh_tokens_token_hash_uk UNIQUE (token_hash)
 );
-CREATE INDEX refresh_tokens_user_idx   ON auth.refresh_tokens (user_id);
-CREATE INDEX refresh_tokens_family_idx ON auth.refresh_tokens (family_id);
-CREATE INDEX refresh_tokens_expires_idx ON auth.refresh_tokens (expires_at);
+CREATE INDEX refresh_tokens_user_id_idx    ON auth.refresh_tokens (user_id);
+CREATE INDEX refresh_tokens_family_id_idx  ON auth.refresh_tokens (family_id);
+CREATE INDEX refresh_tokens_expires_at_idx ON auth.refresh_tokens (expires_at);
 
 CREATE TABLE auth.password_reset_tokens (
     id          uuid        PRIMARY KEY,
@@ -93,9 +96,9 @@ CREATE TABLE auth.password_reset_tokens (
     expires_at  timestamptz NOT NULL,
     used_at     timestamptz,
     created_at  timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT password_reset_tokens_hash_uk UNIQUE (token_hash)
+    CONSTRAINT password_reset_tokens_token_hash_uk UNIQUE (token_hash)
 );
-CREATE INDEX password_reset_tokens_user_idx ON auth.password_reset_tokens (user_id);
+CREATE INDEX password_reset_tokens_user_id_idx ON auth.password_reset_tokens (user_id);
 
 CREATE TABLE auth.outbox (
     id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

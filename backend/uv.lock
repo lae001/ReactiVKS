@@ -4,6 +4,7 @@ requires-python = "==3.12.*"
 
 [manifest]
 members = [
+    "auth-service",
     "vks-backend",
     "vks-common",
 ]
@@ -112,6 +113,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/52/b2/b20e09670be031afa4cbfabd645caece7f85ec62d69c312239de568e058e/asyncpg-0.31.0-cp312-cp312-win32.whl", hash = "sha256:027eaa61361ec735926566f995d959ade4796f6a49d3bde17e5134b9964f9ba8", size = 527852, upload-time = "2025-11-24T23:26:01.084Z" },
     { url = "https://files.pythonhosted.org/packages/b5/f0/f2ed1de154e15b107dc692262395b3c17fc34eafe2a78fc2115931561730/asyncpg-0.31.0-cp312-cp312-win_amd64.whl", hash = "sha256:72d6bdcbc93d608a1158f17932de2321f68b1a967a13e014998db87a72ed3186", size = 597175, upload-time = "2025-11-24T23:26:02.564Z" },
 ]
+
+[[package]]
+name = "auth-service"
+version = "0.1.0"
+source = { editable = "services/auth_service" }
+dependencies = [
+    { name = "vks-common" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "vks-common", editable = "libs/vks_common" }]
 
 [[package]]
 name = "certifi"
@@ -985,6 +997,7 @@ name = "vks-backend"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "auth-service" },
     { name = "vks-common" },
 ]
 
@@ -1001,7 +1014,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "vks-common", editable = "libs/vks_common" }]
+requires-dist = [
+    { name = "auth-service", editable = "services/auth_service" },
+    { name = "vks-common", editable = "libs/vks_common" },
+]
 
 [package.metadata.requires-dev]
 dev = [

@@ -5,7 +5,7 @@ UV ?= uv
 # Пакеты workspace: mypy проверяет их по одному – у каждого свой tests/conftest.py.
 PACKAGES := $(wildcard libs/*) $(wildcard services/*)
 
-.PHONY: help sync lint format type imports test test-unit cov check
+.PHONY: help sync lint format type imports test test-unit cov check migrate
 
 help: ## Список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -42,3 +42,9 @@ cov: ## Тесты с покрытием и порогом 60 %
 	$(UV) run pytest --cov --cov-report=term --cov-fail-under=60
 
 check: lint type imports test ## Все проверки, как в CI
+
+# БД из deploy/docker-compose.dev.yml; для другой – make migrate AUTH_DATABASE_URL=…
+AUTH_DATABASE_URL ?= postgresql+asyncpg://auth_svc:auth-dev-password@localhost:5432/vks
+
+migrate: ## Применить миграции auth-service к локальной БД
+	DATABASE_URL=$(AUTH_DATABASE_URL) $(UV) run alembic -c services/auth_service/alembic.ini upgrade head
