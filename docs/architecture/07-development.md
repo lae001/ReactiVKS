@@ -142,7 +142,7 @@ flowchart LR
 
 | Job | Триггер (paths) | Шаги |
 |---|---|---|
-| `backend-<service>` | `backend/services/<service>/**`, `backend/libs/**` | ruff, mypy, pytest + coverage (порог 60 %), сборка Docker-образа |
+| `backend` (`.github/workflows/backend.yml`) | `backend/**`, `deploy/postgres/**` | ruff, mypy, import-linter; pytest + coverage (порог 60 %) с PostgreSQL в testcontainers. Сборка Docker-образов – вместе с Dockerfile сервисов (развертывание в compose) |
 | `ml-service` | `ml/emotion_service/**`, `backend/libs/vks_contracts/**` | ruff, mypy, pytest (на маленькой тестовой модели), сборка образа |
 | `frontend` | `frontend/**` | eslint, tsc, vitest, `vite build` |
 | `contracts` | `backend/libs/vks_contracts/**`, `docs/api/**` | Проверка совместимости схем событий (генерация JSON Schema и diff) |

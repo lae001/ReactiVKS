@@ -1,0 +1,48 @@
+# Проверки бэкенда – те же, что make check локально (backend/Makefile).
+# Интеграционные тесты поднимают PostgreSQL через testcontainers: на ubuntu-latest есть Docker.
+name: backend
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', 'deploy/postgres/**', '.github/workflows/backend.yml']
+  pull_request:
+    paths: ['backend/**', 'deploy/postgres/**', '.github/workflows/backend.yml']
+concurrency:
+  # Новый push в ветку отменяет прогон предыдущего: ответ про коммит, который никто не сольет, не стоит раннера.
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    working-directory: backend
+env:
+  UV_VERSION: '0.12.8'
+jobs:
+  static:
+    name: ruff, mypy, import-linter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      # --locked: uv.lock обязан соответствовать pyproject.toml, иначе CI проверял бы не то, что закоммичено.
+      - run: uv sync --locked
+      - run: make lint
+      - run: make type
+      - run: make imports
+
+  test:
+    name: pytest + покрытие
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked
+      # Порог 60 % – требование концепции (conventions.md, §13).
+      - run: make cov
