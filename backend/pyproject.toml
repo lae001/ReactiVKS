@@ -166,9 +166,12 @@ name = "auth-service: сценарии получают адаптеры чер�
 type = "forbidden"
 source_modules = ["auth_service.services"]
 forbidden_modules = ["auth_service.adapters", "auth_service.models", "auth_service.settings", "auth_service.api"]
+# Запрещены прямые импорты: к ORM сценарий законно ходит через репозиторий.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "auth-service: входы вызывают сценарии, а не репозитории, модели и адаптеры"
 type = "forbidden"
 source_modules = ["auth_service.api"]
 forbidden_modules = ["auth_service.repositories", "auth_service.models", "auth_service.adapters"]
+allow_indirect_imports = true

@@ -9,15 +9,18 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 from auth_service.domain.passwords import PasswordHasher
 from auth_service.domain.signing import TokenSigner
+from auth_service.services.accounts import RegisterOrganizer
 from auth_service.services.keys import PublishedKeys
 from auth_service.settings import AuthSettings
 from vks_common.clock import Clock
+from vks_common.db import get_session
 
-__all__ = ["PublishedKeysScenario", "Settings"]
+__all__ = ["PublishedKeysScenario", "RegisterOrganizerScenario", "Settings"]
 
 
 def get_settings(request: Request) -> AuthSettings:
@@ -52,6 +55,7 @@ Settings = Annotated[AuthSettings, Depends(get_settings)]
 Hasher = Annotated[PasswordHasher, Depends(get_password_hasher)]
 Signer = Annotated[TokenSigner, Depends(get_token_signer)]
 CurrentClock = Annotated[Clock, Depends(get_clock)]
+Session = Annotated[AsyncSession, Depends(get_session)]
 
 
 def build_published_keys(signer: Signer) -> PublishedKeys:
@@ -59,3 +63,17 @@ def build_published_keys(signer: Signer) -> PublishedKeys:
 
 
 PublishedKeysScenario = Annotated[PublishedKeys, Depends(build_published_keys)]
+
+
+def build_register_organizer(
+    session: Session, hasher: Hasher, clock: CurrentClock, settings: Settings
+) -> RegisterOrganizer:
+    return RegisterOrganizer(
+        session=session,
+        hasher=hasher,
+        clock=clock,
+        registration_enabled=settings.auth_registration_enabled,
+    )
+
+
+RegisterOrganizerScenario = Annotated[RegisterOrganizer, Depends(build_register_organizer)]
