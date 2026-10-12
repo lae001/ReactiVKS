@@ -127,6 +127,8 @@ LiveKit работает в `network_mode: host`: для медиатрафик�
 | `KAFKA_SASL_USERNAME`, `KAFKA_SASL_PASSWORD` | все бэкенд-сервисы, ml | Учетная запись SCRAM сервиса |
 | `REDIS_URL` | бэкенд-сервисы | `redis://:…@redis:6379/0` |
 | `JWT_PRIVATE_KEY_PATH` | auth | Закрытый ключ RS256 (Docker secret) |
+| `JWT_PREVIOUS_PUBLIC_KEY_PATH` | auth | Публичный ключ прежней пары на время ротации (опционально) |
+| `AUTH_*` | auth | Сроки токенов, cookie, регистрация, стоимость Argon2 – [auth-service.md](../backend/auth-service.md#конфигурация) |
 | `JWKS_URL` | meeting, realtime, analytics | `http://auth-service:8001/api/v1/auth/.well-known/jwks.json` |
 | `SERVICE_TOKEN` | все | Секрет для `/internal/*` |
 | `ML_TARGET_FPS`, `ML_MIN_FPS` | ml | Частота анализа (по умолчанию 3 и 2) |
@@ -146,7 +148,7 @@ LiveKit работает в `network_mode: host`: для медиатрафик�
 5. Загрузить веса моделей в том `models`: `deploy/scripts/fetch-models.sh` (из Releases репозитория).
 6. `docker compose up -d` – `kafka-init` создаст топики, учетные записи SCRAM и ACL, `migrate` применит миграции,
    затем стартуют остальные сервисы.
-7. Создать администратора: `docker compose exec auth-service vks-auth create-admin --email …`.
+7. Создать администратора: `docker compose exec -it auth-service vks-auth create-admin --email … --display-name …`.
 8. Проверка: `GET https://vks.<домен>/api/v1/admin/health`, тестовая встреча из двух браузеров, проверка через TURN
    (в Chrome – `chrome://webrtc-internals`, принудительный relay в настройках клиента для тестирования).
 

@@ -48,7 +48,7 @@ FastAPI из кода (`/openapi.json`, в dev – Swagger UI); по нему ф
 | `not_found` | 404 | Ресурс не найден или не принадлежит пользователю |
 | `too_many_requests` | 429 | Вход, ссылки-приглашения, восстановление пароля |
 | `invalid_credentials` | 401 | Неверный e-mail или пароль |
-| `user_blocked` | 401 / 403 | Вход или вход во встречу заблокированного пользователя |
+| `user_blocked` | 403 | Вход (при верном пароле) или вход во встречу заблокированного пользователя |
 | `email_taken` | 409 | Регистрация |
 | `invalid_reset_token` | 400 | Восстановление пароля |
 | `last_admin` | 409 | Нельзя заблокировать/понизить/удалить последнего администратора или себя |
@@ -105,16 +105,21 @@ FastAPI из кода (`/openapi.json`, в dev – Swagger UI); по нему ф
 
 | Поле запроса | Тип | Ограничения |
 |---|---|---|
-| `email` | string | e-mail, ≤ 254 |
-| `password` | string | 8–128 символов |
-| `display_name` | string | 1–100 |
+| `email` | string | e-mail, ≤ 254; сравнивается без учета регистра, хранится в нижнем регистре |
+| `password` | string | 8–128 символов, хотя бы одна буква и одна цифра, без пробелов в начале и в конце |
+| `display_name` | string | 1–100 после обрезки пробелов по краям |
 
-Ответы: `201 User`; `409 email_taken`; `422`; `429`.
+Ответы: `201 User` (аккаунт сразу активен, токены не выдаются – клиент затем вызывает `login`); `404 not_found`,
+если регистрация выключена (`registration_enabled = false`); `409 email_taken`; `422`; `429`.
+
+Политика пароля одинакова для регистрации, смены пароля и восстановления; фронтенд повторяет ее в схеме Zod,
+сервер проверяет всегда.
 
 ### `POST /auth/login`
 
 Запрос `{"email", "password"}`. Ответ `200 TokenResponse` + `Set-Cookie: vks_refresh=…`.
-Ошибки: `401 invalid_credentials` | `user_blocked`; `422`; `429` (5 попыток за 15 мин на IP + e-mail).
+Ошибки: `401 invalid_credentials` (неизвестный e-mail и неверный пароль неотличимы, в том числе по времени
+ответа); `403 user_blocked` (только при верном пароле); `422`; `429` (5 попыток за 15 мин на IP + e-mail).
 
 ```json
 {"access_token": "eyJ…", "token_type": "Bearer", "expires_in": 900,
@@ -123,8 +128,13 @@ FastAPI из кода (`/openapi.json`, в dev – Swagger UI); по нему ф
 
 ### `POST /auth/refresh`, `POST /auth/logout`
 
-`refresh`: `200 TokenResponse` + новый cookie (ротация); `401 unauthorized` (в т. ч. при повторном использовании
-токена – отзывается вся цепочка). `logout`: `204`, cookie очищается.
+`refresh`: `200 TokenResponse` + новый cookie (ротация); `401 unauthorized` – нет cookie, токен неизвестен, истек
+или отозван, пользователь заблокирован или удален. Повторное предъявление уже обмененного токена отзывает всю его
+семью (цепочку ротаций одного входа): разлогинивается только это устройство, другие сессии пользователя живут.
+Причина `401` клиенту не раскрывается.
+
+`logout`: `204` всегда (в т. ч. без cookie и с уже отозванным токеном), семья текущего токена отзывается,
+cookie очищается. Выданный access-токен действует до истечения срока (≤ 15 мин).
 
 ### `GET /auth/.well-known/jwks.json`
 
@@ -142,8 +152,9 @@ FastAPI из кода (`/openapi.json`, в dev – Swagger UI); по нему ф
 ### `/users/me`
 
 - `GET` → `200 User`.
-- `PATCH {"display_name"}` → `200 User`.
-- `POST /users/me/password {"current_password", "new_password"}` → `204` (остальные сессии завершаются); `401 invalid_credentials`.
+- `PATCH {"display_name"}` → `200 User`. Claim `name` в access-токене обновится при следующем `refresh`.
+- `POST /users/me/password {"current_password", "new_password"}` → `204` (остальные сессии завершаются); `401 invalid_credentials`;
+  `422` (политика пароля – как при регистрации).
 
 ### `/admin/users`
 
