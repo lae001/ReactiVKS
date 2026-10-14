@@ -38,7 +38,16 @@ export function EmotionIndicator({
 }
 
 /** Распределение вероятностей одной полосой; текстовая расшифровка – для скринридеров. */
-export function ProbabilityBar({ p, className }: { p: number[]; className?: string }) {
+export function ProbabilityBar({
+  p,
+  className,
+  surface = 'dark',
+}: {
+  p: number[];
+  className?: string;
+  /** Фон под полосой: комната (dark) или светлая страница (fill) */
+  surface?: 'dark' | 'fill';
+}) {
   const description = EMOTION_LABELS.map(
     (e, i) => `${EMOTION_META[e].title} ${formatPercent(p[i] ?? 0)}`,
   ).join(', ');
@@ -47,12 +56,17 @@ export function ProbabilityBar({ p, className }: { p: number[]; className?: stri
     <div
       role="img"
       aria-label={`Распределение: ${description}`}
-      className={cn('flex h-2 overflow-hidden rounded-full bg-room-border', className)}
+      className={cn(
+        'flex h-2 overflow-hidden rounded-full',
+        // на светлом фоне сегменты разделяет белая линия в 1 px (emotion-visualization.md, раздел 4)
+        surface === 'dark' ? 'bg-room-border' : 'gap-px bg-card',
+        className,
+      )}
     >
       {EMOTION_LABELS.map((e, i) => (
         <span
           key={e}
-          style={{ width: `${(p[i] ?? 0) * 100}%`, background: emotionColor(e, 'dark') }}
+          style={{ width: `${(p[i] ?? 0) * 100}%`, background: emotionColor(e, surface) }}
         />
       ))}
     </div>

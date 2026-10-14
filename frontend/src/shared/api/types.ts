@@ -75,3 +75,56 @@ export interface SnapshotParticipant {
 }
 
 export type AnalysisState = 'active' | 'degraded' | 'unavailable' | 'off';
+
+/** Распределение вероятностей по классам эмоций (сумма ≈ 1). */
+export type EmotionDistribution = Record<EmotionLabel, number>;
+
+export interface Marker {
+  id: string;
+  ts: string;
+  kind: 'auto_shift' | 'manual';
+  participant_id: string | null;
+  label: string;
+  details: Record<string, unknown>;
+}
+
+export interface ReportParticipant {
+  participant_id: string;
+  display_name: string;
+  consent: ConsentState;
+  distribution: EmotionDistribution | null;
+  dominant: EmotionLabel | null;
+  face_detected_ratio: number | null;
+  analyzed_seconds: number;
+}
+
+/** Ответ GET /reports/{meeting_id} (docs/api/rest-api.md, раздел analytics-service). */
+export interface Report {
+  meeting_id: string;
+  status: 'pending' | 'ready' | 'failed';
+  model_version: string | null;
+  meeting: { title: string; started_at: string; ended_at: string; duration_s: number };
+  summary: {
+    overall: {
+      distribution: EmotionDistribution;
+      face_detected_ratio: number;
+      negative_share: number;
+    };
+    participants: ReportParticipant[];
+  };
+  markers: Marker[];
+  disclaimer: string;
+}
+
+export interface SeriesPoint {
+  ts: string;
+  /** Вероятности в порядке EMOTION_LABELS; null – лица не было весь интервал */
+  p: number[] | null;
+  face_ratio: number;
+}
+
+/** Ответ GET /reports/{meeting_id}/series для одного ряда «вся встреча». */
+export interface Series {
+  resolution: '1s' | '5s' | '30s';
+  points: SeriesPoint[];
+}

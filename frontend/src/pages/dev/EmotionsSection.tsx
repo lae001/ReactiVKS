@@ -2,6 +2,10 @@ import { EmotionIndicator, ProbabilityBar } from '@/features/emotions/EmotionInd
 import type { SnapshotParticipant } from '@/shared/api/types';
 import { EMOTION_LABELS, EMOTION_META, emotionVar } from '@/shared/config/emotions';
 import { simulateVision, type VisionType } from '@/shared/lib/color';
+import { EmotionDistribution } from '@/features/reports/EmotionDistribution';
+import { EmotionLegend } from '@/features/reports/EmotionLegend';
+import { EmotionTimeline } from '@/features/reports/EmotionTimeline';
+import { MOCK_REPORT, MOCK_REPORT_SERIES } from '@/shared/mocks/report';
 import { EmotionSpectrum } from '@/shared/ui/brand';
 import { EmotionTag } from '@/shared/ui/emotion-icon';
 
@@ -128,6 +132,24 @@ export function EmotionsSection() {
         <p className="text-xs text-room-muted">
           Распределение вероятностей одной полосой; текстовая расшифровка — для скринридеров.
         </p>
+      </div>
+
+      <div className="flex flex-col gap-6 rounded-xl border bg-card p-5">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">Графики отчета (светлый фон)</p>
+          <p className="text-xs text-muted-foreground">
+            Стековая площадь вероятностей для динамики, столбцы для распределения; серии различаются
+            заливкой, а не цветом линий.
+          </p>
+        </div>
+        <EmotionTimeline
+          series={MOCK_REPORT_SERIES}
+          markers={MOCK_REPORT.markers}
+          startedAt={MOCK_REPORT.meeting.started_at}
+          durationS={MOCK_REPORT.meeting.duration_s}
+        />
+        <EmotionLegend />
+        <EmotionDistribution distribution={MOCK_REPORT.summary.overall.distribution} />
       </div>
     </section>
   );

@@ -253,7 +253,8 @@ function Room({
                     <EmotionIndicator data={data} />
                   ) : p.isSelf && meeting.analysis_enabled && myConsent !== 'granted' ? (
                     <span className="rounded-md bg-room/85 px-2 py-1 text-xs text-room-muted">
-                      Ваши эмоции не анализируются
+                      <span className="hidden sm:inline">Ваши эмоции не анализируются</span>
+                      <span className="sm:hidden">Вас не анализируют</span>
                     </span>
                   ) : null
                 }

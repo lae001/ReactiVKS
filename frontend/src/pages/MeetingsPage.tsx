@@ -14,7 +14,7 @@ import { Label } from '@/shared/ui/label';
 /** id «быстрой» встречи на тестовых данных; в EMO-73 – POST /meetings без scheduled_at. */
 const INSTANT_MEETING_ID = 'instant';
 
-const tileClass = 'flex flex-col gap-4 rounded-xl border p-5 text-left transition-colors';
+const tileClass = 'flex gap-4 rounded-xl border p-4 text-left transition-colors md:flex-col md:p-5';
 
 /**
  * Главная организатора (docs/frontend/site-structure.md, 4.1): плитки действий,
@@ -58,7 +58,7 @@ export function MeetingsPage() {
             'border-transparent bg-primary text-primary-foreground hover:bg-primary/90',
           )}
         >
-          <Video className="size-6" aria-hidden />
+          <Video className="size-6 shrink-0" aria-hidden />
           <span className="flex flex-col gap-1">
             <span className="text-lg font-semibold">Начать сейчас</span>
             <span className="text-sm text-primary-foreground/80">
@@ -68,7 +68,7 @@ export function MeetingsPage() {
         </button>
 
         <Link to={paths.meetingNew} className={cn(tileClass, 'bg-card hover:bg-accent')}>
-          <CalendarPlus className="size-6 text-primary" aria-hidden />
+          <CalendarPlus className="size-6 shrink-0 text-primary" aria-hidden />
           <span className="flex flex-col gap-1">
             <span className="text-lg font-semibold">Запланировать</span>
             <span className="text-sm text-muted-foreground">
@@ -78,7 +78,7 @@ export function MeetingsPage() {
         </Link>
 
         <form onSubmit={joinByLink} className={cn(tileClass, 'bg-card')} noValidate>
-          <Link2 className="size-6 text-primary" aria-hidden />
+          <Link2 className="size-6 shrink-0 text-primary" aria-hidden />
           <div className="flex flex-col gap-2">
             <Label htmlFor="invite" className="text-lg font-semibold">
               Войти по ссылке
