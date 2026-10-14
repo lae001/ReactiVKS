@@ -20,6 +20,8 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 | `pnpm format` / `pnpm format:check` | Prettier (с сортировкой классов Tailwind)                                                    |
 | `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                                    |
 | `pnpm test`                         | Vitest + Testing Library                                                                     |
+| `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))     |
+| `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                            |
 
 ## Структура
 

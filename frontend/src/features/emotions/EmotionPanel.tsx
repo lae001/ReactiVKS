@@ -5,6 +5,7 @@ import type { SnapshotParticipant } from '@/shared/api/types';
 import { EMOTION_LABELS, EMOTION_META } from '@/shared/config/emotions';
 import { formatDuration, formatPercent } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/button';
+import { EmotionIcon } from '@/shared/ui/emotion-icon';
 
 import { EmotionIndicator, ProbabilityBar } from './EmotionIndicator';
 import { summarize } from './summary';
@@ -40,11 +41,7 @@ export function EmotionPanel({
             <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
               {EMOTION_LABELS.map((e, i) => (
                 <li key={e} className="flex items-center gap-1.5">
-                  <span
-                    className="size-2 rounded-full"
-                    style={{ background: `var(${EMOTION_META[e].cssVar})` }}
-                    aria-hidden
-                  />
+                  <EmotionIcon label={e} className="size-3.5" />
                   {EMOTION_META[e].title}
                   <span className="ml-auto text-room-muted">
                     {formatPercent(summary.mean[i] ?? 0)}

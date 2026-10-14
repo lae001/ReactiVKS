@@ -66,7 +66,7 @@
 ### Frontend ([frontend/](frontend/README.md))
 
 [README.md](frontend/README.md) – исходное описание от архитектора; раздел развивает разработчик frontend ·
-[site-structure.md](frontend/site-structure.md) · [webrtc-livekit-notes.md](frontend/webrtc-livekit-notes.md) · [ui-kit.md](frontend/ui-kit.md)
+[site-structure.md](frontend/site-structure.md) · [webrtc-livekit-notes.md](frontend/webrtc-livekit-notes.md) · [ui-kit.md](frontend/ui-kit.md) · [emotion-visualization.md](frontend/emotion-visualization.md) · [mockups.md](frontend/mockups.md)
 
 ### Тестирование ([testing/](testing/))
 

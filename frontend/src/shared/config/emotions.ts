@@ -1,7 +1,7 @@
 /**
  * Классы эмоций. Порядок совпадает с массивом `labels` в сообщении `welcome`
  * протокола WebSocket (docs/api/websocket-protocol.md) и с выходом модели.
- * Цвета – черновик до утверждения гайда визуализации (EMO-56).
+ * Цвета и правила их применения – docs/frontend/emotion-visualization.md (EMO-55).
  */
 export const EMOTION_LABELS = [
   'angry',
@@ -35,3 +35,22 @@ export const EMOTION_SPECTRUM: readonly EmotionLabel[] = [
   'angry',
   'fear',
 ];
+
+/** Где рисуется цвет: заливка на светлом фоне, линия/обводка на светлом фоне, любая метка на темном (комната). */
+export type EmotionSurface = 'fill' | 'line' | 'dark';
+
+/**
+ * Имя CSS-переменной цвета эмоции для поверхности. Заливки на светлом фоне бывают ниже 3:1,
+ * поэтому линии и обводки берут более темный вариант `-line`; синий «Грусть» на темном фоне
+ * светлеет (`--emotion-sad-dark`). Остальные цвета на темном фоне подходят без изменений.
+ */
+export function emotionVar(label: EmotionLabel, surface: EmotionSurface = 'fill'): string {
+  if (surface === 'line') return `${EMOTION_META[label].cssVar}-line`;
+  if (surface === 'dark' && label === 'sad') return '--emotion-sad-dark';
+  return EMOTION_META[label].cssVar;
+}
+
+/** Цвет эмоции как значение для style/SVG. */
+export function emotionColor(label: EmotionLabel, surface: EmotionSurface = 'fill'): string {
+  return `var(${emotionVar(label, surface)})`;
+}
