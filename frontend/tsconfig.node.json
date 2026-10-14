@@ -20,6 +20,7 @@
     "eslint.config.js",
     "playwright.config.ts",
     "playwright.mockups.config.ts",
+    "playwright.livekit.config.ts",
     "e2e"
   ]
 }

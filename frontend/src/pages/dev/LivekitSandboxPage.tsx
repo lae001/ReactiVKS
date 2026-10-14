@@ -1,8 +1,9 @@
 import '@livekit/components-styles';
 
-import { LiveKitRoom, VideoConference } from '@livekit/components-react';
+import { LiveKitRoom } from '@livekit/components-react';
 import { type FormEvent, useState } from 'react';
 
+import { LiveKitGallery } from '@/features/room/LiveKitGallery';
 import { checkWebRtcSupport, describeWebRtcProblem } from '@/shared/lib/webrtc-support';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -14,7 +15,8 @@ interface Connection {
 }
 
 /**
- * Песочница LiveKit (EMO-17): подключение к комнате по адресу сервера и токену.
+ * Песочница LiveKit (EMO-17) и прототип видеовстречи (EMO-53): подключение к комнате по адресу сервера
+ * и токену, галерея участников с пагинацией (`LiveKitGallery`).
  * Токен выпускается вручную (`lk token create …`), в рабочем сценарии его выдает meeting-service.
  * Инструкция – docs/frontend/webrtc-livekit-notes.md. Доступна только в dev-сборке.
  */
@@ -35,7 +37,7 @@ export default function LivekitSandboxPage() {
 
   if (conn) {
     return (
-      <div className="h-dvh" data-lk-theme="default">
+      <div className="h-dvh">
         <LiveKitRoom
           serverUrl={conn.serverUrl}
           token={conn.token}
@@ -50,7 +52,7 @@ export default function LivekitSandboxPage() {
           }}
           style={{ height: '100%' }}
         >
-          <VideoConference />
+          <LiveKitGallery />
         </LiveKitRoom>
       </div>
     );
