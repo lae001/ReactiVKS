@@ -1,13 +1,14 @@
 import type { SnapshotParticipant } from '@/shared/api/types';
-import { EMOTION_LABELS, EMOTION_META } from '@/shared/config/emotions';
+import { EMOTION_LABELS, EMOTION_META, emotionColor } from '@/shared/config/emotions';
 import { formatPercent } from '@/shared/lib/format';
 import { cn } from '@/shared/lib/utils';
+import { EmotionIcon } from '@/shared/ui/emotion-icon';
 
 import { STATE_LABEL } from './summary';
 
 /**
- * Индикатор на плитке (ui-kit.md, вывод 2): маленькая цветная метка, подпись и процент –
- * плитка собеседника не «окрашивается». Цвет всегда дублируется подписью.
+ * Индикатор на плитке (ui-kit.md, вывод 2): маленький цветной значок, подпись и процент –
+ * плитка собеседника не «окрашивается». Цвет всегда дублируется формой значка и подписью.
  */
 export function EmotionIndicator({
   data,
@@ -29,11 +30,7 @@ export function EmotionIndicator({
   const meta = EMOTION_META[data.last.dominant];
   return (
     <span className={cn(base, 'text-room-foreground')}>
-      <span
-        className="size-2 rounded-full"
-        style={{ background: `var(${meta.cssVar})` }}
-        aria-hidden
-      />
+      <EmotionIcon label={data.last.dominant} className="size-3.5" />
       {meta.title}
       <span className="text-room-muted">{formatPercent(data.last.confidence)}</span>
     </span>
@@ -55,7 +52,7 @@ export function ProbabilityBar({ p, className }: { p: number[]; className?: stri
       {EMOTION_LABELS.map((e, i) => (
         <span
           key={e}
-          style={{ width: `${(p[i] ?? 0) * 100}%`, background: `var(${EMOTION_META[e].cssVar})` }}
+          style={{ width: `${(p[i] ?? 0) * 100}%`, background: emotionColor(e, 'dark') }}
         />
       ))}
     </div>
