@@ -55,7 +55,7 @@
 
 ### Бэкенд ([backend/](backend/README.md))
 
-[conventions.md](backend/conventions.md) · [database.md](backend/database.md) · [background-jobs.md](backend/background-jobs.md) ·
+[coding-standards.md](backend/coding-standards.md) · [conventions.md](backend/conventions.md) · [database.md](backend/database.md) · [background-jobs.md](backend/background-jobs.md) ·
 [auth-service](backend/auth-service.md) · [meeting-service](backend/meeting-service.md) ·
 [realtime-service](backend/realtime-service.md) · [analytics-service](backend/analytics-service.md)
 

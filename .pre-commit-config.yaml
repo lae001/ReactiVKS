@@ -1,0 +1,57 @@
+# Проверки перед коммитом – те же, что в CI бэкенда (docs/backend/coding-standards.md, приложение).
+# Установка один раз на клон: uv run --directory backend pre-commit install
+# Фронтенд проверяется своими ESLint и Prettier (frontend/README.md), поэтому стилевые хуки ограничены backend/ и deploy/.
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      # Закрытый ключ в истории не отозвать – только ротация.
+      - id: detect-private-key
+      # GitHub Flow: задача – в ветке, в main – только через pull request.
+      - id: no-commit-to-branch
+        args: [--branch, main]
+      - id: end-of-file-fixer
+        files: ^(backend|deploy)/
+      - id: trailing-whitespace
+        files: ^(backend|deploy)/
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.5
+    hooks:
+      - id: ruff-check
+        args: [--fix, --config, backend/pyproject.toml]
+        files: ^backend/
+      - id: ruff-format
+        args: [--config, backend/pyproject.toml]
+        files: ^backend/
+
+  # Conventional Commits: feat(auth): … (EMO-33).
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.18.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      # mypy и import-linter смотрят на весь проект: проверка части файлов находит несуществующие ошибки и
+      # пропускает настоящие.
+      - id: mypy
+        name: mypy (backend)
+        entry: make -C backend type
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: import-linter
+        name: import-linter (backend)
+        entry: make -C backend imports
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false

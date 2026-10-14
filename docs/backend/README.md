@@ -6,6 +6,7 @@
 
 | Документ | Содержание |
 |---|---|
+| [coding-standards.md](coding-standards.md) | Стандарты кодирования: устройство сервиса и слои, правила импорта, именование, типизация, тесты, git и ревью |
 | [conventions.md](conventions.md) | Общие правила сервисов: `vks_common`, ошибки, межсервисные вызовы, outbox, потребители Kafka, БД, health, журналы, тесты |
 | [database.md](database.md) | Физическая схема PostgreSQL: DDL, ограничения, индексы, роли |
 | [background-jobs.md](background-jobs.md) | Фоновые задачи и потребители событий всех сервисов |

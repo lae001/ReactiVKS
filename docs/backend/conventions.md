@@ -5,31 +5,37 @@
 
 ## 1. Библиотека `vks_common`
 
-| Модуль | Содержимое |
-|---|---|
-| `vks_common.app` | Фабрика `create_app(settings, routers, lifespan_hooks)`: middleware, обработчики ошибок, `/health`, `/ready`, `/metrics`, OpenAPI |
-| `vks_common.config` | Базовый класс `BaseServiceSettings` (pydantic-settings) |
-| `vks_common.auth` | Проверка JWT по JWKS, зависимости FastAPI `require_user`, `require_admin`, `require_service` |
-| `vks_common.errors` | Иерархия исключений, реестр кодов ошибок, преобразование в Problem Details |
-| `vks_common.http` | Фабрика `httpx.AsyncClient` для внутренних вызовов (таймауты, повторы, заголовки) |
-| `vks_common.db` | Движок и фабрика сессий SQLAlchemy 2.0 (async), Unit of Work, базовый репозиторий |
-| `vks_common.kafka` | Публикация (`OutboxRelay`, `EventProducer`) и потребление (`EventConsumer`) событий Kafka на `aiokafka` |
-| `vks_common.jobs` | Периодические задачи с распределенной блокировкой (см. [background-jobs.md](background-jobs.md)) |
-| `vks_common.logging` | Настройка structlog (JSON), контекст `request_id`/`meeting_id` |
-| `vks_common.clock` | `Clock` (`now()` в UTC) – подменяется в тестах |
-| `vks_common.ids` | `new_id()` → UUIDv7, генерация случайных токенов и `invite_code` |
-| `vks_contracts` (отдельный пакет) | Pydantic-модели событий и внутренних API ([events.md](../api/events.md)) |
+| Модуль | Содержимое | Есть |
+|---|---|---|
+| `vks_common.app` | Фабрика `create_app(settings, routers, lifespan)`: middleware, обработчики ошибок, `/health`, `/ready`, OpenAPI; `use_database` | ✓ |
+| `vks_common.config` | `BaseServiceSettings`, `DatabaseServiceSettings` (pydantic-settings), секреты из файлов `<ИМЯ>_FILE` | ✓ |
+| `vks_common.auth` | Проверка JWT RS256 (`TokenVerifier`), ключи `StaticKeys` / `JwksKeys`, зависимости `require_user`, `require_admin` | ✓ |
+| `vks_common.errors` | Базовые классы ошибок `AppError` и наследники – без зависимостей, их импортирует домен | ✓ |
+| `vks_common.problem_details` | Преобразование ошибок в RFC 9457, описание ошибок в OpenAPI | ✓ |
+| `vks_common.middleware` | `request_id` из `X-Request-ID`, журнал доступа | ✓ |
+| `vks_common.db` | Движок и сессии SQLAlchemy 2.0 (async), `transaction()`, соглашение об именах, SQLSTATE, миграции и сверка версии схемы | ✓ |
+| `vks_common.logging` | Настройка structlog (JSON), контекст `request_id`/`user_id`/`meeting_id` | ✓ |
+| `vks_common.clock` | `Clock` (`now()` в UTC), `FixedClock` для тестов | ✓ |
+| `vks_common.ids` | `new_id()` → UUIDv7, случайные токены | ✓ |
+| `vks_common.testing` | PostgreSQL в testcontainers с init-скриптом `deploy/`, изоляция откатом, `TokenFactory`, клиент приложения | ✓ |
+| `vks_common.auth` (дополнение) | `require_service` (`X-Service-Token`) | с первым `/internal/*` |
+| `vks_common.http` | Фабрика `httpx.AsyncClient` для внутренних вызовов (таймауты, повторы, заголовки) | с meeting-service |
+| `vks_common.kafka` | Публикация (`OutboxRelay`, `EventProducer`) и потребление (`EventConsumer`) событий Kafka на `aiokafka` | с первым событием |
+| `vks_common.jobs` | Периодические задачи с распределенной блокировкой (см. [background-jobs.md](background-jobs.md)) | с первой задачей |
+| `/metrics` в `vks_common.app` | Метрики Prometheus | с мониторингом (спринт 6) |
+| `vks_contracts` (отдельный пакет) | Pydantic-модели событий и внутренних API ([events.md](../api/events.md)) | с первым событием |
 
 ## 2. Устройство сервиса
 
-Слои и каталоги – [architecture/07-development.md](../architecture/07-development.md#72-внутренняя-структура-python-сервиса).
-Дополнительные правила:
+Слои, каталоги и правила импорта – [coding-standards.md](coding-standards.md#2-структура),
+схема – [architecture/07-development.md](../architecture/07-development.md#72-внутренняя-структура-python-сервиса).
+Кратко:
 
 - `api/` не содержит бизнес-логики: разбор запроса → вызов сценария из `services/` → формирование ответа.
-- Схемы запросов/ответов (`api/schemas.py`) отделены от доменных сущностей (`domain/`) и от моделей ORM (`infra/db/models.py`).
-- Сценарий использования = один публичный метод класса в `services/`, одна транзакция.
-- Внешние системы (LiveKit, Redis, SMTP, другие сервисы) – только через интерфейсы (`Protocol`) из `services/ports.py`;
-  реализации в `infra/`. В тестах – фейки.
+- Схемы запросов/ответов (`schemas/`) отделены от доменных сущностей (`domain/`) и от моделей ORM (`models/`).
+- Сценарий использования – класс в `services/` с единственным методом `execute`; транзакцию открывает и фиксирует он.
+- Внешние системы (LiveKit, Redis, SMTP, криптография) – только через порты (`Protocol`) из `domain/`; реализации –
+  в `adapters/`, вызовы других сервисов – в `clients/`. В модульных тестах – фейки портов.
 - Запуск: `uvicorn <service>.main:app` (1 процесс, асинхронно); фоновые задачи и потребители стартуют в `lifespan`
   того же процесса.
 
@@ -167,7 +173,7 @@ sequenceDiagram
 ## 8. Доступ к БД
 
 - SQLAlchemy 2.0, `AsyncSession`, драйвер `asyncpg`; пул 5–10 соединений на сервис.
-- Сессия на запрос/сообщение; транзакция открывается и фиксируется в сценарии (`async with uow:`).
+- Сессия на запрос/сообщение; транзакция открывается и фиксируется в сценарии (`async with transaction(session):`).
 - Ленивые загрузки запрещены (`lazy="raise"`), связи загружаются явно.
 - Репозитории возвращают доменные сущности, а не ORM-объекты.
 - Блокировки: изменение статуса встречи – `SELECT … FOR UPDATE` строки встречи (гонки «завершить» vs «вебхук room_finished»).
@@ -202,9 +208,13 @@ sequenceDiagram
 
 ```python
 @router.post("/meetings/{meeting_id}/end")
-async def end_meeting(meeting_id: UUID, user: CurrentUser = Depends(require_user), svc: MeetingService = Depends()):
-    return await svc.end(meeting_id, actor=user)
+async def end_meeting(meeting_id: UUID, user: CurrentUser, scenario: EndMeetingScenario) -> MeetingResponse:
+    meeting = await scenario.execute(meeting_id=MeetingId(meeting_id), actor=user)
+    return MeetingResponse.from_domain(meeting)
 ```
+
+`CurrentUser` – `Annotated[AuthenticatedUser, Depends(require_user)]` из `vks_common.auth`; `EndMeetingScenario` –
+`Annotated[EndMeeting, Depends(build_end_meeting)]` из `api/v1/dependencies.py` сервиса.
 
 | Зависимость | Проверяет |
 |---|---|
