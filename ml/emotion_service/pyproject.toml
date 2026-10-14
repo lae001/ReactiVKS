@@ -1,0 +1,68 @@
+[project]
+name = "emotion-service"
+version = "0.1.0"
+description = "ReactiVKS emotion-ml-service: агент LiveKit, распознающий эмоции участников (docs/ml/emotion-ml-service.md)"
+requires-python = ">=3.12,<3.13"
+# Ядро – конвейер распознавания без сетевых зависимостей: его же импортирует обучение (ml/training) ради общего
+# препроцессинга.
+dependencies = [
+    "numpy>=2.0",
+    "opencv-python-headless>=4.10",
+    "onnxruntime>=1.20",
+]
+
+[project.optional-dependencies]
+# Сетка лица MediaPipe (478 точек, мимика, взгляд); без нее работают 5 точек YuNet.
+mesh = [
+    "mediapipe>=0.10.20",
+]
+# Агент LiveKit: подключение к комнате, получение видеодорожек.
+agent = [
+    "livekit-agents>=1.2",
+    "livekit>=1.0",
+    "emotion-service[mesh]",
+]
+
+[project.scripts]
+emotion-agent = "emotion_service.agent:main"
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.5",
+    "mypy==2.3.1",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/emotion_service"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "S", "ASYNC", "DTZ", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+"scripts/**" = ["T201"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["cv2.*", "onnxruntime.*", "mediapipe.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --import-mode=importlib"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
