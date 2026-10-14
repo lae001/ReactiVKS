@@ -10,15 +10,16 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 
 ## Команды
 
-| Команда                             | Что делает                                                                    |
-| ----------------------------------- | ----------------------------------------------------------------------------- |
-| `pnpm install`                      | Установка зависимостей                                                        |
-| `pnpm dev`                          | Dev-сервер на http://localhost:5173 (прокси `/api`, `/ws` → `localhost:8080`) |
-| `pnpm build`                        | Проверка типов + production-сборка в `dist/`                                  |
-| `pnpm lint`                         | ESLint                                                                        |
-| `pnpm format` / `pnpm format:check` | Prettier (с сортировкой классов Tailwind)                                     |
-| `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                     |
-| `pnpm test`                         | Vitest + Testing Library                                                      |
+| Команда                             | Что делает                                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `pnpm install`                      | Установка зависимостей                                                                       |
+| `pnpm dev`                          | Dev-сервер на http://localhost:5173 (прокси `/api` → auth-service, `/ws` → `localhost:8080`) |
+| `pnpm gen:api`                      | Типы API из OpenAPI запущенного сервиса → `src/shared/api/schema.d.ts`                       |
+| `pnpm build`                        | Проверка типов + production-сборка в `dist/`                                                 |
+| `pnpm lint`                         | ESLint                                                                                       |
+| `pnpm format` / `pnpm format:check` | Prettier (с сортировкой классов Tailwind)                                                    |
+| `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                                    |
+| `pnpm test`                         | Vitest + Testing Library                                                                     |
 
 ## Структура
 
@@ -28,10 +29,11 @@ src/
 ├── pages/          # страницы (по одной на маршрут); dev/ – служебные страницы
 ├── features/       # auth, meetings, lobby, room, emotions, reports, admin (с спринта 2)
 ├── shared/
+│   ├── api/        # fetch-клиент, сессия (Zustand), типы OpenAPI
 │   ├── ui/         # компоненты shadcn/ui и общие элементы (Wordmark, PageStub)
 │   ├── config/     # пути, классы эмоций
 │   └── lib/        # утилиты (cn, проверка поддержки WebRTC)
-└── test/           # настройка Vitest
+└── test/           # настройка Vitest, мок сети (MSW), renderApp
 ```
 
 Импорт из `src` – через псевдоним `@/`. Компоненты shadcn/ui добавляются командой
@@ -47,3 +49,17 @@ src/
 ## Переменные окружения
 
 См. `.env.example`. Все переменные клиента начинаются с `VITE_` и попадают в сборку – секреты в них не хранятся.
+
+### Подключение к бэкенду в dev
+
+`pnpm dev` проксирует `/api` на адрес из `VITE_DEV_API_TARGET` (по умолчанию `http://127.0.0.1:8001` – локальный
+auth-service, запуск описан в `backend/services/auth_service`). Браузер видит один origin
+(`http://localhost:5173`), поэтому работает cookie `vks_refresh` (`HttpOnly; Secure; SameSite=Strict;
+Path=/api/v1/auth`): Chromium и Firefox принимают `Secure`-cookie на `localhost` и по `http`. Сменить адрес:
+
+```bash
+VITE_DEV_API_TARGET=http://127.0.0.1:9000 pnpm dev
+```
+
+Типы API перегенерируются командой `pnpm gen:api` при запущенном сервисе (адрес берется из той же переменной);
+сгенерированный файл коммитится. Тесты ходят не в сеть, а в мок на MSW (`src/test/`).

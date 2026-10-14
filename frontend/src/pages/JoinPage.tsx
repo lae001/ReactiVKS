@@ -12,6 +12,7 @@ import {
 import { paths } from '@/shared/config/routes';
 import { useLocalMedia } from '@/shared/hooks/use-local-media';
 import { formatDateTime } from '@/shared/lib/format';
+import { setParticipantToken } from '@/shared/lib/participant-session';
 import type { RoomEntry } from '@/shared/lib/room-entry';
 import { checkWebRtcSupport, describeWebRtcProblem } from '@/shared/lib/webrtc-support';
 import { getJoinInfo, joinMeeting } from '@/shared/mocks/data';
@@ -103,6 +104,9 @@ function Lobby({
       if (result.error === 'meeting_not_started') setWaiting(true);
       return;
     }
+
+    // МОК: настоящий participant_token придет в ответе POST /join/{invite_code} (EMO-74, EMO-89)
+    setParticipantToken(`pt_mock_${crypto.randomUUID()}`);
 
     const entry: RoomEntry = {
       role: 'guest',

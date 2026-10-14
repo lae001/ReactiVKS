@@ -1,39 +1,25 @@
 import { Link } from 'react-router';
 
+import { RegisterForm } from '@/features/auth/RegisterForm';
+import { useAuthConfig } from '@/features/auth/use-auth-config';
 import { paths } from '@/shared/config/routes';
-import { Button } from '@/shared/ui/button';
-import { Input } from '@/shared/ui/input';
-import { Label } from '@/shared/ui/label';
 
-/** UC-1. Регистрация организатора. Валидация (Zod) и отправка – EMO-39. */
+/** UC-1. Регистрация организатора; при выключенной регистрации (GET /auth/config) формы нет. */
 export function RegisterPage() {
+  const { registrationEnabled } = useAuthConfig();
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">Регистрация</h1>
         <p className="text-sm text-muted-foreground">
-          Аккаунт нужен, чтобы создавать встречи и получать отчеты.
+          {registrationEnabled
+            ? 'Аккаунт нужен, чтобы создавать встречи и получать отчеты.'
+            : 'Сейчас регистрация закрыта. Обратитесь к администратору системы, если нужен аккаунт.'}
         </p>
       </div>
-      <form className="flex flex-col gap-4" onSubmit={(e) => e.preventDefault()}>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="name">Имя</Label>
-          <Input id="name" autoComplete="name" />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="email">Электронная почта</Label>
-          <Input id="email" type="email" autoComplete="email" placeholder="name@example.ru" />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="password">Пароль</Label>
-          <Input id="password" type="password" autoComplete="new-password" />
-        </div>
-        <Button type="submit" disabled title="Подключается в спринте 2 (EMO-39)">
-          Создать аккаунт
-        </Button>
-      </form>
+      {registrationEnabled ? <RegisterForm /> : null}
       <p className="text-sm text-muted-foreground">
-        Уже зарегистрированы?{' '}
+        {registrationEnabled ? 'Уже зарегистрированы? ' : 'Есть аккаунт? '}
         <Link to={paths.login} className="font-medium text-primary hover:underline">
           Войти
         </Link>
