@@ -1,0 +1,25 @@
+# EMO-43 (в отчете спринта 3 – EMO-41): сравнение архитектур в одинаковых условиях – FER-2013, 25 эпох,
+# вход 224, аугментации ВКС, без балансировки. Отличается только model.arch.
+name: cmp-efficientnet_b0
+seed: 42
+data:
+  fer2013: data/fer2013
+  val_fraction: 0.1
+  drop_blank: true
+  dedup: true
+model:
+  arch: efficientnet_b0
+  pretrained: true
+  input_size: 224
+  drop_rate: 0.2
+train:
+  epochs: 25
+  batch_size: 128
+  lr: 1.0e-3
+  weight_decay: 0.05
+  warmup_epochs: 1
+  label_smoothing: 0.1
+  balance: none
+  num_workers: 4
+augment:
+  level: vks

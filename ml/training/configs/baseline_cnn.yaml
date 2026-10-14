@@ -1,0 +1,24 @@
+# EMO-28 (в отчете спринта 2 – EMO-27): базовая модель – простая CNN без предобучения на родном 48×48.
+name: baseline-cnn
+seed: 42
+data:
+  fer2013: data/fer2013
+  val_fraction: 0.1
+  drop_blank: true
+  dedup: true
+model:
+  arch: simple_cnn
+  pretrained: false
+  input_size: 48
+  drop_rate: 0.3
+train:
+  epochs: 40
+  batch_size: 128
+  lr: 2.0e-3
+  weight_decay: 0.05
+  warmup_epochs: 1
+  label_smoothing: 0.1
+  balance: none
+  num_workers: 4
+augment:
+  level: vks
