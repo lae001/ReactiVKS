@@ -1,9 +1,10 @@
 import { Settings, Shield, Video } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router';
+import { NavLink, Outlet, useNavigate } from 'react-router';
+
+import { useAuth } from '@/features/auth/auth-context';
 
 import { paths } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/utils';
-import { getMockUser } from '@/shared/mocks/session';
 import { Wordmark } from '@/shared/ui/brand';
 import { Button } from '@/shared/ui/button';
 
@@ -15,8 +16,9 @@ const nav = [
 
 /** Каркас страниц организатора и администратора: шапка с навигацией и область контента. */
 export function AppLayout() {
-  // Пока роль тестовая; сам маршрут /admin закрывается RequireRole в EMO-40
-  const isAdmin = getMockUser().role === 'admin';
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
   const items = nav.filter((item) => !item.adminOnly || isAdmin);
 
   return (
@@ -44,9 +46,22 @@ export function AppLayout() {
               </NavLink>
             ))}
           </nav>
-          {/* Имя пользователя и выход – после подключения auth-service (EMO-40) */}
-          <Button variant="ghost" size="sm" asChild>
-            <NavLink to={paths.login}>Выйти</NavLink>
+          {user ? (
+            <span className="hidden max-w-48 truncate text-sm text-muted-foreground md:block">
+              {user.display_name}
+            </span>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // выход не должен зависеть от ответа сервера: сессия на устройстве забывается в любом случае
+              logout()
+                .catch(() => undefined)
+                .finally(() => void navigate(paths.login, { replace: true }));
+            }}
+          >
+            Выйти
           </Button>
         </div>
       </header>

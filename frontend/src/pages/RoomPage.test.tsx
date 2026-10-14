@@ -1,9 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 
-import { routes } from '@/app/routes';
 import type { RoomEntry } from '@/shared/lib/room-entry';
+import { mockNoSession, organizer } from '@/test/api-mocks';
+import { renderApp } from '@/test/render';
 
 const guest: RoomEntry = {
   role: 'guest',
@@ -14,12 +14,10 @@ const guest: RoomEntry = {
   inviteCode: 'demoactive',
 };
 
+/** Организатор входит по сессии, гость – из лобби без учетной записи. */
 function renderRoom(meetingId: string, state?: RoomEntry) {
-  const router = createMemoryRouter(routes, {
-    initialEntries: [{ pathname: `/room/${meetingId}`, state }],
-  });
-  render(<RouterProvider router={router} />);
-  return router;
+  if (state) mockNoSession();
+  return renderApp(`/room/${meetingId}`, { user: state ? undefined : organizer, state });
 }
 
 describe('комната организатора', () => {

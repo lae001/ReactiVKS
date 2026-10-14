@@ -1,38 +1,46 @@
-import { render, screen } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { screen } from '@testing-library/react';
 
-import { routes } from '@/app/routes';
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(<RouterProvider router={router} />);
-  return router;
-}
+import { admin, mockAuthConfig, mockNoSession, organizer } from '@/test/api-mocks';
+import { renderApp } from '@/test/render';
 
 describe('маршруты-заглушки', () => {
   it.each([
-    ['/login', 'Вход'],
-    ['/register', 'Регистрация'],
     ['/meetings', 'Встречи'],
     ['/meetings/new', 'Новая встреча'],
     ['/meetings/42', 'Карточка встречи'],
     ['/settings', 'Настройки'],
-    ['/admin', 'Администрирование'],
+  ])('%s открывается организатору', async (path, heading) => {
+    renderApp(path, { user: organizer });
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+  });
+
+  it('/admin открывается администратору', async () => {
+    renderApp('/admin', { user: admin });
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Администрирование' }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ['/login', 'Вход'],
+    ['/register', 'Регистрация'],
     ['/j/abc123', 'Приглашение не найдено'],
     ['/nope', 'Такой страницы нет'],
-  ])('%s открывается', async (path, heading) => {
-    renderAt(path);
+  ])('%s открывается без входа', async (path, heading) => {
+    mockNoSession();
+    mockAuthConfig();
+    renderApp(path);
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
   });
 
   it('корень перенаправляет на /meetings', async () => {
-    const router = renderAt('/');
+    const router = renderApp('/', { user: organizer });
     await screen.findByRole('heading', { level: 1, name: 'Встречи' });
     expect(router.state.location.pathname).toBe('/meetings');
   });
 
   it('комната загружается лениво', async () => {
-    renderAt('/room/m1');
+    renderApp('/room/m1', { user: organizer });
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Быстрая встреча' }),
     ).toBeInTheDocument();

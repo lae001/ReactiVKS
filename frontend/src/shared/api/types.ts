@@ -1,20 +1,18 @@
 import type { EmotionLabel } from '@/shared/config/emotions';
 
+import type { components } from './schema';
+
 /**
  * Типы по контрактам docs/api/rest-api.md и docs/api/websocket-protocol.md.
- * Написаны вручную на время работы на тестовых данных; в EMO-40 заменяются
- * типами, сгенерированными openapi-typescript (src/shared/api/schema.d.ts).
+ * Типы auth-service берутся из сгенерированной схемы (pnpm gen:api); типы meeting-service
+ * и WebSocket написаны вручную на время работы на тестовых данных, пока сервисов нет.
  */
 
-/** Роль учетной записи (схема `User`); у гостя учетной записи нет. */
-export type UserRole = 'organizer' | 'admin';
+/** Учетная запись (схема `User`); у гостя учетной записи нет. */
+export type User = components['schemas']['UserResponse'];
 
-export interface User {
-  id: string;
-  email: string;
-  display_name: string;
-  role: UserRole;
-}
+/** Роль учетной записи. */
+export type UserRole = User['role'];
 
 export type MeetingStatus = 'scheduled' | 'active' | 'ended' | 'cancelled';
 
