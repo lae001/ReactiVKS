@@ -2,7 +2,7 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router';
 
 import type { UserRole } from '@/shared/api/types';
 import { paths } from '@/shared/config/routes';
-import { readRoomEntry } from '@/shared/lib/room-entry';
+import { getParticipantToken } from '@/shared/lib/participant-session';
 import { Button } from '@/shared/ui/button';
 
 import { useAuth } from './auth-context';
@@ -45,14 +45,13 @@ export function RequireAuth() {
 }
 
 /**
- * Комната: организатор и администратор входят по сессии, гость – из лобби (/j/:inviteCode),
- * которое передает вход через state навигации. Пока нет meeting-service, это единственный признак гостя;
- * настоящий допуск даст participant_token / токен LiveKit (EMO-74, EMO-89).
+ * Комната: организатор и администратор входят по сессии, гость – по participant_token, который лобби
+ * кладет в sessionStorage после POST /join/{invite_code}. Сейчас токен фиктивный (лобби на моке);
+ * проверять его на сервере будет meeting-service (EMO-74, EMO-89).
  */
 export function RequireRoomAccess() {
   const { status } = useAuth();
-  const location = useLocation();
-  if (status === 'anonymous' && readRoomEntry(location.state)?.role === 'guest') return <Outlet />;
+  if (status === 'anonymous' && getParticipantToken()) return <Outlet />;
   return <RequireAuth />;
 }
 

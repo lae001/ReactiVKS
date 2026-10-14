@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 
 import { admin, mockAuthConfig, mockNoSession, mockSession, organizer } from '@/test/api-mocks';
+import { setParticipantToken } from '@/shared/lib/participant-session';
 import { renderApp } from '@/test/render';
 
 const protectedPaths = [
@@ -53,13 +54,24 @@ describe('защита маршрутов', () => {
     ).toBeInTheDocument();
   });
 
-  it('гость, пришедший из лобби, попадает в комнату без учетной записи', async () => {
+  it('гость с participant_token попадает в комнату без учетной записи', async () => {
     mockNoSession();
+    setParticipantToken('pt_test');
     renderApp('/room/m1', {
       state: { role: 'guest', displayName: 'Гость', consent: 'granted', inviteCode: 'abc' },
     });
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Вход' })).not.toBeInTheDocument();
+  });
+
+  it('без participant_token комната закрыта, даже если в state написано «гость»', async () => {
+    mockNoSession();
+    mockAuthConfig();
+    const router = renderApp('/room/m1', {
+      state: { role: 'guest', displayName: 'Гость', consent: 'granted', inviteCode: 'abc' },
+    });
+    await screen.findByRole('heading', { level: 1, name: 'Вход' });
+    expect(router.state.location.pathname).toBe('/login');
   });
 
   it.each(['/login', '/register'])('вошедшего с %s уводит на /meetings', async (path) => {

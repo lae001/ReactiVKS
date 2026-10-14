@@ -88,8 +88,12 @@ flowchart TB
   (`features/auth/errors.ts`). Политика пароля (8–128 символов, буква и цифра, без пробелов по краям) повторена в
   Zod (`features/auth/schemas.ts`); сервер проверяет ее всегда.
 - **Типы API.** Генерируются `pnpm gen:api` из OpenAPI auth-service (`src/shared/api/schema.d.ts`).
-- Гость хранит `participant_token` в `sessionStorage` на время встречи (для отзыва согласия и повторного входа
-  после перезагрузки вкладки) – появится вместе с meeting-service.
+- **Гость.** `participant_token` выдает `POST /join/{invite_code}`; он хранится в `sessionStorage` вкладки
+  (`shared/lib/participant-session.ts`) на время встречи – для отзыва согласия и повторного входа после перезагрузки.
+  REST-вызовы гостя идут с `Authorization: Participant <токен>`, `livekit_token` нужен только для медиа.
+  `RequireRoomAccess` пускает в `/room/:id` вошедшего организатора или администратора либо гостя, у которого в
+  `sessionStorage` есть токен. Пока лобби на моке, токен фиктивный (`pt_mock_…`) и сервером не проверяется:
+  проверка появится вместе с meeting-service (EMO-74, EMO-89).
 
 ### Что на моках
 
@@ -97,7 +101,7 @@ flowchart TB
 |---|---|
 | Смена пароля (`POST /users/me/password`) | Мок в `features/auth/api.ts` (`changePassword`); в `/settings` карточка помечена «Тестовый режим». Заменить тело функции вызовом `apiFetch`, когда эндпоинт появится |
 | Восстановление пароля, `/admin/users` | Не реализованы ни на бэкенде, ни на фронтенде |
-| Встречи, лобби, комната | Тестовые данные (`shared/mocks/`), до meeting-service |
+| Встречи, лобби, комната | Тестовые данные (`shared/mocks/`), до meeting-service; `participant_token` гостя фиктивный |
 
 ## Комната встречи
 

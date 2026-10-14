@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { setParticipantToken } from '@/shared/lib/participant-session';
 import type { RoomEntry } from '@/shared/lib/room-entry';
 import { mockNoSession, organizer } from '@/test/api-mocks';
 import { renderApp } from '@/test/render';
@@ -16,7 +17,10 @@ const guest: RoomEntry = {
 
 /** Организатор входит по сессии, гость – из лобби без учетной записи. */
 function renderRoom(meetingId: string, state?: RoomEntry) {
-  if (state) mockNoSession();
+  if (state) {
+    mockNoSession();
+    setParticipantToken('pt_test');
+  }
   return renderApp(`/room/${meetingId}`, { user: state ? undefined : organizer, state });
 }
 
