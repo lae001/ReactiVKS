@@ -2,13 +2,13 @@ import { Outlet } from 'react-router';
 
 import { EmotionSpectrum, Wordmark } from '@/shared/ui/brand';
 
-/** Экраны входа и регистрации: форма слева, пояснение о приватности справа. */
+/** Экраны входа и регистрации: форма по центру левой колонки, пояснение о приватности справа. */
 export function AuthLayout() {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
       <div className="flex flex-col px-6 py-8 md:px-12">
         <Wordmark />
-        <main className="flex flex-1 items-center">
+        <main className="flex flex-1 items-center justify-center py-8">
           <div className="w-full max-w-sm">
             <Outlet />
           </div>

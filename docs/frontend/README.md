@@ -6,7 +6,8 @@
 файлы и раздается Nginx. Интерфейс на русском языке.
 
 Запуск и команды – [frontend/README.md](../../frontend/README.md). Дополнительно:
-[заметки по WebRTC и LiveKit](webrtc-livekit-notes.md) · [UI-кит и визуальный стиль](ui-kit.md).
+[структура сайта: роли, экраны, UC](site-structure.md) · [заметки по WebRTC и LiveKit](webrtc-livekit-notes.md) ·
+[UI-кит и визуальный стиль](ui-kit.md).
 
 ## Технологии ([ADR-006](../adr/ADR-006-frontend-stack.md))
 
