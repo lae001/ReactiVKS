@@ -32,6 +32,8 @@ class Settings:
     worker_id: str
     # Доля загрузки CPU, при которой воркер перестает брать новые встречи (по умолчанию LiveKit Agents – 0,7).
     load_threshold: float
+    # > 0 – первые N секунд анализа участника считаются его нейтральным лицом (calibration.py); 0 – выключено.
+    auto_neutral_s: float
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -47,4 +49,5 @@ class Settings:
             max_side=int(_env("ML_MAX_SIDE", "640")),
             worker_id=_env("ML_WORKER_ID", socket.gethostname()),
             load_threshold=float(_env("ML_LOAD_THRESHOLD", "0.7")),
+            auto_neutral_s=float(_env("ML_AUTO_NEUTRAL_S", "0")),
         )

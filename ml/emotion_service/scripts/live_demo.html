@@ -81,6 +81,16 @@
 
   <div class="col">
     <div class="card">
+      <h2>Калибровка под вас</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button id="calibrate" class="primary">Откалибровать нейтральное лицо</button>
+        <button id="reset-cal">Сбросить</button>
+        <span id="cal-state" class="chip">не откалибровано</span>
+      </div>
+      <div class="track" style="margin-top:10px"><div class="fill" id="cal-progress" style="background:var(--accent)"></div></div>
+      <div class="note">Нажмите и 3 секунды смотрите в камеру со спокойным лицом. Дальше эмоции считаются относительно вашего нейтрального выражения: свет, ракурс и индивидуальные черты лица перестают сдвигать ответ в сторону «Грусти».</div>
+    </div>
+    <div class="card">
       <h2>Сейчас</h2>
       <div class="dominant">
         <div class="swatch" id="swatch"></div>
@@ -251,8 +261,18 @@ function renderAttention(a) {
   $("att-dis-n").textContent = ((1 - a.interest) * 100).toFixed(0) + " %";
 }
 
+const CAL = { none: ["не откалибровано", ""], collecting: ["калибровка… сохраняйте спокойное лицо", "warn"], ready: ["откалибровано", "on"] };
+
+function renderCalibration(c) {
+  if (!c) return;
+  const [text, cls] = CAL[c.state];
+  $("cal-state").textContent = text; $("cal-state").className = "chip " + cls;
+  $("cal-progress").style.width = (c.progress * 100).toFixed(0) + "%";
+}
+
 function render(r) {
   last = r;
+  renderCalibration(r.calibration);
   renderAttention(r.attention);
   history.push({ t: performance.now(), probs: r.probs || null, interest: r.attention ? r.attention.interest : null });
   while (history.length && history[0].t < performance.now() - 60000) history.shift();
@@ -285,7 +305,9 @@ function render(r) {
     drawOverlay(r);
     renderMesh(r);
     const top = (p) => p ? TITLES[Object.entries(p).sort((a, b) => b[1] - a[1])[0][0]] : "—";
-    $("sources").textContent = `CNN: ${top(r.cnn_probs)} · с мимикой: ${top(r.raw_probs)} · сглажено: ${TITLES[r.dominant]}`;
+    $("sources").textContent = `CNN: ${top(r.cnn_probs)} · с мимикой: ${top(r.uncalibrated_probs)}` +
+      (r.calibration && r.calibration.state === "ready" ? ` · после калибровки: ${top(r.raw_probs)}` : "") +
+      ` · сглажено: ${TITLES[r.dominant]}`;
   }
   drawTimeline();
 }
@@ -372,6 +394,8 @@ function drawTimeline() {
 
 $("start").onclick = () => (stream ? stopCamera() : startCamera().catch((e) => setStatus("нет доступа к камере: " + e.message, "warn")));
 $("camera").onchange = () => stream && startCamera();
+$("calibrate").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "calibrate" }));
+$("reset-cal").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "reset_calibration" }));
 listCameras().catch(() => {});
 </script>
 </body>

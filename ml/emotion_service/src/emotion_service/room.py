@@ -62,6 +62,7 @@ class RoomAnalyzer:
         rate: AdaptiveRate,
         worker_id: str,
         model_version: str,
+        auto_calibrate: bool = False,
     ) -> None:
         self.room = room
         self.meeting_id = room.name
@@ -70,6 +71,8 @@ class RoomAnalyzer:
         self.rate = rate
         self.worker_id = worker_id
         self.model_version = model_version
+        # Автокалибровка: начало анализа участника считается его нейтральным лицом (ML_AUTO_NEUTRAL_S).
+        self.auto_calibrate = auto_calibrate
         self.sampler: FrameSampler[rtc.VideoFrame] = FrameSampler()
         self._readers: dict[str, asyncio.Task[None]] = {}  # track sid → чтение дорожки
         self._throttle = StateThrottle()
@@ -129,7 +132,10 @@ class RoomAnalyzer:
             # Средний слой simulcast (≈ 640×360) достаточен для лица и экономит декодирование.
             publication.set_video_quality(rtc.VideoQuality.VIDEO_QUALITY_MEDIUM)
             log.info("Анализ камеры %s (%s)", participant.identity, publication.sid)
-            self._readers[publication.sid] = asyncio.create_task(self._read(track, participant_id(participant)))
+            pid = participant_id(participant)
+            if self.auto_calibrate:
+                self.pipeline.calibrator.start(pid)
+            self._readers[publication.sid] = asyncio.create_task(self._read(track, pid))
 
     def _on_track_muted(self, participant: rtc.Participant, publication: rtc.TrackPublication) -> None:
         if isinstance(participant, rtc.RemoteParticipant) and is_camera(publication) and is_human(participant):
@@ -157,6 +163,7 @@ class RoomAnalyzer:
         self.sampler.remove(pid)
         self.pipeline.smoother.reset(pid)
         self.pipeline.attention.reset(pid)
+        self.pipeline.calibrator.reset(pid)
 
     def _queue_state(self, participant: rtc.RemoteParticipant, state: str) -> None:
         pid = participant_id(participant)

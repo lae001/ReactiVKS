@@ -89,6 +89,14 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     # Свое сглаживание на каждое подключение: новая вкладка начинает с чистого состояния.
     pipeline = build_pipeline(request.app["card_path"], request.app["alpha"])
     async for msg in ws:
+        if msg.type == WSMsgType.TEXT:
+            command = json.loads(msg.data).get("cmd")
+            if command == "calibrate":
+                pipeline.calibrator.start("me")
+            elif command == "reset_calibration":
+                pipeline.calibrator.reset("me")
+                pipeline.smoother.reset("me")
+            continue
         if msg.type != WSMsgType.BINARY:
             continue
         started = time.perf_counter()
@@ -107,6 +115,8 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                 "pipeline": round((processed - decoded) * 1000, 1),
             },
         }
+        status = pipeline.calibrator.status("me", time.monotonic())
+        payload["calibration"] = {"state": status.state, "progress": round(status.progress, 2)}
         if result.attention is not None:
             payload["attention"] = attention_payload(result.attention)
         if result.state == "analyzing" and result.face is not None and result.crop is not None:
@@ -123,6 +133,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                 face_box_area=result.face_box_area,
                 crop=encode_png(result.crop),
                 cnn_probs=result.cnn_probs,
+                uncalibrated_probs=result.uncalibrated_probs,
             )
             if result.mesh is not None:
                 mesh = result.mesh

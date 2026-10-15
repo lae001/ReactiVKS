@@ -239,3 +239,37 @@ def test_mesh_pose_uses_gaze() -> None:
     assert mesh_pose(5.0, -5.0, 0.1).looking
     assert not mesh_pose(5.0, -5.0, 0.8).looking  # голова прямо, глаза в сторону
     assert not mesh_pose(5.0, 35.0, None).looking
+
+
+# ---------------------------------------------------------------------------- калибровка
+
+
+def test_calibration_maps_personal_neutral_to_neutral_and_keeps_changes() -> None:
+    from emotion_service.calibration import NEUTRAL_TARGET, NeutralCalibrator
+
+    calibrator = NeutralCalibrator(duration_s=1.0, min_samples=3)
+    resting = np.array([0.05, 0.02, 0.08, 0.05, 0.55, 0.05, 0.20])  # спокойное лицо, но модель говорит sad
+    smiling = np.array([0.03, 0.01, 0.04, 0.60, 0.17, 0.05, 0.10])
+    unchanged, _ = calibrator.apply("p", resting, 0.0)
+    assert unchanged is resting  # без запуска калибровки – без изменений
+    calibrator.start("p")
+    done = [calibrator.apply("p", resting, t / 4)[1] for t in range(6)]
+    assert done.index(True) == 4 and calibrator.status("p", 1.5).state == "ready"
+    after, _ = calibrator.apply("p", resting, 2.0)
+    assert LABELS[int(after.argmax())] == "neutral" and after.max() == pytest.approx(NEUTRAL_TARGET, abs=1e-3)
+    smile, _ = calibrator.apply("p", smiling, 2.3)
+    assert LABELS[int(smile.argmax())] == "happy"
+    calibrator.reset("p")
+    assert calibrator.status("p", 3.0).state == "none"
+
+
+def test_pipeline_resets_smoothing_when_calibration_completes() -> None:
+    face = FaceBox(100, 50, 120, 120, 0.95, None)
+    sad = np.array([0.05, 0.02, 0.08, 0.05, 0.55, 0.05, 0.20], np.float32)
+    pipeline = EmotionPipeline(FixedDetector({640: [face]}), FixedClassifier(sad))
+    frame = [("p", np.zeros((360, 640, 3), np.uint8))]
+    assert pipeline.process(frame, 0.0)[0].dominant == "sad"
+    pipeline.calibrator.start("p")
+    results = [pipeline.process(frame, 0.1 + t * 0.4)[0] for t in range(12)]
+    assert results[-1].calibration is not None and results[-1].calibration.state == "ready"
+    assert results[-1].dominant == "neutral"

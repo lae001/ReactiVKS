@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from emotion_service.attention import Attention, AttentionTracker, HeadPose, head_pose, mesh_pose
+from emotion_service.calibration import CalibrationStatus, NeutralCalibrator
 from emotion_service.classifier import EmotionClassifier
 from emotion_service.detection import FaceDetector
 from emotion_service.fusion import BlendshapeHead
@@ -37,7 +38,9 @@ class FaceResult:
     crop: np.ndarray | None = field(default=None, repr=False, compare=False)
     mesh: FaceMesh | None = field(default=None, repr=False, compare=False)  # координаты – в уменьшенном кадре
     cnn_probs: dict[str, float] | None = field(default=None, repr=False, compare=False)
-    raw_probs: dict[str, float] | None = field(default=None, repr=False, compare=False)
+    raw_probs: dict[str, float] | None = field(default=None, repr=False, compare=False)  # после калибровки
+    uncalibrated_probs: dict[str, float] | None = field(default=None, repr=False, compare=False)
+    calibration: CalibrationStatus | None = field(default=None, repr=False, compare=False)
     scale: float = field(default=1.0, repr=False, compare=False)  # кадр уменьшен в scale раз перед детекцией
 
 
@@ -50,6 +53,7 @@ class EmotionPipeline:
         attention: AttentionTracker | None = None,
         mesh: FaceMeshAnalyzer | None = None,
         blendshape_head: BlendshapeHead | None = None,
+        calibrator: NeutralCalibrator | None = None,
         max_side: int = 640,
         min_face_px: int = 24,
     ) -> None:
@@ -59,6 +63,7 @@ class EmotionPipeline:
         self.attention = attention or AttentionTracker()
         self.mesh = mesh
         self.blendshape_head = blendshape_head
+        self.calibrator = calibrator or NeutralCalibrator()
         self.max_side = max_side
         self.min_face_px = min_face_px
 
@@ -96,6 +101,10 @@ class EmotionPipeline:
                 raw = cnn
                 if mesh is not None and self.blendshape_head is not None:
                     raw = self.blendshape_head.fuse(cnn, mesh.blendshape_vector())
+                uncalibrated = raw
+                raw, calibrated_now = self.calibrator.apply(participant_id, raw, now)
+                if calibrated_now:
+                    self.smoother.reset(participant_id)  # сглаживание не тянет состояние до калибровки
                 smoothed = self.smoother.update(participant_id, raw, now)
                 pose: HeadPose | None
                 if mesh is not None:
@@ -117,6 +126,10 @@ class EmotionPipeline:
                     mesh=mesh,
                     cnn_probs={label: round(float(p), 4) for label, p in zip(labels, cnn, strict=True)},
                     raw_probs={label: round(float(p), 4) for label, p in zip(labels, raw, strict=True)},
+                    uncalibrated_probs={
+                        label: round(float(p), 4) for label, p in zip(labels, uncalibrated, strict=True)
+                    },
+                    calibration=self.calibrator.status(participant_id, now),
                     scale=scale,
                 )
         return [results[pid] for pid, _ in frames]

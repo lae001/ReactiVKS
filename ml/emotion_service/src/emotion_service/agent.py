@@ -11,6 +11,7 @@ import logging
 
 from livekit.agents import AutoSubscribe, JobContext, JobProcess, WorkerOptions, cli
 
+from emotion_service.calibration import NeutralCalibrator
 from emotion_service.classifier import OnnxEmotionClassifier
 from emotion_service.detection import YuNetDetector
 from emotion_service.fusion import BlendshapeHead
@@ -62,6 +63,7 @@ async def entrypoint(ctx: JobContext) -> None:
         TemporalSmoother(alpha=settings.ema_alpha),
         mesh=FaceMeshAnalyzer(settings.face_mesh_model) if settings.face_mesh_model else None,
         blendshape_head=ctx.proc.userdata["blendshape_head"],
+        calibrator=NeutralCalibrator(duration_s=settings.auto_neutral_s or 3.0),
         max_side=settings.max_side,
     )
     analyzer = RoomAnalyzer(
@@ -71,6 +73,7 @@ async def entrypoint(ctx: JobContext) -> None:
         AdaptiveRate(target_fps=fps, min_fps=settings.min_fps, max_fps=settings.max_fps),
         worker_id=settings.worker_id,
         model_version=classifier.model_version,
+        auto_calibrate=settings.auto_neutral_s > 0,
     )
     ctx.add_shutdown_callback(analyzer.aclose)
     await analyzer.run()
