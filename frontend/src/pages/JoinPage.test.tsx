@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 
-import { routes } from '@/app/routes';
+import { getParticipantToken } from '@/shared/lib/participant-session';
+import { mockNoSession } from '@/test/api-mocks';
+import { renderApp } from '@/test/render';
 
 /** Браузер с WebRTC и камерой: без этого лобби не дает войти. */
 function stubMediaBrowser() {
@@ -16,9 +17,8 @@ function stubMediaBrowser() {
 }
 
 function renderLobby(code: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [`/j/${code}`] });
-  render(<RouterProvider router={router} />);
-  return router;
+  mockNoSession();
+  return renderApp(`/j/${code}`);
 }
 
 describe('лобби участника', () => {
@@ -44,6 +44,7 @@ describe('лобби участника', () => {
     await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
     // комната загружается лениво – переход завершается после загрузки модуля
     await waitFor(() => expect(router.state.location.pathname).toBe('/room/m-active'));
+    expect(getParticipantToken()).toMatch(/^pt_/);
     expect(router.state.location.state).toMatchObject({
       role: 'guest',
       displayName: 'Анна',
