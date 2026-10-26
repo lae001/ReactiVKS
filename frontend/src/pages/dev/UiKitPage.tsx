@@ -1,6 +1,6 @@
-import { EMOTION_LABELS, EMOTION_META } from '@/shared/config/emotions';
 import { Badge } from '@/shared/ui/badge';
-import { EmotionSpectrum, Wordmark } from '@/shared/ui/brand';
+import { Wordmark } from '@/shared/ui/brand';
+import { EmotionsSection } from '@/pages/dev/EmotionsSection';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
@@ -53,17 +53,7 @@ export default function UiKitPage() {
         ))}
       </section>
 
-      <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">
-          Эмоции <Badge variant="outline">черновик, EMO-56</Badge>
-        </h2>
-        <EmotionSpectrum className="h-2 max-w-md" />
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-          {EMOTION_LABELS.map((e) => (
-            <Swatch key={e} name={EMOTION_META[e].title} cssVar={EMOTION_META[e].cssVar} note={e} />
-          ))}
-        </div>
-      </section>
+      <EmotionsSection />
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Типографика — Onest</h2>

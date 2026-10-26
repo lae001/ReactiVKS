@@ -45,9 +45,10 @@
   --room-muted: #93a4b0;
 
   /*
-   * Цвета 7 классов эмоций – ЧЕРНОВИК, утверждаются в EMO-56.
-   * Палитра Okabe–Ito: различима при протанопии и дейтеранопии.
+   * Цвета 7 классов эмоций (EMO-55, docs/frontend/emotion-visualization.md).
+   * Основа – палитра Okabe–Ito, «нейтральное» затемнено до сине-серого (различимость при дейтеранопии).
    * Ключи – как в labels протокола WebSocket (docs/api/websocket-protocol.md).
+   * Цвет всегда дублируется подписью и значком. -line – для линий и обводок на светлом фоне (≥ 3:1).
    */
   --emotion-angry: #d55e00;
   --emotion-disgust: #009e73;
@@ -55,7 +56,17 @@
   --emotion-happy: #e69f00;
   --emotion-sad: #0072b2;
   --emotion-surprise: #56b4e9;
-  --emotion-neutral: #999999;
+  --emotion-neutral: #6f7b85;
+
+  --emotion-angry-line: #d55e00;
+  --emotion-disgust-line: #009e73;
+  --emotion-fear-line: #c675a2;
+  --emotion-happy-line: #bd8200;
+  --emotion-sad-line: #0072b2;
+  --emotion-surprise-line: #4897c4;
+  --emotion-neutral-line: #6f7b85;
+  /* «Грусть» на темном фоне комнаты: основной синий там ниже 3:1 */
+  --emotion-sad-dark: #2a86c0;
 }
 
 .dark {

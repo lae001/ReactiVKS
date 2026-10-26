@@ -7,7 +7,7 @@ describe('маршруты-заглушки', () => {
   it.each([
     ['/meetings', 'Встречи'],
     ['/meetings/new', 'Новая встреча'],
-    ['/meetings/42', 'Карточка встречи'],
+    ['/meetings/m-later', 'Интервью: frontend-разработчик'],
     ['/settings', 'Настройки'],
   ])('%s открывается организатору', async (path, heading) => {
     renderApp(path, { user: organizer });

@@ -17,6 +17,8 @@ function meeting(m: Omit<Meeting, 'invite_url' | 'analysis_fps' | 'created_at'>)
   };
 }
 
+const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
+
 export const MOCK_MEETINGS: Meeting[] = [
   meeting({
     id: 'm-active',
@@ -74,6 +76,35 @@ export const MOCK_MEETINGS: Meeting[] = [
     participants_count: 3,
   }),
 ];
+
+/**
+ * Аналог POST /meetings: создает встречу в тестовом списке. Без времени – статус `active` («сейчас»),
+ * со временем – `scheduled`. Настоящий запрос – с Idempotency-Key, EMO-73.
+ */
+export function createMockMeeting(body: {
+  title: string;
+  scheduled_at: string | null;
+  analysis_enabled: boolean;
+  analysis_fps: number;
+}): Meeting {
+  const code = Array.from({ length: 10 }, () => BASE32[Math.floor(Math.random() * 32)]).join('');
+  const created = {
+    ...meeting({
+      id: `m-new-${MOCK_MEETINGS.length + 1}`,
+      title: body.title,
+      status: body.scheduled_at ? 'scheduled' : 'active',
+      invite_code: code,
+      analysis_enabled: body.analysis_enabled,
+      scheduled_at: body.scheduled_at,
+      started_at: null,
+      ended_at: null,
+      participants_count: 0,
+    }),
+    analysis_fps: body.analysis_fps,
+  };
+  MOCK_MEETINGS.unshift(created);
+  return created;
+}
 
 /**
  * Черновик уведомления для лобби. Окончательный текст согласуется с заказчиком
