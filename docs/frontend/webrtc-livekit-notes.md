@@ -36,7 +36,8 @@
 
 ## 4. Пробное подключение (песочница `/dev/livekit`)
 
-1. Запустить LiveKit в режиме разработки: `livekit-server --dev` (ключи режима: `devkey` / `secret`, порт 7880).
+1. Запустить LiveKit в режиме разработки (команда и установка – в [frontend/README.md](../../frontend/README.md),
+   раздел «LiveKit для разработки и e2e»): `livekit-server --dev` (ключи режима: `devkey` / `secret`, порт 7880).
 2. Выпустить два токена с разными `identity`:
    `lk token create --api-key devkey --api-secret secret --join --room test --identity u1`
    (и так же для `u2`).
@@ -44,6 +45,17 @@
    `ws://localhost:7880` и токен.
 4. Должно появиться видео обеих вкладок. Камера нужна разрешённая; для проверки без камеры в Chrome есть флаги
    `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`.
+
+**Версии, на которых проверено (EMO-53):** `livekit-server` 1.13.9 и `lk` (livekit-cli) 2.19.0, установлены через
+Homebrew (`brew install livekit livekit-cli`). **В `deploy/` образ LiveKit нужно брать с тем же тегом** (`livekit/livekit-server:v1.13.9`),
+чтобы поведение разработки и стенда совпадало; при обновлении меняются обе версии сразу.
+
+Прототип видеовстречи (EMO-53): страница `/dev/livekit` показывает галерею `features/room/LiveKitGallery.tsx` –
+`GridLayout` по списку дорожек, число плиток не задано; на странице помещается до 12 плиток, остальные уходят на
+следующие (кнопки «Предыдущая/Следующая страница» собраны на `usePagination`: готового `PaginationControl` в
+`@livekit/components-react` 2.9.24 нет). Включены `adaptiveStream` и `dynacast`. Токены пока выпускаются вручную или
+вспомогательным кодом e2e (`frontend/e2e/livekit-token.ts`, пакет `livekit-server-sdk` – devDependency только для
+тестов); в рабочем сценарии токен выдает meeting-service.
 
 Статус проверки: страница собирается и проходит типизацию и линтер; подключение к реальному серверу LiveKit
 вручную подтверждается отдельно (запись результата – в отчёте о статусе спринта).

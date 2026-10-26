@@ -23,6 +23,20 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 | `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))     |
 | `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                            |
 
+## LiveKit для разработки и e2e
+
+Прототип видеовстречи (`/dev/livekit`) и проверки `pnpm test:e2e:livekit` требуют локального сервера LiveKit.
+Установка (версии – в [webrtc-livekit-notes.md](../docs/frontend/webrtc-livekit-notes.md)):
+
+```bash
+brew install livekit livekit-cli
+livekit-server --dev --bind 127.0.0.1   # ws://localhost:7880, ключи devkey / secret; остановить – Ctrl-C
+pnpm test:e2e:livekit                    # два участника видят друг друга (Chromium, фейковая камера)
+LK_SMOKE_PUBLISHERS=9 pnpm test:e2e:livekit e2e/livekit-smoke.lk.ts   # раскладка на 10 участниках через lk load-test
+```
+
+Токены в тестах подписывает `e2e/livekit-token.ts` (`livekit-server-sdk`, devDependency только для e2e).
+
 ## Структура
 
 ```text

@@ -70,7 +70,7 @@
 
 ### Тестирование ([testing/](testing/))
 
-[defect-log.md](testing/defect-log.md) – журнал дефектов: поля, серьезность, жизненный цикл · [defect-log.xlsx](testing/defect-log.xlsx)
+[defect-log.md](testing/defect-log.md) – журнал дефектов: поля, серьезность, жизненный цикл · [defect-log.xlsx](testing/defect-log.xlsx) · [test-plan.md](testing/test-plan.md) – план тестирования: виды тестов, окружения, браузеры, критерии приемки
 
 ### Архитектурные решения ([adr/](adr/))
 
