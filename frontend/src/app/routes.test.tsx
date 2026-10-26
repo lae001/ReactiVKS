@@ -18,7 +18,7 @@ describe('маршруты-заглушки', () => {
     ['/meetings/42', 'Карточка встречи'],
     ['/settings', 'Настройки'],
     ['/admin', 'Администрирование'],
-    ['/j/abc123', 'Встреча еще не загружена'],
+    ['/j/abc123', 'Приглашение не найдено'],
     ['/nope', 'Такой страницы нет'],
   ])('%s открывается', async (path, heading) => {
     renderAt(path);
@@ -33,6 +33,8 @@ describe('маршруты-заглушки', () => {
 
   it('комната загружается лениво', async () => {
     renderAt('/room/m1');
-    expect(await screen.findByText('Встреча m1')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Быстрая встреча' }),
+    ).toBeInTheDocument();
   });
 });

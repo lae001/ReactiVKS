@@ -3,18 +3,22 @@ import { NavLink, Outlet } from 'react-router';
 
 import { paths } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/utils';
+import { getMockUser } from '@/shared/mocks/session';
 import { Wordmark } from '@/shared/ui/brand';
 import { Button } from '@/shared/ui/button';
 
 const nav = [
-  { to: paths.meetings, label: 'Встречи', icon: Video, end: false },
-  { to: paths.settings, label: 'Настройки', icon: Settings, end: true },
-  // Пункт виден только администратору – появится вместе с ролями (EMO-40)
-  { to: paths.admin, label: 'Администрирование', icon: Shield, end: true },
+  { to: paths.meetings, label: 'Встречи', icon: Video, end: false, adminOnly: false },
+  { to: paths.settings, label: 'Настройки', icon: Settings, end: true, adminOnly: false },
+  { to: paths.admin, label: 'Администрирование', icon: Shield, end: true, adminOnly: true },
 ];
 
 /** Каркас страниц организатора и администратора: шапка с навигацией и область контента. */
 export function AppLayout() {
+  // Пока роль тестовая; сам маршрут /admin закрывается RequireRole в EMO-40
+  const isAdmin = getMockUser().role === 'admin';
+  const items = nav.filter((item) => !item.adminOnly || isAdmin);
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b bg-card">
@@ -23,7 +27,7 @@ export function AppLayout() {
             <Wordmark />
           </NavLink>
           <nav className="flex flex-1 items-center gap-1" aria-label="Основная навигация">
-            {nav.map(({ to, label, icon: Icon, end }) => (
+            {items.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
