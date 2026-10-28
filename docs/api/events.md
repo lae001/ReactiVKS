@@ -118,6 +118,9 @@ realtime-service использует **отдельную группу на э�
 | `participant.left` | `{meeting_id, participant_id, left_at, reason: "left" \| "removed" \| "disconnected"}` |
 | `consent.changed` | `{meeting_id, participant_id, consent_state, notice_version, decided_at}` |
 
+Первоначальное решение участника о согласии передается в `participant.registered` (`consent_state`); `consent.changed` –
+только последующее изменение решения (повторный вход организатора с другим решением, `PUT /participants/me/consent`).
+
 ## `report.events`
 
 | type | payload |
