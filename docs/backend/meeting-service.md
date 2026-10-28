@@ -93,3 +93,40 @@ flowchart TB
 ## Данные
 
 Схема `meeting` – [../04-data-model.md](../architecture/04-data-model.md#42-схема-meeting-meeting-service).
+
+## Состояние реализации
+
+| Часть | Задача | Статус |
+|---|---|---|
+| Схема `meeting`: встречи, участники, журнал согласий, настройки организатора | EMO-51 | ✓ |
+| `POST/GET /meetings`, `GET /meetings/{id}`, `POST /meetings/{id}/join`, `POST /meetings/{id}/end` | EMO-53 | ✓ |
+| `GET/POST /join/{invite_code}`, `POST /participants/me/rejoin`, токены LiveKit с атрибутами `vks.*` | EMO-53 | ✓ |
+| `PATCH/DELETE /meetings/{id}`, `Idempotency-Key`, `/settings` | EMO-68 | спринт 4 |
+| Вебхуки LiveKit, `meeting_full` по онлайн-участникам, `user_blocked`, ограничение частоты `/join` | EMO-69 | спринт 4 |
+| Модерация (`mute`, `remove`), список участников | EMO-70 | спринт 4 |
+| `PUT /participants/me/consent`, `livekit_sync_queue`, запуск ML-агента | EMO-84 | спринт 5 |
+
+До EMO-69 предел в 10 участников держит сам LiveKit (`max_participants = 11` комнаты с учетом агента): лишнее
+подключение отвергается сервером, а не meeting-service.
+
+## Конфигурация
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `DATABASE_URL` | – (обязательна) | `postgresql+asyncpg://meeting_svc:…@postgres:5432/vks` |
+| `ENV` | `development` | `development` \| `test` \| `production` |
+| `LOG_LEVEL` | `INFO` | Уровень журналов |
+| `JWKS_URL` | `http://127.0.0.1:8001/api/v1/auth/.well-known/jwks.json` | Публичные ключи auth-service для проверки access-токенов |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | `vks-auth`, `vks` | Ожидаемые `iss` и `aud` access-токена |
+| `PUBLIC_BASE_URL` | `http://localhost:5173` | Адрес фронтенда: ссылка-приглашение `<PUBLIC_BASE_URL>/j/<код>` |
+| `LIVEKIT_URL` | `http://localhost:7880` | Server API LiveKit (внутренняя сеть) |
+| `LIVEKIT_PUBLIC_URL` | `ws://localhost:7880` | Адрес сигнализации для браузера участника (`livekit_url` в `JoinResult`) |
+| `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | – (обязательны) | Ключ и секрет API, те же, что у сервера LiveKit; секрет – не короче 32 символов |
+| `LIVEKIT_TOKEN_TTL_SECONDS` | `21600` | Срок токена участника (6 ч) |
+| `LIVEKIT_TIMEOUT_SECONDS` | `3` | Таймаут вызова Server API; два повтора идемпотентных операций |
+
+Любая переменная с секретом может быть передана файлом: `<ИМЯ>_FILE=/run/secrets/…`.
+
+`/ready` проверяет PostgreSQL (критично) и LiveKit (`ListRooms`, некритично: без LiveKit не войти во встречу, но
+история и карточки работают).
+

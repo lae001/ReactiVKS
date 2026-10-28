@@ -24,18 +24,45 @@ Python-сервисы и общая библиотека в одном uv worksp
 | `make migrate` | Миграции всех сервисов к БД из `deploy/docker-compose.dev.yml` (`migrate-auth`, `migrate-meeting` – по одному) |
 | `make jwt-key` | Ключ подписи JWT для локального запуска (`secrets/`, в git не попадает) |
 | `make run-auth` | auth-service на http://127.0.0.1:8001 (`AUTH_PORT=…` – другой порт) |
+| `make run-meeting` | meeting-service на http://127.0.0.1:8002 (`MEETING_PORT=…` – другой порт) |
 
 ## Локальный запуск auth-service
 
 ```bash
-docker compose -f ../deploy/docker-compose.dev.yml up -d --wait   # PostgreSQL и Redis
+docker compose -f ../deploy/docker-compose.dev.yml up -d --wait postgres redis
 cp services/auth_service/.env.example services/auth_service/.env
 make sync migrate jwt-key run-auth
 uv run --env-file services/auth_service/.env vks-auth create-admin --email admin@example.ru --display-name "Администратор"
 ```
 
-Swagger UI – http://127.0.0.1:8001/docs. Dev-сервер фронтенда проксирует `/api` на `localhost:8080`: до появления
-Nginx в compose запускайте `make run-auth AUTH_PORT=8080`.
+Swagger UI – http://127.0.0.1:8001/docs. Dev-сервер фронтенда проксирует `/api` на auth-service
+(`VITE_DEV_API_TARGET`, по умолчанию `http://127.0.0.1:8001`).
+
+## Локальный запуск meeting-service
+
+Нужны PostgreSQL, LiveKit и запущенный auth-service (по его JWKS проверяются access-токены):
+
+```bash
+docker compose -f ../deploy/docker-compose.dev.yml up -d --wait postgres livekit
+cp services/meeting_service/.env.example services/meeting_service/.env
+make migrate run-meeting
+```
+
+Swagger UI – http://127.0.0.1:8002/docs. Сценарий проверки «организатор и гость в одной комнате»:
+
+```bash
+TOKEN=$(curl -s localhost:8001/api/v1/auth/login -H 'content-type: application/json' \
+  -d '{"email": "ivan@example.ru", "password": "correct-horse-7"}' | jq -r .access_token)
+MEETING=$(curl -s localhost:8002/api/v1/meetings -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"title": "Демонстрация"}')
+curl -s localhost:8002/api/v1/meetings/$(echo $MEETING | jq -r .id)/join -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"consent": "granted"}' | jq -r .livekit_token          # токен организатора
+curl -s localhost:8002/api/v1/join/$(echo $MEETING | jq -r .invite_code) -H 'content-type: application/json' \
+  -d '{"display_name": "Анна", "consent": "granted", "notice_version": "v1-draft"}' | jq -r .livekit_token  # токен гостя
+```
+
+Токены вставляются на странице фронтенда `/dev/livekit` (адрес сервера – `ws://localhost:7880`) в двух вкладках:
+участники видят и слышат друг друга.
 
 Pre-commit (из корня репозитория, один раз на клон): `uv run --directory backend pre-commit install`.
 
