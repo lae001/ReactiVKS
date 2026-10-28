@@ -4,12 +4,7 @@ import { Link, useNavigate } from 'react-router';
 
 import { meetingErrorMessage } from '@/features/meetings/errors';
 import { MeetingList } from '@/features/meetings/MeetingList';
-import {
-  flattenPages,
-  type MeetingsFilters,
-  useMeetingsList,
-  useStartInstantMeeting,
-} from '@/features/meetings/queries';
+import { flattenPages, useMeetingsList, useStartInstantMeeting } from '@/features/meetings/queries';
 import type { MeetingStatus } from '@/shared/api/meetings';
 import { paths } from '@/shared/config/routes';
 import { parseInviteCode } from '@/shared/lib/invite';
@@ -20,15 +15,75 @@ import { Label } from '@/shared/ui/label';
 
 const tileClass = 'flex gap-4 rounded-xl border p-4 text-left transition-colors md:flex-col md:p-5';
 
-const STATUS_FILTERS: { label: string; status?: MeetingStatus[] }[] = [
-  { label: 'Все' },
-  { label: 'Идут', status: ['active'] },
-  { label: 'Запланированы', status: ['scheduled'] },
-  { label: 'Завершены', status: ['ended'] },
+/** Два раздела главной: у каждого свой запрос (`status` через запятую), курсор и кнопка «Ещё». */
+const SECTIONS: { id: string; title: string; status: MeetingStatus[]; empty: string }[] = [
+  {
+    id: 'upcoming',
+    title: 'Ближайшие',
+    status: ['scheduled', 'active'],
+    empty: 'Запланированных и идущих встреч нет.',
+  },
+  {
+    id: 'past',
+    title: 'Прошедшие',
+    status: ['ended', 'cancelled'],
+    empty: 'Завершенных встреч пока нет.',
+  },
 ];
 
 /** Пауза после последнего символа поиска, чтобы не слать запрос на каждую букву. */
 const SEARCH_DEBOUNCE_MS = 300;
+
+function MeetingsSection({
+  title,
+  status,
+  q,
+  empty,
+}: {
+  title: string;
+  status: MeetingStatus[];
+  q: string;
+  empty: string;
+}) {
+  const list = useMeetingsList({ status, q: q || undefined });
+  const titleId = `meetings-${status.join('-')}`;
+  return (
+    <section aria-labelledby={titleId} className="flex flex-col gap-4">
+      <h2 id={titleId} className="text-lg font-semibold">
+        {title}
+      </h2>
+      {list.isPending ? (
+        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden /> Загружаем встречи…
+        </p>
+      ) : list.isError ? (
+        <div role="alert" className="flex flex-col items-start gap-2 text-sm">
+          <p className="text-destructive">{meetingErrorMessage(list.error, 'загрузить встречи')}</p>
+          <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
+            Повторить
+          </Button>
+        </div>
+      ) : (
+        <>
+          <MeetingList
+            meetings={flattenPages(list.data)}
+            empty={q ? 'Ничего не найдено. Измените поиск.' : empty}
+          />
+          {list.hasNextPage && (
+            <Button
+              variant="outline"
+              className="self-center"
+              disabled={list.isFetchingNextPage}
+              onClick={() => void list.fetchNextPage()}
+            >
+              {list.isFetchingNextPage ? 'Загружаем…' : 'Ещё'}
+            </Button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
 
 function useDebounced<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -40,22 +95,17 @@ function useDebounced<T>(value: T, delay: number): T {
 }
 
 /**
- * Главная организатора (docs/frontend/site-structure.md, 4.1): плитки действий и список встреч
- * с поиском, фильтром по статусу и подгрузкой «Ещё» (GET /meetings, курсор).
+ * Главная организатора (docs/frontend/site-structure.md, 4.1): плитки действий и разделы
+ * «Ближайшие» и «Прошедшие» (GET /meetings, курсор у каждого). Поиск по названию общий.
  */
 export function MeetingsPage() {
   const navigate = useNavigate();
   const [invite, setInvite] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState(0);
 
   const q = useDebounced(search.trim(), SEARCH_DEBOUNCE_MS);
-  const filters: MeetingsFilters = { status: STATUS_FILTERS[filter]?.status, q: q || undefined };
-  const list = useMeetingsList(filters);
-  const meetings = flattenPages(list.data);
   const instant = useStartInstantMeeting();
-  const filtered = filter !== 0 || q !== '';
 
   function joinByLink(e: FormEvent) {
     e.preventDefault();
@@ -152,76 +202,25 @@ export function MeetingsPage() {
         </p>
       )}
 
-      <section aria-labelledby="meetings-title" className="flex flex-col gap-4">
-        <h2 id="meetings-title" className="text-lg font-semibold">
-          Все встречи
-        </h2>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative sm:w-80">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              type="search"
-              aria-label="Поиск по названию"
-              placeholder="Поиск по названию"
-              maxLength={100}
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div role="group" aria-label="Статус встречи" className="flex flex-wrap gap-2">
-            {STATUS_FILTERS.map((f, i) => (
-              <Button
-                key={f.label}
-                type="button"
-                size="sm"
-                variant={filter === i ? 'default' : 'outline'}
-                aria-pressed={filter === i}
-                onClick={() => setFilter(i)}
-              >
-                {f.label}
-              </Button>
-            ))}
-          </div>
-        </div>
+      <div className="relative sm:w-80">
+        <Search
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          aria-label="Поиск по названию"
+          placeholder="Поиск по названию"
+          maxLength={100}
+          className="pl-9"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
-        {list.isPending ? (
-          <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-            <LoaderCircle className="size-4 animate-spin" aria-hidden /> Загружаем встречи…
-          </p>
-        ) : list.isError ? (
-          <div role="alert" className="flex flex-col items-start gap-2 text-sm">
-            <p className="text-destructive">
-              {meetingErrorMessage(list.error, 'загрузить встречи')}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
-              Повторить
-            </Button>
-          </div>
-        ) : (
-          <>
-            <MeetingList
-              meetings={meetings}
-              empty={
-                filtered ? 'Ничего не найдено. Измените поиск или фильтр.' : 'Встреч пока нет.'
-              }
-            />
-            {list.hasNextPage && (
-              <Button
-                variant="outline"
-                className="self-center"
-                disabled={list.isFetchingNextPage}
-                onClick={() => void list.fetchNextPage()}
-              >
-                {list.isFetchingNextPage ? 'Загружаем…' : 'Ещё'}
-              </Button>
-            )}
-          </>
-        )}
-      </section>
+      {SECTIONS.map((section) => (
+        <MeetingsSection key={section.id} {...section} q={q} />
+      ))}
     </div>
   );
 }
