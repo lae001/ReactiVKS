@@ -6,6 +6,10 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "vks-common",
     "uvicorn[standard]==0.52.4",
+    # Server API LiveKit (CreateRoom, DeleteRoom) и подпись токенов доступа участников.
+    "livekit-api==1.2.1",
+    # HTTP-клиент livekit-api: таймауты и ошибки сети адаптер задает и ловит сам.
+    "aiohttp==3.14.5",
 ]
 
 [tool.uv.sources]
