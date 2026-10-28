@@ -187,6 +187,8 @@ export const MOCK_ROOM_PARTICIPANTS: Participant[] = [
     consent_state: 'granted',
     online: true,
     is_removed: false,
+    first_joined_at: null,
+    last_left_at: null,
   },
   {
     id: 'p-oleg',
@@ -195,6 +197,8 @@ export const MOCK_ROOM_PARTICIPANTS: Participant[] = [
     consent_state: 'denied',
     online: true,
     is_removed: false,
+    first_joined_at: null,
+    last_left_at: null,
   },
   {
     id: 'p-maria',
@@ -203,6 +207,8 @@ export const MOCK_ROOM_PARTICIPANTS: Participant[] = [
     consent_state: 'granted',
     online: true,
     is_removed: false,
+    first_joined_at: null,
+    last_left_at: null,
   },
   {
     id: 'p-dmitry',
@@ -211,6 +217,8 @@ export const MOCK_ROOM_PARTICIPANTS: Participant[] = [
     consent_state: 'granted',
     online: true,
     is_removed: false,
+    first_joined_at: null,
+    last_left_at: null,
   },
 ];
 

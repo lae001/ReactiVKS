@@ -7,6 +7,10 @@ export interface RequestOptions {
   body?: unknown;
   /** false – запрос без Authorization и без повтора после refresh (сами вызовы /auth/*). */
   auth?: boolean;
+  /** Дополнительные заголовки (Idempotency-Key, Authorization: Participant …). */
+  headers?: Record<string, string>;
+  /** Параметры строки запроса; undefined пропускаются. */
+  query?: Record<string, string | number | undefined>;
   signal?: AbortSignal;
 }
 
@@ -14,8 +18,14 @@ async function send(path: string, options: RequestOptions, token: string | null)
   const headers = new Headers({ Accept: 'application/json, application/problem+json' });
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  for (const [name, value] of Object.entries(options.headers ?? {})) headers.set(name, value);
+  const search = new URLSearchParams();
+  for (const [name, value] of Object.entries(options.query ?? {})) {
+    if (value !== undefined && value !== '') search.set(name, String(value));
+  }
+  const url = search.size > 0 ? `${path}?${search}` : path;
   try {
-    return await fetch(path, {
+    return await fetch(url, {
       method: options.method ?? 'GET',
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
