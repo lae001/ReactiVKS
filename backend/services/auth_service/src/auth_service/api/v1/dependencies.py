@@ -17,13 +17,14 @@ from auth_service.domain.passwords import PasswordHasher
 from auth_service.domain.signing import TokenSigner
 from auth_service.services.accounts import RegisterOrganizer
 from auth_service.services.keys import PublishedKeys
-from auth_service.services.profile import GetProfile, RenameUser
+from auth_service.services.profile import ChangePassword, GetProfile, RenameUser
 from auth_service.services.sessions import Login, Logout, RefreshSession, TokenPolicy
 from auth_service.settings import AuthSettings
 from vks_common.clock import Clock
 from vks_common.db import get_session
 
 __all__ = [
+    "ChangePasswordScenario",
     "CurrentClock",
     "GetProfileScenario",
     "LoginScenario",
@@ -133,3 +134,10 @@ def build_rename_user(session: Session, clock: CurrentClock) -> RenameUser:
 
 GetProfileScenario = Annotated[GetProfile, Depends(build_get_profile)]
 RenameUserScenario = Annotated[RenameUser, Depends(build_rename_user)]
+
+
+def build_change_password(session: Session, hasher: Hasher, clock: CurrentClock) -> ChangePassword:
+    return ChangePassword(session=session, hasher=hasher, clock=clock)
+
+
+ChangePasswordScenario = Annotated[ChangePassword, Depends(build_change_password)]

@@ -69,6 +69,16 @@ class UserRepository:
         row = (await self._session.execute(statement)).scalar_one_or_none()
         return _to_domain(row) if row is not None else None
 
+    async def change_password_hash(self, user_id: UserId, password_hash: str, *, now: datetime) -> bool:
+        """Заменить хеш пароля; ``False`` – учетной записи больше нет."""
+        result = await self._session.execute(
+            update(UserRow)
+            .where(UserRow.id == user_id)
+            .values(password_hash=password_hash, updated_at=now)
+            .returning(UserRow.id)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def record_login(self, user_id: UserId, *, at: datetime) -> None:
         await self._session.execute(update(UserRow).where(UserRow.id == user_id).values(last_login_at=at))
 
