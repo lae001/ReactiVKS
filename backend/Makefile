@@ -5,7 +5,7 @@ UV ?= uv
 # Пакеты workspace: mypy проверяет их по одному – у каждого свой tests/conftest.py.
 PACKAGES := $(wildcard libs/*) $(wildcard services/*)
 
-.PHONY: help sync lint format type imports test test-unit cov check migrate jwt-key run-auth
+.PHONY: help sync lint format type imports test test-unit cov check migrate migrate-auth migrate-meeting jwt-key run-auth
 
 help: ## Список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -45,11 +45,17 @@ cov: ## Тесты с покрытием и порогом 60 %
 
 check: lint type imports test ## Все проверки, как в CI
 
-# БД из deploy/docker-compose.dev.yml; для другой – make migrate AUTH_DATABASE_URL=…
+# БД из deploy/docker-compose.dev.yml; для другой – make migrate AUTH_DATABASE_URL=… MEETING_DATABASE_URL=…
 AUTH_DATABASE_URL ?= postgresql+asyncpg://auth_svc:auth-dev-password@localhost:5432/vks
+MEETING_DATABASE_URL ?= postgresql+asyncpg://meeting_svc:meeting-dev-password@localhost:5432/vks
 
-migrate: ## Применить миграции auth-service к локальной БД
+migrate: migrate-auth migrate-meeting ## Применить миграции всех сервисов к локальной БД
+
+migrate-auth: ## Миграции auth-service (роль auth_svc)
 	DATABASE_URL=$(AUTH_DATABASE_URL) $(UV) run alembic -c services/auth_service/alembic.ini upgrade head
+
+migrate-meeting: ## Миграции meeting-service (роль meeting_svc)
+	DATABASE_URL=$(MEETING_DATABASE_URL) $(UV) run alembic -c services/meeting_service/alembic.ini upgrade head
 
 jwt-key: ## Ключ подписи JWT для локального запуска (secrets/jwt-private.pem, если его еще нет)
 	@test -f secrets/jwt-private.pem || $(UV) run python scripts/gen_jwt_key.py --out secrets/jwt-private.pem

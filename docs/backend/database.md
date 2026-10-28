@@ -119,8 +119,13 @@ RESET ROLE;
 
 ## Схема `meeting`
 
+Миграция `0001_meetings_participants_consents` создает `organizer_settings`, `meetings`, `participants` и `consents`.
+Остальные таблицы схемы создаются миграциями задач, которые их используют: `outbox` – событий `meeting.events`
+(спайк 3, EMO-52), `processed_webhooks` – вебхуков LiveKit (EMO-69), `livekit_sync_queue` – синхронизации согласия
+(EMO-84), `blocked_users` – проекции блокировок из `user.events` (EMO-69).
+
 ```sql
--- Схема meeting (владелец meeting_svc). Начальная миграция Alembic meeting-service.
+-- Схема meeting (владелец meeting_svc). Миграция 0001 meeting-service.
 SET ROLE meeting_svc;
 
 CREATE TABLE meeting.organizer_settings (
@@ -128,12 +133,13 @@ CREATE TABLE meeting.organizer_settings (
     analysis_enabled_default  boolean     NOT NULL DEFAULT true,
     analysis_fps_default      smallint    NOT NULL DEFAULT 3,
     updated_at                timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT organizer_settings_fps_ck CHECK (analysis_fps_default BETWEEN 2 AND 5)
+    CONSTRAINT organizer_settings_analysis_fps_default_ck CHECK (analysis_fps_default BETWEEN 2 AND 5)
 );
 
 CREATE TABLE meeting.meetings (
     id                uuid        PRIMARY KEY,                  -- = имя комнаты LiveKit
     owner_id          uuid        NOT NULL,                     -- sub из JWT
+    owner_name        text        NOT NULL,                     -- снимок имени организатора (claim name) для лобби
     title             text        NOT NULL,
     invite_code       text        NOT NULL,
     status            text        NOT NULL DEFAULT 'scheduled',
@@ -146,19 +152,20 @@ CREATE TABLE meeting.meetings (
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
     deleted_at        timestamptz,
-    CONSTRAINT meetings_invite_code_uk UNIQUE (invite_code),
-    CONSTRAINT meetings_invite_code_ck CHECK (invite_code ~ '^[a-z2-7]{10}$'),
-    CONSTRAINT meetings_title_ck       CHECK (char_length(title) BETWEEN 1 AND 200),
-    CONSTRAINT meetings_status_ck      CHECK (status IN ('scheduled', 'active', 'ended', 'cancelled')),
-    CONSTRAINT meetings_fps_ck         CHECK (analysis_fps BETWEEN 2 AND 5),
-    CONSTRAINT meetings_started_ck     CHECK (status NOT IN ('active', 'ended') OR started_at IS NOT NULL),
-    CONSTRAINT meetings_ended_ck       CHECK (status <> 'ended' OR ended_at IS NOT NULL),
-    CONSTRAINT meetings_end_reason_ck  CHECK (end_reason IS NULL OR end_reason IN ('organizer', 'empty_timeout', 'admin'))
+    CONSTRAINT meetings_invite_code_uk  UNIQUE (invite_code),
+    CONSTRAINT meetings_invite_code_ck  CHECK (invite_code ~ '^[a-z2-7]{10}$'),
+    CONSTRAINT meetings_title_ck        CHECK (char_length(title) BETWEEN 1 AND 200),
+    CONSTRAINT meetings_owner_name_ck   CHECK (char_length(owner_name) BETWEEN 1 AND 100),
+    CONSTRAINT meetings_status_ck       CHECK (status IN ('scheduled', 'active', 'ended', 'cancelled')),
+    CONSTRAINT meetings_analysis_fps_ck CHECK (analysis_fps BETWEEN 2 AND 5),
+    CONSTRAINT meetings_started_at_ck   CHECK (status NOT IN ('active', 'ended') OR started_at IS NOT NULL),
+    CONSTRAINT meetings_ended_at_ck     CHECK (status <> 'ended' OR ended_at IS NOT NULL),
+    CONSTRAINT meetings_end_reason_ck   CHECK (end_reason IS NULL OR end_reason IN ('organizer', 'empty_timeout', 'admin'))
 );
-CREATE INDEX meetings_owner_idx  ON meeting.meetings (owner_id, created_at DESC) WHERE deleted_at IS NULL;
-CREATE INDEX meetings_status_idx ON meeting.meetings (status) WHERE status IN ('scheduled', 'active');
-CREATE INDEX meetings_title_trgm_idx ON meeting.meetings USING gin (title gin_trgm_ops);
-CREATE INDEX meetings_deleted_idx ON meeting.meetings (deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX meetings_owner_id_created_at_idx ON meeting.meetings (owner_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX meetings_status_idx     ON meeting.meetings (status) WHERE status IN ('scheduled', 'active');
+CREATE INDEX meetings_title_idx      ON meeting.meetings USING gin (title gin_trgm_ops);
+CREATE INDEX meetings_deleted_at_idx ON meeting.meetings (deleted_at) WHERE deleted_at IS NOT NULL;
 
 CREATE TABLE meeting.participants (
     id                      uuid        PRIMARY KEY,            -- identity LiveKit: p_<id>
@@ -173,16 +180,16 @@ CREATE TABLE meeting.participants (
     last_left_at            timestamptz,
     created_at              timestamptz NOT NULL DEFAULT now(),
     updated_at              timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT participants_token_uk      UNIQUE (participant_token_hash),
-    CONSTRAINT participants_name_ck       CHECK (char_length(display_name) BETWEEN 1 AND 64),
-    CONSTRAINT participants_role_ck       CHECK (role IN ('organizer', 'guest')),
-    CONSTRAINT participants_consent_ck    CHECK (consent_state IN ('granted', 'denied', 'revoked', 'not_required')),
-    CONSTRAINT participants_identity_ck   CHECK (
+    CONSTRAINT participants_participant_token_hash_uk UNIQUE (participant_token_hash),
+    CONSTRAINT participants_display_name_ck  CHECK (char_length(display_name) BETWEEN 1 AND 64),
+    CONSTRAINT participants_role_ck          CHECK (role IN ('organizer', 'guest')),
+    CONSTRAINT participants_consent_state_ck CHECK (consent_state IN ('granted', 'denied', 'revoked', 'not_required')),
+    CONSTRAINT participants_identity_ck      CHECK (
         (role = 'organizer' AND user_id IS NOT NULL AND participant_token_hash IS NULL) OR
         (role = 'guest'     AND user_id IS NULL     AND participant_token_hash IS NOT NULL))
 );
-CREATE INDEX participants_meeting_idx ON meeting.participants (meeting_id);
-CREATE UNIQUE INDEX participants_meeting_user_uk ON meeting.participants (meeting_id, user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX participants_meeting_id_idx ON meeting.participants (meeting_id);
+CREATE UNIQUE INDEX participants_meeting_id_user_id_uk ON meeting.participants (meeting_id, user_id) WHERE user_id IS NOT NULL;
 
 -- Журнал согласий: append-only, намеренно без FK, чтобы переживать очистку встреч (хранится 3 года).
 CREATE TABLE meeting.consents (
@@ -198,24 +205,30 @@ CREATE TABLE meeting.consents (
     decided_at      timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT consents_decision_ck CHECK (decision IN ('granted', 'denied', 'revoked'))
 );
-CREATE INDEX consents_participant_idx ON meeting.consents (participant_id, decided_at);
-CREATE INDEX consents_meeting_idx     ON meeting.consents (meeting_id);
-CREATE INDEX consents_decided_idx     ON meeting.consents (decided_at);
+CREATE INDEX consents_participant_id_decided_at_idx ON meeting.consents (participant_id, decided_at);
+CREATE INDEX consents_meeting_id_idx  ON meeting.consents (meeting_id);
+CREATE INDEX consents_decided_at_idx  ON meeting.consents (decided_at);
 
--- Проекция заблокированных организаторов из user.events.
+RESET ROLE;
+```
+
+Таблицы следующих миграций:
+
+```sql
+-- Проекция заблокированных организаторов из user.events (EMO-69).
 CREATE TABLE meeting.blocked_users (
     user_id     uuid        PRIMARY KEY,
     blocked_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- Идемпотентность вебхуков LiveKit.
+-- Идемпотентность вебхуков LiveKit (EMO-69).
 CREATE TABLE meeting.processed_webhooks (
     event_id     text        PRIMARY KEY,
     received_at  timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX processed_webhooks_received_idx ON meeting.processed_webhooks (received_at);
+CREATE INDEX processed_webhooks_received_at_idx ON meeting.processed_webhooks (received_at);
 
--- Отложенная синхронизация атрибутов участника в LiveKit (если LiveKit был недоступен).
+-- Отложенная синхронизация атрибутов участника в LiveKit, если LiveKit был недоступен (EMO-84).
 CREATE TABLE meeting.livekit_sync_queue (
     id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     meeting_id      uuid        NOT NULL,
@@ -226,34 +239,28 @@ CREATE TABLE meeting.livekit_sync_queue (
     last_error      text,
     created_at      timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX livekit_sync_queue_next_idx ON meeting.livekit_sync_queue (next_attempt_at);
+CREATE INDEX livekit_sync_queue_next_attempt_at_idx ON meeting.livekit_sync_queue (next_attempt_at);
 
-CREATE TABLE meeting.outbox (
-    id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    event_id      uuid        NOT NULL,
-    topic         text        NOT NULL,                        -- топик Kafka
-    event_key     text        NOT NULL,                        -- ключ сообщения (meeting_id / user_id)
-    event_type    text        NOT NULL,
-    envelope      jsonb       NOT NULL,
-    created_at    timestamptz NOT NULL DEFAULT now(),
-    published_at  timestamptz,
-    attempts      int         NOT NULL DEFAULT 0,
-    CONSTRAINT outbox_event_uk UNIQUE (event_id)
-);
-CREATE INDEX outbox_unpublished_idx ON meeting.outbox (id) WHERE published_at IS NULL;
-
-RESET ROLE;
+-- Транзакционный outbox событий meeting.events – см. «Таблица outbox» ниже (EMO-52).
 ```
 
 Пояснения:
 
+- `owner_name` – снимок отображаемого имени организатора (claim `name` access-токена) на момент создания встречи.
+  Его показывает лобби гостя (`GET /join/{invite_code}` → `organizer_name`), а читать учетные записи чужой схемы
+  meeting-service не может. Переименование организатора на уже созданные встречи не влияет.
 - `participants_identity_ck` – у организатора есть `user_id` и нет `participant_token_hash`, у гостя – наоборот.
 - `consents` без внешних ключей и со снимками имени и названия встречи: журнал согласий должен пережить очистку
   встреч (срок хранения 3 года).
 - `livekit_sync_queue` – гарантированная доставка изменения согласия в LiveKit
   (см. [background-jobs.md](background-jobs.md)).
+- Изоляция ролей проверяется тестом `meeting_service/tests/integration/test_schema_isolation.py`: `auth_svc` и
+  `analytics_svc` не читают схему `meeting`, `meeting_svc` не создает таблиц вне своей схемы.
 
 ## Схема `analytics`
+
+Схема и роль `analytics_svc` создаются init-скриптом; таблицы – миграциями analytics-service, вместе с задачами,
+которые их используют (проекции и агрегация – EMO-86, отчеты – EMO-87). DDL ниже – целевое состояние.
 
 ```sql
 -- Схема analytics (владелец analytics_svc). Начальная миграция Alembic analytics-service.

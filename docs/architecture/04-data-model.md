@@ -51,6 +51,7 @@ erDiagram
     meetings {
         uuid id PK "= имя комнаты LiveKit"
         uuid owner_id "sub из JWT"
+        text owner_name "снимок имени организатора для лобби"
         text title
         text invite_code UK "10 символов, base32"
         text status "scheduled | active | ended | cancelled"
