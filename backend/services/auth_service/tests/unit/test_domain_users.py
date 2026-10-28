@@ -3,9 +3,18 @@ from uuid import uuid4
 
 import pytest
 
-from auth_service.domain.errors import InvalidDisplayName, InvalidEmail, UserBlocked
+from auth_service.domain.errors import InvalidDisplayName, InvalidEmail, LastAdmin, UserBlocked
 from auth_service.domain.identifiers import UserId
-from auth_service.domain.users import Role, User, UserStatus, normalize_display_name, normalize_email
+from auth_service.domain.users import (
+    InvalidCursor,
+    Role,
+    User,
+    UserCursor,
+    UserStatus,
+    ensure_admin_remains,
+    normalize_display_name,
+    normalize_email,
+)
 
 
 def make_user(**overrides: object) -> User:
@@ -73,3 +82,78 @@ def test_blocked_user_cannot_sign_in() -> None:
 
     with pytest.raises(UserBlocked):
         make_user(status=UserStatus.BLOCKED).ensure_can_sign_in()
+
+
+def test_administered_without_changes_returns_same_user() -> None:
+    user = make_user()
+
+    assert user.administered(status=UserStatus.ACTIVE, role=None) is user
+
+
+def test_administered_changes_status_and_role() -> None:
+    user = make_user().administered(status=UserStatus.BLOCKED, role=Role.ADMIN)
+
+    assert (user.status, user.role) == (UserStatus.BLOCKED, Role.ADMIN)
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        pytest.param({"status": UserStatus.BLOCKED}, id="block"),
+        pytest.param({"role": Role.ORGANIZER}, id="demote"),
+        pytest.param(None, id="delete"),
+    ],
+)
+def test_administrator_cannot_act_on_self(after: dict[str, object] | None) -> None:
+    admin = make_user(role=Role.ADMIN)
+
+    with pytest.raises(LastAdmin):
+        ensure_admin_remains(
+            actor_id=admin.id,
+            before=admin,
+            after=admin.administered(**after) if after is not None else None,  # type: ignore[arg-type]
+            active_admins=2,
+        )
+
+
+def test_last_active_admin_cannot_be_lost() -> None:
+    admin = make_user(role=Role.ADMIN)
+
+    with pytest.raises(LastAdmin):
+        ensure_admin_remains(
+            actor_id=UserId(uuid4()),
+            before=admin,
+            after=admin.administered(status=UserStatus.BLOCKED),
+            active_admins=1,
+        )
+
+
+def test_admin_can_be_demoted_while_another_remains() -> None:
+    admin = make_user(role=Role.ADMIN)
+
+    ensure_admin_remains(
+        actor_id=UserId(uuid4()), before=admin, after=admin.administered(role=Role.ORGANIZER), active_admins=2
+    )
+
+
+def test_organizer_can_be_blocked_by_the_only_admin() -> None:
+    organizer = make_user()
+
+    ensure_admin_remains(
+        actor_id=UserId(uuid4()),
+        before=organizer,
+        after=organizer.administered(status=UserStatus.BLOCKED),
+        active_admins=1,
+    )
+
+
+def test_user_cursor_survives_round_trip() -> None:
+    cursor = UserCursor(created_at=datetime(2026, 10, 12, tzinfo=UTC), user_id=uuid4())
+
+    assert UserCursor.decode(cursor.encode()) == cursor
+
+
+@pytest.mark.parametrize("value", ["not-a-cursor", "e30"])
+def test_foreign_user_cursor_is_refused(value: str) -> None:
+    with pytest.raises(InvalidCursor):
+        UserCursor.decode(value)

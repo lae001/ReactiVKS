@@ -8,9 +8,11 @@ __all__ = [
     "InvalidCredentials",
     "InvalidDisplayName",
     "InvalidEmail",
+    "LastAdmin",
     "RegistrationClosed",
     "SessionInvalid",
     "UserBlocked",
+    "UserNotFound",
     "WeakPassword",
 ]
 
@@ -68,3 +70,15 @@ class RegistrationClosed(NotFound):
 
 class AccountGone(Unauthorized):
     """Access-токен еще действует, а учетной записи уже нет: для сервиса такой вызывающий не аутентифицирован."""
+
+
+class UserNotFound(NotFound):
+    """Учетной записи нет (или она удалена)."""
+
+
+class LastAdmin(Conflict):
+    """Администратор не блокирует, не понижает и не удаляет себя, а в Системе остается хотя бы один активный
+    администратор: иначе управлять пользователями станет некому."""
+
+    code = "last_admin"
+    title = "The last administrator cannot be removed"

@@ -12,7 +12,6 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 
 import httpx
-from aiokafka.errors import KafkaError
 from fastapi import FastAPI
 
 from meeting_service.adapters.livekit_server import LiveKitServerGateway
@@ -24,14 +23,12 @@ from vks_common.auth import JwksKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
 from vks_common.db import Database, create_engine_from_settings
 from vks_common.db.migrations import check_schema_is_current, load_alembic_config
-from vks_common.kafka import OUTBOX_NOTIFY, EventProducer, OutboxRelay
+from vks_common.kafka import OUTBOX_NOTIFY, EventProducer, OutboxRelay, log_unexpected_stop, run_outbox_relay
 from vks_common.logging import get_logger
 
 __all__ = ["create_application"]
 
 SCHEMA = "meeting"
-# Пауза между попытками подключиться к брокеру, пока он недоступен.
-_KAFKA_RECONNECT_SECONDS = 5.0
 
 _logger = get_logger(__name__)
 
@@ -86,8 +83,8 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
             )
             # Некритична (conventions.md, §10): пока брокер недоступен, события копятся в outbox.
             health.register("kafka", producer.check, critical=False)
-            relay_task = asyncio.create_task(_publish_events(producer, relay), name="outbox-relay")
-            relay_task.add_done_callback(_report_stopped)
+            relay_task = asyncio.create_task(run_outbox_relay(producer, relay), name="outbox-relay")
+            relay_task.add_done_callback(log_unexpected_stop)
         else:
             _logger.warning("kafka is not configured: events stay in outbox")
         try:
@@ -119,22 +116,3 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
         ),
     )
     return app
-
-
-async def _publish_events(producer: EventProducer, relay: OutboxRelay) -> None:
-    """Подключиться к брокеру (повторяя, пока он недоступен) и отправлять события из outbox до остановки."""
-    while True:
-        try:
-            await producer.start()
-            break
-        except KafkaError as error:
-            _logger.warning("kafka unavailable, retrying", error=type(error).__name__)
-            await asyncio.sleep(_KAFKA_RECONNECT_SECONDS)
-    _logger.info("outbox relay started")
-    await relay.run()
-
-
-def _report_stopped(task: asyncio.Task[None]) -> None:
-    """Неожиданная остановка релея – в журнал: события перестали уходить, нужен человек."""
-    if not task.cancelled() and task.exception() is not None:
-        _logger.error("outbox relay stopped", error=type(task.exception()).__name__)
