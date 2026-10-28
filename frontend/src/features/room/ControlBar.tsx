@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   Activity,
   type LucideIcon,
@@ -17,7 +18,7 @@ import { cn } from '@/shared/lib/utils';
 
 import type { SidePanelTab } from './types';
 
-function ControlButton({
+export function ControlButton({
   icon: Icon,
   label,
   caption = label,
@@ -68,6 +69,9 @@ export function ControlBar({
   onToggleConsent,
   onTogglePanel,
   onLeave,
+  devices,
+  onEnd,
+  showChat = true,
 }: {
   isOrganizer: boolean;
   analysisEnabled: boolean;
@@ -80,6 +84,11 @@ export function ControlBar({
   onToggleConsent: () => void;
   onTogglePanel: (tab: SidePanelTab) => void;
   onLeave: () => void;
+  /** Меню устройств (комната на LiveKit): камера, микрофон, динамик */
+  devices?: ReactNode;
+  /** Если задано, «Выйти» и «Завершить встречу» – две разные кнопки (организатор в комнате на LiveKit) */
+  onEnd?: () => void;
+  showChat?: boolean;
 }) {
   const analyzed = consent === 'granted';
 
@@ -104,6 +113,7 @@ export function ControlBar({
         pressed={cameraOn}
         tone={cameraOn ? 'default' : 'off'}
       />
+      {devices}
       {analysisEnabled && (
         <ControlButton
           icon={ScanFace}
@@ -133,28 +143,45 @@ export function ControlBar({
           tone={panel === 'emotions' ? 'active' : 'default'}
         />
       )}
-      <ControlButton
-        icon={MessageSquare}
-        label="Чат"
-        onClick={() => onTogglePanel('chat')}
-        pressed={panel === 'chat'}
-        tone={panel === 'chat' ? 'active' : 'default'}
-      />
+      {showChat && (
+        <ControlButton
+          icon={MessageSquare}
+          label="Чат"
+          onClick={() => onTogglePanel('chat')}
+          pressed={panel === 'chat'}
+          tone={panel === 'chat' ? 'active' : 'default'}
+        />
+      )}
 
       <button
         type="button"
         onClick={onLeave}
-        className="ml-1 flex h-12 shrink-0 items-center gap-2 rounded-lg bg-destructive px-3 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 sm:ml-2 sm:px-4"
+        className={cn(
+          'ml-1 flex h-12 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors sm:ml-2 sm:px-4',
+          onEnd
+            ? 'bg-room-surface text-room-foreground hover:bg-room-border'
+            : 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        )}
       >
-        {isOrganizer ? (
+        {isOrganizer && !onEnd ? (
           <PhoneOff className="size-5" aria-hidden />
         ) : (
           <LogOut className="size-5" aria-hidden />
         )}
         <span className="sr-only md:not-sr-only">
-          {isOrganizer ? 'Завершить встречу' : 'Выйти'}
+          {isOrganizer && !onEnd ? 'Завершить встречу' : 'Выйти'}
         </span>
       </button>
+      {onEnd && (
+        <button
+          type="button"
+          onClick={onEnd}
+          className="flex h-12 shrink-0 items-center gap-2 rounded-lg bg-destructive px-3 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 sm:px-4"
+        >
+          <PhoneOff className="size-5" aria-hidden />
+          <span className="sr-only md:not-sr-only">Завершить встречу</span>
+        </button>
+      )}
     </footer>
   );
 }

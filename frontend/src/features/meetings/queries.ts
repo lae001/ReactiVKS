@@ -54,9 +54,10 @@ export function useMeeting(id: string, options: { enabled?: boolean } = {}) {
   });
 }
 
-export function useParticipants(id: string) {
+export function useParticipants(id: string, enabled = true) {
   return useQuery({
     queryKey: meetingKeys.participants(id),
+    enabled,
     queryFn: ({ signal }) => meetingsApi.listParticipants(id, signal),
   });
 }

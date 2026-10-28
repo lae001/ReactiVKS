@@ -1,5 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
+import { expectRemoteAudio, expectRemoteVideo, TRACK_PEER_CONNECTIONS } from './media-helpers';
+
 // Организатор и гость в двух контекстах одного Chromium: SPA в режиме VITE_API_MODE=http ходит через
 // прокси Vite в dev-api (127.0.0.1:8002), токены LiveKit выдает dev-api (livekit-server --dev).
 // Запуск: livekit-server --dev --bind 127.0.0.1, pnpm dev:api, затем pnpm test:e2e:room.
@@ -52,6 +54,7 @@ async function mockAuth(page: Page, signedIn: boolean) {
 
 async function newPage(context: BrowserContext, signedIn: boolean) {
   const page = await context.newPage();
+  await page.addInitScript(TRACK_PEER_CONNECTIONS);
   await mockAuth(page, signedIn);
   return page;
 }
@@ -125,6 +128,37 @@ test('режим http: организатор создает и начинает
   expect(items.map((p) => p.display_name)).toEqual(
     expect.arrayContaining(['Иван Петров', 'Анна Гостева']),
   );
+
+  // 7. оба в комнате LiveKit по токенам dev-api: соединение установлено, две плитки у каждого
+  for (const page of [org, guest]) {
+    await expect(page.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
+    await expect(page.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '2');
+  }
+
+  // 8. видят и слышат друг друга (кадры идут, входящие байты аудио растут)
+  await expectRemoteVideo(org, 'Анна Гостева');
+  await expectRemoteVideo(guest, 'Иван Петров');
+  await expectRemoteAudio(org, 'Анна Гостева');
+  await expectRemoteAudio(guest, 'Иван Петров');
+
+  // 9. состав и роли берутся из LiveKit (имя в токене, атрибуты vks.*), панель управления по-русски
+  const controls = guest.getByRole('contentinfo', { name: 'Управление встречей' });
+  for (const label of ['Микрофон', 'Камера', 'Устройства', 'Участники', 'Выйти']) {
+    await expect(controls.getByRole('button', { name: label })).toBeVisible();
+  }
+  await guest.getByRole('button', { name: 'Участники' }).click();
+  const panel = guest.getByRole('tabpanel');
+  await expect(panel).toContainText('Анна Гостева');
+  await expect(panel).toContainText('Иван Петров');
+  await expect(panel).toContainText('Организатор');
+  await expect(guest.getByRole('tab')).toContainText('2');
+
+  // 10. выход гостя: экран выхода, у организатора остается одна плитка
+  await guest.getByRole('button', { name: 'Выйти' }).click();
+  await expect(guest.getByRole('heading', { name: 'Вы вышли из встречи' })).toBeVisible();
+  await expect(org.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '1', {
+    timeout: 20_000,
+  });
 
   await orgContext.close();
   await guestContext.close();

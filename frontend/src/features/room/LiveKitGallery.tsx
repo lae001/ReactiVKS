@@ -8,10 +8,9 @@ import {
   usePagination,
   useTracks,
 } from '@livekit/components-react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Track } from 'livekit-client';
 
-import { Button } from '@/shared/ui/button';
+import { PagerNav } from './PagerNav';
 
 /**
  * Плиток на странице: остальные участники уходят на следующие страницы. Лимит комнаты по уставу – 10 человек,
@@ -32,7 +31,6 @@ export function LiveKitGallery() {
     { source: Track.Source.ScreenShare, withPlaceholder: false },
   ]);
   const pagination = usePagination(TILES_PER_PAGE, tracks);
-  const multiPage = pagination.totalPageCount > 1;
 
   return (
     <div className="flex h-full flex-col bg-room text-room-foreground" data-lk-theme="default">
@@ -44,33 +42,12 @@ export function LiveKitGallery() {
           <ParticipantTile />
         </GridLayout>
       </div>
-      {multiPage && (
-        <nav aria-label="Страницы галереи" className="flex items-center justify-center gap-3 py-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Предыдущая страница"
-            onClick={pagination.prevPage}
-            disabled={pagination.currentPage <= 1}
-          >
-            <ChevronLeft />
-          </Button>
-          <span className="text-sm tabular-nums" aria-live="polite">
-            Страница {pagination.currentPage} из {pagination.totalPageCount}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Следующая страница"
-            onClick={pagination.nextPage}
-            disabled={pagination.currentPage >= pagination.totalPageCount}
-          >
-            <ChevronRight />
-          </Button>
-        </nav>
-      )}
+      <PagerNav
+        currentPage={pagination.currentPage}
+        totalPageCount={pagination.totalPageCount}
+        onPrev={pagination.prevPage}
+        onNext={pagination.nextPage}
+      />
       <ControlBar controls={{ chat: false, screenShare: false }} />
       <RoomAudioRenderer />
       <ConnectionStateToast />

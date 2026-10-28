@@ -1,0 +1,59 @@
+import { DisconnectReason } from 'livekit-client';
+
+export type RoomEnd =
+  | { kind: 'left' }
+  | { kind: 'removed' }
+  | { kind: 'meeting_ended' }
+  | { kind: 'duplicate' }
+  | { kind: 'lost' };
+
+/**
+ * Почему мы больше не в комнате. `lost` – обрыв, после которого LiveKit не смог переподключиться:
+ * пользователю предлагается подключиться снова.
+ */
+export function describeDisconnect(reason: DisconnectReason | undefined): RoomEnd {
+  switch (reason) {
+    case DisconnectReason.CLIENT_INITIATED:
+      return { kind: 'left' };
+    case DisconnectReason.PARTICIPANT_REMOVED:
+      return { kind: 'removed' };
+    case DisconnectReason.ROOM_DELETED:
+    case DisconnectReason.ROOM_CLOSED:
+      return { kind: 'meeting_ended' };
+    case DisconnectReason.DUPLICATE_IDENTITY:
+      return { kind: 'duplicate' };
+    default:
+      return { kind: 'lost' };
+  }
+}
+
+/** Заголовок и пояснение экрана по причине выхода (кнопки – у вызывающего). */
+export function roomEndText(end: RoomEnd, meetingTitle: string): { title: string; text: string } {
+  switch (end.kind) {
+    case 'left':
+      return {
+        title: 'Вы вышли из встречи',
+        text: 'Камера и микрофон выключены. Если вышли случайно, вернитесь во встречу.',
+      };
+    case 'removed':
+      return {
+        title: 'Вас удалили из встречи',
+        text: `Организатор удалил вас из встречи «${meetingTitle}». Вернуться по этой ссылке нельзя.`,
+      };
+    case 'meeting_ended':
+      return {
+        title: 'Встреча завершена',
+        text: `Организатор завершил встречу «${meetingTitle}».`,
+      };
+    case 'duplicate':
+      return {
+        title: 'Вы вошли с другого устройства',
+        text: 'С вашим именем в эту встречу вошли еще раз (другая вкладка или устройство), поэтому здесь связь закрыта.',
+      };
+    case 'lost':
+      return {
+        title: 'Соединение потеряно',
+        text: 'Связь с видеосервером оборвалась, и восстановить ее автоматически не получилось. Проверьте интернет и подключитесь снова.',
+      };
+  }
+}
