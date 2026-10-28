@@ -53,7 +53,7 @@ Homebrew (`brew install livekit livekit-cli`). **В `deploy/` образ LiveKit
 Прототип видеовстречи (EMO-53): страница `/dev/livekit` показывает галерею `features/room/LiveKitGallery.tsx` –
 `GridLayout` по списку дорожек, число плиток не задано; на странице помещается до 12 плиток, остальные уходят на
 следующие (кнопки «Предыдущая/Следующая страница» собраны на `usePagination`: готового `PaginationControl` в
-`@livekit/components-react` 2.9.24 нет). Включены `adaptiveStream` и `dynacast`. Токены пока выпускаются вручную или
+`@livekit/components-react` 2.9.24 нет). Размер страницы 12 взят с запасом к лимиту комнаты в 10 человек по уставу; пагинация – на случай роста лимита. Включены `adaptiveStream` и `dynacast`. Токены пока выпускаются вручную или
 вспомогательным кодом e2e (`frontend/e2e/livekit-token.ts`, пакет `livekit-server-sdk` – devDependency только для
 тестов); в рабочем сценарии токен выдает meeting-service.
 
