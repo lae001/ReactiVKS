@@ -21,6 +21,7 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 | `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                                                              |
 | `pnpm test`                         | Vitest + Testing Library                                                                                               |
 | `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))                               |
+| `pnpm mockups:live`                 | Живые снимки комнаты (`docs/frontend/mockups/room-live-*.png`): нужны `livekit-server --dev` и `pnpm dev:api`          |
 | `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                                                      |
 | `pnpm test:e2e:lobby`               | Лобби в Chromium с фейковыми устройствами, режим mock, бэкенд не нужен (Playwright)                                    |
 | `pnpm dev:api`                      | Временный сервер вместо meeting-service на 127.0.0.1:8002 ([dev-api/README.md](dev-api/README.md))                     |

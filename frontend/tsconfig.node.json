@@ -24,6 +24,7 @@
     "playwright.livekit.config.ts",
     "playwright.lobby.config.ts",
     "playwright.room.config.ts",
+    "playwright.room-live.config.ts",
     "dev-api",
     "e2e"
   ]
