@@ -25,6 +25,8 @@ from meeting_service.domain.meetings import (
 )
 from meeting_service.repositories.meetings import InviteCodeTaken, MeetingPage, MeetingRepository
 from meeting_service.repositories.organizer_settings import OrganizerSettingsRepository
+from meeting_service.repositories.outbox import EventOutbox
+from meeting_service.services.event_payloads import meeting_created, meeting_ended
 from vks_common.clock import Clock
 from vks_common.db import transaction
 from vks_common.errors import InternalError
@@ -53,6 +55,7 @@ class CreateMeeting:
         self._session = session
         self._meetings = MeetingRepository(session)
         self._settings = OrganizerSettingsRepository(session)
+        self._events = EventOutbox(session)
         self._clock = clock
         self._random_bytes = random_bytes
 
@@ -86,6 +89,7 @@ class CreateMeeting:
             try:
                 async with transaction(self._session):
                     await self._meetings.add(meeting)
+                    await self._events.add(meeting_created(meeting), occurred_at=meeting.created_at)
             except InviteCodeTaken:
                 _logger.warning("invite code collision, retrying")
                 continue
@@ -135,6 +139,7 @@ class EndMeeting:
     def __init__(self, *, session: AsyncSession, clock: Clock, livekit: LiveKitGateway) -> None:
         self._session = session
         self._meetings = MeetingRepository(session)
+        self._events = EventOutbox(session)
         self._clock = clock
         self._livekit = livekit
 
@@ -147,6 +152,7 @@ class EndMeeting:
             ended = meeting.ended(now, EndReason.ORGANIZER)
             if ended is not meeting:
                 await self._meetings.save_lifecycle(ended, now=now)
+                await self._events.add(meeting_ended(ended), occurred_at=now)
             overview = await self._meetings.overview(ended)
 
         if ended is not meeting:

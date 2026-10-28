@@ -110,7 +110,7 @@ CREATE TABLE auth.outbox (
     created_at    timestamptz NOT NULL DEFAULT now(),
     published_at  timestamptz,
     attempts      int         NOT NULL DEFAULT 0,
-    CONSTRAINT outbox_event_uk UNIQUE (event_id)
+    CONSTRAINT outbox_event_id_uk UNIQUE (event_id)
 );
 CREATE INDEX outbox_unpublished_idx ON auth.outbox (id) WHERE published_at IS NULL;
 
@@ -119,10 +119,11 @@ RESET ROLE;
 
 ## Схема `meeting`
 
-Миграция `0001_meetings_participants_consents` создает `organizer_settings`, `meetings`, `participants` и `consents`.
-Остальные таблицы схемы создаются миграциями задач, которые их используют: `outbox` – событий `meeting.events`
-(спайк 3, EMO-52), `processed_webhooks` – вебхуков LiveKit (EMO-69), `livekit_sync_queue` – синхронизации согласия
-(EMO-84), `blocked_users` – проекции блокировок из `user.events` (EMO-69).
+Миграция `0001_meetings_participants_consents` создает `organizer_settings`, `meetings`, `participants` и `consents`,
+миграция `0002_outbox` – `outbox` событий `meeting.events` (спайк 3, EMO-52; DDL – в разделе «Таблица outbox»).
+Остальные таблицы схемы создаются миграциями задач, которые их используют: `processed_webhooks` – вебхуков LiveKit
+(EMO-69), `livekit_sync_queue` – синхронизации согласия (EMO-84), `blocked_users` – проекции блокировок из
+`user.events` (EMO-69).
 
 ```sql
 -- Схема meeting (владелец meeting_svc). Миграция 0001 meeting-service.
@@ -241,7 +242,6 @@ CREATE TABLE meeting.livekit_sync_queue (
 );
 CREATE INDEX livekit_sync_queue_next_attempt_at_idx ON meeting.livekit_sync_queue (next_attempt_at);
 
--- Транзакционный outbox событий meeting.events – см. «Таблица outbox» ниже (EMO-52).
 ```
 
 Пояснения:
@@ -359,7 +359,7 @@ CREATE TABLE analytics.outbox (
     created_at    timestamptz NOT NULL DEFAULT now(),
     published_at  timestamptz,
     attempts      int         NOT NULL DEFAULT 0,
-    CONSTRAINT outbox_event_uk UNIQUE (event_id)
+    CONSTRAINT outbox_event_id_uk UNIQUE (event_id)
 );
 CREATE INDEX outbox_unpublished_idx ON analytics.outbox (id) WHERE published_at IS NULL;
 
@@ -378,7 +378,25 @@ RESET ROLE;
 фоновая задача отправляет его в топик Kafka `topic` с ключом `event_key` и после подтверждения брокера проставляет
 `published_at`. Так событие не теряется при сбое между `COMMIT` и отправкой и не публикуется для откатившейся
 транзакции. Подробнее – [conventions.md](conventions.md#6-публикация-событий-transactional-outbox),
-[ADR-011](../adr/ADR-011-transactional-outbox.md).
+[ADR-011](../adr/ADR-011-transactional-outbox.md), результаты спайка – [kafka-spike.md](kafka-spike.md).
+
+Определение таблицы общее – `vks_common.kafka.outbox_table(metadata)`; DDL в каждой схеме одинаковый:
+
+```sql
+CREATE TABLE <схема>.outbox (
+    id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    event_id      uuid        NOT NULL,
+    topic         text        NOT NULL,                        -- топик Kafka
+    event_key     text        NOT NULL,                        -- ключ сообщения (meeting_id / user_id)
+    event_type    text        NOT NULL,
+    envelope      jsonb       NOT NULL,                        -- конверт события целиком (events.md)
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    published_at  timestamptz,
+    attempts      int         NOT NULL DEFAULT 0,             -- неудачные попытки отправки
+    CONSTRAINT outbox_event_id_uk UNIQUE (event_id)
+);
+CREATE INDEX outbox_unpublished_idx ON <схема>.outbox (id) WHERE published_at IS NULL;
+```
 
 ## Оценка объема
 

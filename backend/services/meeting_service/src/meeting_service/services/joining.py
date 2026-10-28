@@ -36,7 +36,13 @@ from meeting_service.domain.participants import (
 )
 from meeting_service.repositories.consents import ConsentLog
 from meeting_service.repositories.meetings import MeetingRepository
+from meeting_service.repositories.outbox import EventOutbox
 from meeting_service.repositories.participants import ParticipantRepository
+from meeting_service.services.event_payloads import (
+    consent_changed,
+    meeting_started,
+    participant_registered,
+)
 from vks_common.clock import Clock
 from vks_common.db import transaction
 from vks_common.ids import new_id, new_token
@@ -141,6 +147,8 @@ class JoinAsOrganizer:
         self._meetings = MeetingRepository(session)
         self._participants = ParticipantRepository(session)
         self._journal = _ConsentJournal(session, notice)
+        self._events = EventOutbox(session)
+        self._notice = notice
         self._clock = clock
         self._livekit = livekit
 
@@ -171,17 +179,23 @@ class JoinAsOrganizer:
             started = locked.started(now)
             if started is not locked:
                 await self._meetings.save_lifecycle(started, now=now)
+                await self._events.add(meeting_started(started), occurred_at=now)
                 _logger.info("meeting started")
             participant = await self._participants.get_organizer(started.id, organizer.user_id)
             if participant is None:
                 participant = self._new_participant(started, organizer, consent_state, now=now)
                 await self._participants.add(participant)
                 await self._journal.record(started, participant, origin, decided_at=now)
+                await self._events.add(participant_registered(participant), occurred_at=now)
             elif participant.consent_state is not consent_state:
-                # Организатор вошел снова и решил иначе – новое решение тоже в журнал.
+                # Организатор вошел снова и решил иначе – новое решение тоже в журнал и в событие.
                 participant = participant.with_consent(consent_state)
                 await self._participants.save_consent(participant.id, consent_state, now=now)
                 await self._journal.record(started, participant, origin, decided_at=now)
+                await self._events.add(
+                    consent_changed(participant, notice_version=self._notice.version, decided_at=now),
+                    occurred_at=now,
+                )
 
         return JoinResult(
             meeting=started,
@@ -239,6 +253,7 @@ class JoinAsGuest:
         self._meetings = MeetingRepository(session)
         self._participants = ParticipantRepository(session)
         self._journal = _ConsentJournal(session, notice)
+        self._events = EventOutbox(session)
         self._notice = notice
         self._clock = clock
         self._livekit = livekit
@@ -280,6 +295,7 @@ class JoinAsGuest:
             current.ensure_open_for_guests()
             await self._participants.add(participant, token_hash=hash_participant_token(participant_token))
             await self._journal.record(current, participant, origin, decided_at=participant.created_at)
+            await self._events.add(participant_registered(participant), occurred_at=participant.created_at)
 
         # В журнал – идентификаторы, не имя гостя и не токен.
         _logger.info("guest joined", participant_id=str(participant.id), consent=consent_state.value)
