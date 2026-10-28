@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 
-import { MOCK_CONSENT_NOTICE } from '@/shared/mocks/data';
+import { MOCK_CONSENT_NOTICE } from '@/shared/api/meetings/mock/fixtures';
 
 import { ConsentFieldset } from './ConsentFieldset';
 

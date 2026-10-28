@@ -48,16 +48,16 @@ describe('защита маршрутов', () => {
   });
 
   it('комната открыта организатору и администратору', async () => {
-    renderApp('/room/m1', { user: admin });
+    renderApp('/room/m-active', { user: admin });
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Быстрая встреча' }),
+      await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' }),
     ).toBeInTheDocument();
   });
 
   it('гость с participant_token попадает в комнату без учетной записи', async () => {
     mockNoSession();
     setParticipantToken('pt_test');
-    renderApp('/room/m1', {
+    renderApp('/room/m-active', {
       state: { role: 'guest', displayName: 'Гость', consent: 'granted', inviteCode: 'abc' },
     });
     expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('защита маршрутов', () => {
   it('без participant_token комната закрыта, даже если в state написано «гость»', async () => {
     mockNoSession();
     mockAuthConfig();
-    const router = renderApp('/room/m1', {
+    const router = renderApp('/room/m-active', {
       state: { role: 'guest', displayName: 'Гость', consent: 'granted', inviteCode: 'abc' },
     });
     await screen.findByRole('heading', { level: 1, name: 'Вход' });

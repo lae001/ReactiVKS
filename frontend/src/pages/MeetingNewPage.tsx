@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CalendarClock, Check } from 'lucide-react';
+import { CalendarClock, Check, LoaderCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { Link } from 'react-router';
@@ -9,10 +9,12 @@ import {
   meetingFormSchema,
   toCreateRequest,
 } from '@/features/meetings/schemas';
-import type { Meeting } from '@/shared/api/types';
+import { meetingErrorMessage } from '@/features/meetings/errors';
+import { useCreateMeeting, useSettings } from '@/features/meetings/queries';
+import type { Meeting, Settings } from '@/shared/api/meetings';
+import { ApiError, fieldOf } from '@/shared/api/problem';
 import { paths } from '@/shared/config/routes';
 import { cn } from '@/shared/lib/utils';
-import { createMockMeeting } from '@/shared/mocks/data';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { CopyLinkButton } from '@/shared/ui/copy-link-button';
@@ -20,26 +22,72 @@ import { Field } from '@/shared/ui/field';
 
 const FPS_OPTIONS = [2, 3, 4, 5] as const;
 
-/** UC-2. Создание встречи: название, время, анализ эмоций. Запрос – на тестовых данных, API в EMO-73. */
+/** Значения по умолчанию из GET /settings; пока настройки не загрузились или сервис не ответил – как в контракте. */
+const CONTRACT_DEFAULTS: Settings = { analysis_enabled_default: true, analysis_fps_default: 3 };
+
+/**
+ * UC-2. Создание встречи: название, время, анализ эмоций. Цель – создать встречу и скопировать
+ * ссылку за три действия: ввести название, нажать «Создать», нажать «Копировать ссылку».
+ */
 export function MeetingNewPage() {
+  const settings = useSettings();
+  if (settings.isPending) {
+    return (
+      <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+        <LoaderCircle className="size-4 animate-spin" aria-hidden /> Загружаем настройки…
+      </p>
+    );
+  }
+  return <NewMeeting defaults={settings.data ?? CONTRACT_DEFAULTS} />;
+}
+
+function NewMeeting({ defaults }: { defaults: Settings }) {
   const [created, setCreated] = useState<Meeting | null>(null);
+  const create = useCreateMeeting();
+  // Один ключ на попытку: повторная отправка той же формы (двойной клик, сбой сети) не создаст
+  // вторую встречу; после успеха ключ меняется.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const {
     register,
     handleSubmit,
     control,
     setValue,
-    formState: { errors, isSubmitting },
+    setError,
+    reset,
+    formState: { errors },
   } = useForm<MeetingFormValues>({
     resolver: zodResolver(meetingFormSchema),
-    // Значения по умолчанию – из /settings (GET /settings), пока их там нет – как в контракте
-    defaultValues: { title: '', scheduled_at: '', analysis_enabled: true, analysis_fps: 3 },
+    defaultValues: {
+      title: '',
+      scheduled_at: '',
+      analysis_enabled: defaults.analysis_enabled_default,
+      analysis_fps: defaults.analysis_fps_default,
+    },
   });
   const analysis = useWatch({ control, name: 'analysis_enabled' });
   const fps = useWatch({ control, name: 'analysis_fps' });
   const scheduled = useWatch({ control, name: 'scheduled_at' });
 
   const onSubmit = handleSubmit((values) => {
-    setCreated(createMockMeeting(toCreateRequest(values)));
+    create.mutate(
+      { body: toCreateRequest(values), key: idempotencyKey },
+      {
+        onSuccess: (meeting) => {
+          setIdempotencyKey(crypto.randomUUID());
+          setCreated(meeting);
+        },
+        onError: (error) => {
+          if (error instanceof ApiError) {
+            for (const issue of error.errors) {
+              const field = fieldOf(issue);
+              if (field === 'title' || field === 'scheduled_at') {
+                setError(field, { message: issue.msg });
+              }
+            }
+          }
+        },
+      },
+    );
   });
 
   if (created) {
@@ -66,7 +114,14 @@ export function MeetingNewPage() {
               <Button variant="outline" size="sm" asChild>
                 <Link to={paths.meeting(created.id)}>Открыть карточку</Link>
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  reset();
+                  setCreated(null);
+                }}
+              >
                 Создать еще одну
               </Button>
             </div>
@@ -170,9 +225,19 @@ export function MeetingNewPage() {
           </CardContent>
         </Card>
 
+        {create.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {meetingErrorMessage(create.error, 'создать встречу')}
+          </p>
+        )}
+
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" size="lg" disabled={isSubmitting}>
-            <CalendarClock aria-hidden />
+          <Button type="submit" size="lg" disabled={create.isPending}>
+            {create.isPending ? (
+              <LoaderCircle className="animate-spin" aria-hidden />
+            ) : (
+              <CalendarClock aria-hidden />
+            )}
             {scheduled ? 'Создать встречу' : 'Создать и получить ссылку'}
           </Button>
           <Button variant="ghost" size="lg" asChild>

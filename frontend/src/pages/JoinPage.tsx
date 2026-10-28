@@ -1,3 +1,4 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, LoaderCircle } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -9,13 +10,15 @@ import {
   type JoinFormErrors,
   validateJoinForm,
 } from '@/features/lobby/validate';
+import { meetingErrorMessage } from '@/features/meetings/errors';
+import { type JoinInfo, meetingsApi } from '@/shared/api/meetings';
+import { ApiError, fieldOf } from '@/shared/api/problem';
 import { paths } from '@/shared/config/routes';
 import { useLocalMedia } from '@/shared/hooks/use-local-media';
 import { formatDateTime } from '@/shared/lib/format';
 import { setParticipantToken } from '@/shared/lib/participant-session';
 import type { RoomEntry } from '@/shared/lib/room-entry';
 import { checkWebRtcSupport, describeWebRtcProblem } from '@/shared/lib/webrtc-support';
-import { getJoinInfo, joinMeeting } from '@/shared/mocks/data';
 import { Wordmark } from '@/shared/ui/brand';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -43,39 +46,52 @@ function LobbyMessage({ title, text }: { title: string; text: string }) {
 
 /**
  * UC-3. Лобби участника (docs/frontend/site-structure.md, 4.2): превью камеры слева,
- * имя и явное согласие на анализ эмоций справа. Сейчас – на тестовых данных;
- * GET/POST /api/v1/join/{invite_code} – EMO-74, согласие – EMO-89.
+ * имя и явное согласие на анализ эмоций справа. Данные – через слой API
+ * (GET и POST /join/{invite_code}).
  */
 export function JoinPage() {
   const { inviteCode = '' } = useParams();
-  const info = getJoinInfo(inviteCode);
+  const query = useQuery({
+    queryKey: ['join-info', inviteCode],
+    queryFn: ({ signal }) => meetingsApi.getJoinInfo(inviteCode, signal),
+  });
 
-  if (!info) {
+  if (query.isPending) {
+    return (
+      <LobbyShell>
+        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden /> Открываем приглашение…
+        </p>
+      </LobbyShell>
+    );
+  }
+  if (query.isError) {
+    const notFound = query.error instanceof ApiError && query.error.code === 'not_found';
     return (
       <LobbyMessage
-        title="Приглашение не найдено"
-        text="Проверьте ссылку: возможно, в ней опечатка или она устарела. Попросите организатора прислать ее еще раз."
+        title={notFound ? 'Приглашение не найдено' : 'Не удалось открыть приглашение'}
+        text={
+          notFound
+            ? 'Проверьте ссылку: возможно, в ней опечатка или она устарела. Попросите организатора прислать ее еще раз.'
+            : meetingErrorMessage(query.error, 'открыть приглашение')
+        }
       />
     );
   }
+
+  const info = query.data;
   if (info.status === 'ended' || info.status === 'cancelled') {
     return (
       <LobbyMessage
-        title="Встреча завершена"
-        text={`Встреча «${info.title}» уже закончилась. Если это ошибка, свяжитесь с организатором – ${info.organizer_name}.`}
+        title={info.status === 'ended' ? 'Встреча завершена' : 'Встреча отменена'}
+        text={`Встреча «${info.title}» ${info.status === 'ended' ? 'уже закончилась' : 'отменена организатором'}. Если это ошибка, свяжитесь с организатором – ${info.organizer_name}.`}
       />
     );
   }
   return <Lobby inviteCode={inviteCode} info={info} />;
 }
 
-function Lobby({
-  inviteCode,
-  info,
-}: {
-  inviteCode: string;
-  info: NonNullable<ReturnType<typeof getJoinInfo>>;
-}) {
+function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
   const navigate = useNavigate();
   const media = useLocalMedia();
   const problem = describeWebRtcProblem(checkWebRtcSupport());
@@ -84,6 +100,13 @@ function Lobby({
   const [consent, setConsent] = useState<ConsentChoice | null>(null);
   const [errors, setErrors] = useState<JoinFormErrors>({});
   const [waiting, setWaiting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [ended, setEnded] = useState<ApiError | null>(null);
+  const queryClient = useQueryClient();
+  const join = useMutation({
+    mutationFn: (body: Parameters<typeof meetingsApi.joinMeeting>[1]) =>
+      meetingsApi.joinMeeting(inviteCode, body),
+  });
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -95,28 +118,64 @@ function Lobby({
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
-    const result = joinMeeting(inviteCode, {
-      display_name: displayName.trim(),
-      consent: consent ?? undefined,
-    });
-    if ('error' in result) {
-      // meeting_not_started: meeting-service ответит 409; участник обновляет страницу сам
-      if (result.error === 'meeting_not_started') setWaiting(true);
-      return;
-    }
+    setFormError(null);
+    join.mutate(
+      {
+        display_name: displayName.trim(),
+        consent: consent ?? undefined,
+        notice_version: info.consent_notice?.version,
+      },
+      {
+        onSuccess: (result) => {
+          setParticipantToken(result.participant_token);
+          const entry: RoomEntry = {
+            role: 'guest',
+            displayName: displayName.trim(),
+            consent: info.consent_notice ? (consent ?? 'denied') : 'not_required',
+            cameraOn: media.cameraOn,
+            micOn: media.micOn,
+            inviteCode,
+            participantId: result.participant_id,
+            meeting: result.meeting,
+          };
+          navigate(paths.room(result.meeting.id), { state: entry });
+        },
+        onError: (error) => {
+          if (!(error instanceof ApiError)) return setFormError(meetingErrorMessage(error));
+          switch (error.code) {
+            // Встреча еще не началась: клиент повторяет вход (опрос раз в 5 с – следующая задача)
+            case 'meeting_not_started':
+              return setWaiting(true);
+            case 'meeting_ended':
+            case 'meeting_cancelled':
+              return setEnded(error);
+            case 'notice_outdated':
+              // Текст уведомления сменился: показываем новый и просим выбрать заново
+              setConsent(null);
+              void queryClient.invalidateQueries({ queryKey: ['join-info', inviteCode] });
+              return setFormError(
+                'Уведомление об анализе эмоций обновилось. Прочитайте его и выберите вариант заново.',
+              );
+            case 'validation_error': {
+              const issue = error.errors.find((i) => fieldOf(i) === 'display_name');
+              if (issue) return setErrors({ displayName: issue.msg });
+              return setFormError(meetingErrorMessage(error, 'войти во встречу'));
+            }
+            default:
+              return setFormError(meetingErrorMessage(error, 'войти во встречу'));
+          }
+        },
+      },
+    );
+  }
 
-    // МОК: настоящий participant_token придет в ответе POST /join/{invite_code} (EMO-74, EMO-89)
-    setParticipantToken(`pt_mock_${crypto.randomUUID()}`);
-
-    const entry: RoomEntry = {
-      role: 'guest',
-      displayName: displayName.trim(),
-      consent: info.consent_notice ? (consent ?? 'denied') : 'not_required',
-      cameraOn: media.cameraOn,
-      micOn: media.micOn,
-      inviteCode,
-    };
-    navigate(paths.room(result.meetingId), { state: entry });
+  if (ended) {
+    return (
+      <LobbyMessage
+        title={ended.code === 'meeting_cancelled' ? 'Встреча отменена' : 'Встреча завершена'}
+        text={`Встреча «${info.title}» ${ended.code === 'meeting_cancelled' ? 'отменена организатором' : 'уже закончилась'}. Если это ошибка, свяжитесь с организатором – ${info.organizer_name}.`}
+      />
+    );
   }
 
   return (
@@ -197,9 +256,16 @@ function Lobby({
               </Button>
             </div>
           ) : (
-            <Button type="submit" size="lg" disabled={problem !== null}>
-              Войти во встречу
-            </Button>
+            <>
+              {formError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {formError}
+                </p>
+              )}
+              <Button type="submit" size="lg" disabled={problem !== null || join.isPending}>
+                Войти во встречу
+              </Button>
+            </>
           )}
         </form>
       </main>

@@ -84,7 +84,7 @@ const screens: Screen[] = [
     ready: 'Создать аккаунт',
     fullPage: true,
   },
-  { name: 'meetings', path: '/meetings', signedIn: true, ready: 'Ближайшие', fullPage: true },
+  { name: 'meetings', path: '/meetings', signedIn: true, ready: 'Все встречи', fullPage: true },
   {
     name: 'meeting-new',
     path: '/meetings/new',

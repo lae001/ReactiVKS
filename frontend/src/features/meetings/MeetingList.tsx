@@ -1,12 +1,14 @@
 import { ScanFace, Users } from 'lucide-react';
 import { Link } from 'react-router';
 
-import type { Meeting, MeetingStatus } from '@/shared/api/types';
+import type { Meeting, MeetingStatus } from '@/shared/api/meetings';
 import { paths } from '@/shared/config/routes';
 import { formatMeetingWhen } from '@/shared/lib/format';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { CopyLinkButton } from '@/shared/ui/copy-link-button';
+
+import { StartMeetingButton } from './StartMeetingButton';
 
 const STATUS: Record<
   MeetingStatus,
@@ -33,9 +35,7 @@ function MeetingActions({ meeting }: { meeting: Meeting }) {
       return (
         <>
           <CopyLinkButton url={meeting.invite_url} />
-          <Button size="sm" asChild>
-            <Link to={paths.room(meeting.id)}>Начать встречу</Link>
-          </Button>
+          <StartMeetingButton meeting={meeting} />
         </>
       );
     default:

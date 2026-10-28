@@ -2,6 +2,9 @@ import { X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
+import { meetingErrorMessage } from '@/features/meetings/errors';
+import { ApiError } from '@/shared/api/problem';
+
 import { EmotionIndicator } from '@/features/emotions/EmotionIndicator';
 import { EmotionPanel } from '@/features/emotions/EmotionPanel';
 import { type ChatMessage, ChatPanel } from '@/features/room/ChatPanel';
@@ -10,19 +13,17 @@ import { ControlBar } from '@/features/room/ControlBar';
 import { ParticipantsPanel } from '@/features/room/ParticipantsPanel';
 import type { RoomParticipant, SidePanelTab } from '@/features/room/types';
 import { VideoTile } from '@/features/room/VideoTile';
-import type { ConsentState, Meeting, SnapshotParticipant } from '@/shared/api/types';
+import { useMeeting, useParticipants } from '@/features/meetings/queries';
+import type { Meeting, Participant } from '@/shared/api/meetings';
+import { useSessionStore } from '@/shared/api/session';
+import type { ConsentState, SnapshotParticipant } from '@/shared/api/types';
 import { paths } from '@/shared/config/routes';
 import { useLocalMedia } from '@/shared/hooks/use-local-media';
 import { formatDuration } from '@/shared/lib/format';
 import { readRoomEntry, type RoomEntry } from '@/shared/lib/room-entry';
 import { cn } from '@/shared/lib/utils';
-import {
-  getRoomMeeting,
-  MOCK_CHAT,
-  MOCK_EMOTION_SNAPSHOT,
-  MOCK_ORGANIZER_NAME,
-  MOCK_ROOM_PARTICIPANTS,
-} from '@/shared/mocks/data';
+// Панель эмоций и чат остаются на тестовых данных: realtime-сервис и чат на LiveKit – позже
+import { MOCK_CHAT, MOCK_EMOTION_SNAPSHOT } from '@/shared/mocks/data';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { CopyLinkButton } from '@/shared/ui/copy-link-button';
@@ -67,26 +68,68 @@ function RoomMessage({ title, text, action }: { title: string; text: string; act
   );
 }
 
+/** Что комнате нужно знать о встрече: организатору приходит полная карточка, гостю – JoinResult.meeting. */
+type RoomMeeting = Pick<Meeting, 'id' | 'title' | 'status' | 'analysis_enabled'> &
+  Partial<Pick<Meeting, 'invite_url' | 'invite_code'>>;
+
 /**
  * UC-4. Комната встречи (docs/frontend/site-structure.md, 4.3): галерея, боковая панель
  * «Участники / Эмоции / Чат», нижняя панель управления. Состав зависит от роли.
- * Сейчас – на тестовых данных; видео на LiveKit – EMO-75, панель эмоций по WebSocket – EMO-90, EMO-91.
+ * Встреча и участники – через слой API; видео на LiveKit – EMO-75, панель эмоций и чат остаются на
+ * тестовых данных (WebSocket – EMO-90, EMO-91).
  */
 export default function RoomPage() {
   const { meetingId = '' } = useParams();
   const location = useLocation();
-  const meeting = getRoomMeeting(meetingId);
   const [left, setLeft] = useState(false);
+  const organizerName = useSessionStore((s) => s.user?.display_name);
+
+  const fromLobby = readRoomEntry(location.state);
+  // Гость получил сведения о встрече при входе (GET /meetings/{id} только для владельца);
+  // организатор запрашивает карточку сам.
+  const meetingQuery = useMeeting(meetingId, { enabled: !fromLobby?.meeting });
+  const participantsQuery = useParticipants(meetingId);
+
+  const meeting: RoomMeeting | undefined = fromLobby?.meeting ?? meetingQuery.data;
+  if (!meeting) {
+    if (meetingQuery.isError) {
+      const notFound =
+        meetingQuery.error instanceof ApiError && meetingQuery.error.code === 'not_found';
+      return (
+        <RoomMessage
+          title={notFound ? 'Встреча не найдена' : 'Не удалось открыть комнату'}
+          text={
+            notFound
+              ? 'Возможно, ее удалили или ссылка введена с ошибкой.'
+              : meetingErrorMessage(meetingQuery.error, 'открыть комнату')
+          }
+          action={
+            <Button asChild variant="room">
+              <Link to={paths.meetings}>К встречам</Link>
+            </Button>
+          }
+        />
+      );
+    }
+    return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
+  }
+  if (participantsQuery.isPending) {
+    return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
+  }
 
   // Без state из лобби считаем, что вошел организатор (с главной или из карточки встречи).
   // Согласие организатора по умолчанию не дано – анализ только после явного включения.
-  const entry: RoomEntry = readRoomEntry(location.state) ?? {
+  const entry: RoomEntry = fromLobby ?? {
     role: 'organizer',
-    displayName: MOCK_ORGANIZER_NAME,
+    displayName: organizerName ?? 'Организатор',
     consent: meeting.analysis_enabled ? 'denied' : 'not_required',
     cameraOn: true,
     micOn: true,
   };
+  // Собеседники: гости, кроме самого вошедшего. Список обновляется вместе с LiveKit в ветке комнаты.
+  const others = (participantsQuery.data ?? []).filter(
+    (p) => p.role === 'guest' && p.id !== entry.participantId,
+  );
 
   if (meeting.status === 'ended' || meeting.status === 'cancelled') {
     return (
@@ -109,7 +152,7 @@ export default function RoomPage() {
         text="Камера и микрофон выключены. Если вышли случайно, вернитесь по ссылке-приглашению."
         action={
           <Button asChild variant="room">
-            <Link to={paths.join(entry.inviteCode ?? meeting.invite_code)}>
+            <Link to={paths.join(entry.inviteCode ?? meeting.invite_code ?? '')}>
               Вернуться во встречу
             </Link>
           </Button>
@@ -118,16 +161,18 @@ export default function RoomPage() {
     );
   }
 
-  return <Room meeting={meeting} entry={entry} onLeave={() => setLeft(true)} />;
+  return <Room meeting={meeting} entry={entry} others={others} onLeave={() => setLeft(true)} />;
 }
 
 function Room({
   meeting,
   entry,
+  others: initialOthers,
   onLeave,
 }: {
-  meeting: Meeting;
+  meeting: RoomMeeting;
   entry: RoomEntry;
+  others: Participant[];
   onLeave: () => void;
 }) {
   const navigate = useNavigate();
@@ -136,9 +181,7 @@ function Room({
   const media = useLocalMedia({ initialCamera: entry.cameraOn, initialMic: entry.micOn });
 
   const [myConsent, setMyConsent] = useState<ConsentState>(entry.consent);
-  const [others, setOthers] = useState(() =>
-    MOCK_ROOM_PARTICIPANTS.map((p) => ({ ...p, micOn: true })),
-  );
+  const [others, setOthers] = useState(() => initialOthers.map((p) => ({ ...p, micOn: true })));
   const [messages, setMessages] = useState<ChatMessage[]>(MOCK_CHAT);
   const [panel, setPanel] = useState<SidePanelTab | null>(() =>
     isOrganizer && meeting.analysis_enabled && isWide() ? 'emotions' : null,
@@ -222,7 +265,7 @@ function Room({
             Идет анализ эмоций
           </Badge>
         )}
-        {isOrganizer && (
+        {isOrganizer && meeting.invite_url && (
           <span className="hidden md:block">
             <CopyLinkButton url={meeting.invite_url} variant="room" label="Пригласить" />
           </span>

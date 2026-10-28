@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 
+import { resetMockMeetings } from '@/shared/api/meetings';
 import { resetSession } from '@/shared/api/session';
 
 import { server } from './server';
@@ -15,6 +16,7 @@ beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   resetSession();
+  resetMockMeetings();
   localStorage.clear();
   sessionStorage.clear();
 });
