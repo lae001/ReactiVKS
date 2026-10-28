@@ -35,6 +35,9 @@ pnpm test:e2e:livekit                    # два участника видят 
 LK_SMOKE_PUBLISHERS=9 pnpm test:e2e:livekit e2e/livekit-smoke.lk.ts   # раскладка на 10 участниках через lk load-test
 ```
 
+> **Осторожно.** `livekit-server --dev` использует общеизвестные ключи `devkey` и `secret` и слушает TCP-порт 7881 на
+> всех интерфейсах (`--bind 127.0.0.1` ограничивает только 7880). Не оставляйте его запущенным в публичных сетях.
+
 Токены в тестах подписывает `e2e/livekit-token.ts` (`livekit-server-sdk`, devDependency только для e2e).
 
 ## Структура
