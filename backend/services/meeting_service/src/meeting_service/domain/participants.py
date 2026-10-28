@@ -7,20 +7,24 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 
-from meeting_service.domain.errors import InvalidDisplayName
+from meeting_service.domain.errors import InvalidDisplayName, MeetingFull
 from meeting_service.domain.identifiers import MeetingId, ParticipantId, UserId
 
 __all__ = [
     "MAX_DISPLAY_NAME_LENGTH",
+    "MAX_MEETING_PARTICIPANTS",
     "PARTICIPANT_TOKEN_PREFIX",
     "ConsentState",
     "Participant",
     "ParticipantRole",
+    "ensure_seat_available",
     "hash_participant_token",
     "normalize_display_name",
 ]
 
 MAX_DISPLAY_NAME_LENGTH = 64
+# Не более 10 человек одновременно (требование к встрече); ML-агент в это число не входит.
+MAX_MEETING_PARTICIPANTS = 10
 # Префикс отличает токен гостя от access-токена в заголовке и в случайно попавшем на глаза тексте.
 PARTICIPANT_TOKEN_PREFIX = "pt_"  # noqa: S105 - префикс формата, а не секрет
 
@@ -51,6 +55,20 @@ class Participant:
     created_at: datetime
     user_id: UserId | None = None
     is_removed: bool = False
+    first_joined_at: datetime | None = None
+    last_joined_at: datetime | None = None
+    last_left_at: datetime | None = None
+
+    @property
+    def is_online(self) -> bool:
+        """Сейчас в комнате: последний вход позже последнего выхода.
+
+        Отметки ставят вебхуки LiveKit, которые могут прийти не по порядку, – поэтому сравниваются моменты событий,
+        а не порядок их обработки.
+        """
+        if self.is_removed or self.last_joined_at is None:
+            return False
+        return self.last_left_at is None or self.last_left_at < self.last_joined_at
 
     @property
     def livekit_identity(self) -> str:
@@ -59,6 +77,16 @@ class Participant:
 
     def with_consent(self, state: ConsentState) -> Participant:
         return replace(self, consent_state=state)
+
+
+def ensure_seat_available(online_others: int) -> None:
+    """Войти можно, пока в комнате меньше 10 других участников.
+
+    Онлайн считается по вебхукам, поэтому гость, получивший токен, но еще не подключившийся, не учитывается. Такую
+    гонку закрывает сама комната LiveKit: ``max_participants`` не пустит лишнего.
+    """
+    if online_others >= MAX_MEETING_PARTICIPANTS:
+        raise MeetingFull()
 
 
 def normalize_display_name(raw: str) -> str:

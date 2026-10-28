@@ -15,7 +15,7 @@ from starlette.requests import Request
 
 from meeting_service.domain.errors import ParticipantTokenInvalid
 from meeting_service.domain.identifiers import UserId
-from meeting_service.domain.livekit import LiveKitGateway
+from meeting_service.domain.livekit import LiveKitGateway, WebhookVerifier
 from meeting_service.domain.meetings import Organizer
 from meeting_service.domain.participants import PARTICIPANT_TOKEN_PREFIX
 from meeting_service.services.joining import (
@@ -34,6 +34,7 @@ from meeting_service.services.meetings import (
     UpdateMeeting,
 )
 from meeting_service.services.organizer_settings import GetOrganizerSettings, SaveOrganizerSettings
+from meeting_service.services.webhooks import HandleLiveKitWebhook
 from meeting_service.settings import MeetingSettings
 from vks_common.auth import CurrentUser
 from vks_common.clock import Clock
@@ -48,6 +49,7 @@ __all__ = [
     "GetMeetingScenario",
     "GetOrganizerSettingsScenario",
     "GuestToken",
+    "HandleLiveKitWebhookScenario",
     "JoinAsGuestScenario",
     "JoinAsOrganizerScenario",
     "ListMeetingsScenario",
@@ -79,9 +81,17 @@ def get_livekit(request: Request) -> LiveKitGateway:
     return livekit
 
 
+def get_webhook_verifier(request: Request) -> WebhookVerifier:
+    verifier = request.app.state.webhook_verifier
+    if not isinstance(verifier, WebhookVerifier):  # pragma: no cover - выставляет create_application
+        raise RuntimeError("в app.state нет webhook_verifier")
+    return verifier
+
+
 Settings = Annotated[MeetingSettings, Depends(get_settings)]
 CurrentClock = Annotated[Clock, Depends(get_clock)]
 LiveKit = Annotated[LiveKitGateway, Depends(get_livekit)]
+Verifier = Annotated[WebhookVerifier, Depends(get_webhook_verifier)]
 Session = Annotated[AsyncSession, Depends(get_session)]
 
 
@@ -188,3 +198,10 @@ JoinAsOrganizerScenario = Annotated[JoinAsOrganizer, Depends(build_join_as_organ
 GetJoinInfoScenario = Annotated[GetJoinInfo, Depends(build_get_join_info)]
 JoinAsGuestScenario = Annotated[JoinAsGuest, Depends(build_join_as_guest)]
 RejoinAsGuestScenario = Annotated[RejoinAsGuest, Depends(build_rejoin_as_guest)]
+
+
+def build_handle_livekit_webhook(session: Session, clock: CurrentClock, verifier: Verifier) -> HandleLiveKitWebhook:
+    return HandleLiveKitWebhook(session=session, clock=clock, verifier=verifier)
+
+
+HandleLiveKitWebhookScenario = Annotated[HandleLiveKitWebhook, Depends(build_handle_livekit_webhook)]

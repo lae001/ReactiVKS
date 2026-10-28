@@ -15,7 +15,11 @@ room:
   empty_timeout: 300
   departure_timeout: 20
   max_participants: 11
-# Вебхуки включаются вместе с meeting-service:
-# TODO(EMO-69): webhook: {api_key: <key>, urls: ["http://127.0.0.1:8002/webhooks/livekit"]}
+# Вебхуки – в meeting-service, запущенный на хосте (make run-meeting). Подписываются ключом api_key: он должен совпадать
+# с LIVEKIT_API_KEY из deploy/.env (по умолчанию devkey), иначе meeting-service отвечает 401 и присутствие не отмечается.
+webhook:
+  api_key: devkey
+  urls:
+    - http://127.0.0.1:8002/webhooks/livekit
 logging:
   level: info

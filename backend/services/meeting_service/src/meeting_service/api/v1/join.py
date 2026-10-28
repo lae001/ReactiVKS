@@ -31,7 +31,7 @@ async def read_join_info(invite_code: str, scenario: GetJoinInfoScenario) -> Joi
     responses={
         status.HTTP_409_CONFLICT: {
             "description": "meeting_not_started (повторить через 5 с) | meeting_ended | meeting_cancelled | "
-            "consent_required | notice_outdated"
+            "meeting_full | consent_required | notice_outdated"
         },
         status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "livekit_unavailable"},
     },

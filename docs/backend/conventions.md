@@ -164,7 +164,10 @@ sequenceDiagram
 
 | Обработчик | Как обеспечена |
 |---|---|
-| Проекции (analytics, meeting.blocked_users) | `INSERT … ON CONFLICT DO UPDATE`, сравнение `occurred_at` (старое событие не перетирает новое) |
+| Проекции analytics | `INSERT … ON CONFLICT DO UPDATE`, сравнение `occurred_at` (старое событие не перетирает новое) |
+| Проекция `meeting.blocked_users` | `INSERT … ON CONFLICT DO NOTHING` / `DELETE`; порядок событий пользователя сохраняет ключ `user_id`, повторное чтение после сбоя идет в том же порядке |
+| Удаление встреч по `user.deleted` | Удаляются только неудаленные встречи; повтор доделывает прерванное и не публикует `meeting.deleted` дважды |
+| Вебхуки LiveKit (meeting-service) | Отметка `event.id` в `processed_webhooks` в одной транзакции с эффектом; отметки присутствия – `least`/`greatest` по моменту события |
 | Построение отчета | Проверка `reports.status`; повторный вызов для `ready` – без действий |
 | Удаление данных | `DELETE` идемпотентен |
 | realtime-рассылка | Повтор допустим (клиент перерисует то же значение) |

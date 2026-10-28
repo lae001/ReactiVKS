@@ -120,10 +120,9 @@ RESET ROLE;
 ## Схема `meeting`
 
 Миграция `0001_meetings_participants_consents` создает `organizer_settings`, `meetings`, `participants` и `consents`,
-миграция `0002_outbox` – `outbox` событий `meeting.events` (спайк 3, EMO-52; DDL – в разделе «Таблица outbox»).
-Остальные таблицы схемы создаются миграциями задач, которые их используют: `processed_webhooks` – вебхуков LiveKit
-(EMO-69), `livekit_sync_queue` – синхронизации согласия (EMO-84), `blocked_users` – проекции блокировок из
-`user.events` (EMO-69).
+миграция `0002_outbox` – `outbox` событий `meeting.events` (спайк 3, EMO-52; DDL – в разделе «Таблица outbox»),
+миграция `0003_webhooks_and_blocked_users` – `processed_webhooks`, `blocked_users` и колонку
+`participants.last_joined_at` (EMO-69). `livekit_sync_queue` создается миграцией синхронизации согласия (EMO-84).
 
 ```sql
 -- Схема meeting (владелец meeting_svc). Миграция 0001 meeting-service.
@@ -177,7 +176,8 @@ CREATE TABLE meeting.participants (
     consent_state           text        NOT NULL,
     participant_token_hash  bytea,                              -- только у гостей
     is_removed              boolean     NOT NULL DEFAULT false, -- удален организатором, повторный вход запрещен
-    first_joined_at         timestamptz,
+    first_joined_at         timestamptz,                        -- по вебхукам LiveKit
+    last_joined_at          timestamptz,                        -- в комнате, если позже last_left_at (0003)
     last_left_at            timestamptz,
     created_at              timestamptz NOT NULL DEFAULT now(),
     updated_at              timestamptz NOT NULL DEFAULT now(),
@@ -213,7 +213,7 @@ CREATE INDEX consents_decided_at_idx  ON meeting.consents (decided_at);
 RESET ROLE;
 ```
 
-Таблицы следующих миграций:
+Таблицы следующих миграций (`blocked_users` и `processed_webhooks` – миграция 0003):
 
 ```sql
 -- Проекция заблокированных организаторов из user.events (EMO-69).
@@ -250,6 +250,9 @@ CREATE INDEX livekit_sync_queue_next_attempt_at_idx ON meeting.livekit_sync_queu
   Его показывает лобби гостя (`GET /join/{invite_code}` → `organizer_name`), а читать учетные записи чужой схемы
   meeting-service не может. Переименование организатора на уже созданные встречи не влияет.
 - `participants_identity_ck` – у организатора есть `user_id` и нет `participant_token_hash`, у гостя – наоборот.
+- Присутствие в комнате – по вебхукам LiveKit: участник в комнате, если `last_joined_at` позже `last_left_at`.
+  Вебхуки могут прийти не по порядку, поэтому отметки сдвигаются только `least`/`greatest` по моменту события.
+  По этому правилу считается предел в 10 участников (`409 meeting_full`).
 - `consents` без внешних ключей и со снимками имени и названия встречи: журнал согласий должен пережить очистку
   встреч (срок хранения 3 года).
 - `livekit_sync_queue` – гарантированная доставка изменения согласия в LiveKit

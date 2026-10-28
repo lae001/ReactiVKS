@@ -289,7 +289,8 @@ cookie очищается. Выданный access-токен действует
 
 ### `POST /participants/me/rejoin`
 
-Гость после перезагрузки вкладки. `200 JoinResult`; `401`; `409 meeting_ended` | `participant_removed`.
+Гость после перезагрузки вкладки. `200 JoinResult`; `401`; `409 meeting_ended` | `participant_removed` |
+`meeting_full` (в комнате уже 10 других участников).
 
 ### `/settings`
 

@@ -104,12 +104,19 @@ flowchart TB
 | События `meeting.created`, `meeting.started`, `participant.registered`, `consent.changed`, `meeting.ended` через outbox | EMO-52 | ✓ |
 | `PATCH/DELETE /meetings/{id}` (события `meeting.updated`, `meeting.cancelled`, `meeting.deleted`), `GET/PUT /settings` | EMO-68 | ✓ |
 | `Idempotency-Key` для `POST /meetings` (Redis) | EMO-68 | спринт 4 |
-| Вебхуки LiveKit, `participant.joined/left`, `meeting_full` по онлайн-участникам, `user_blocked`, ограничение частоты `/join` | EMO-69 | спринт 4 |
+| `POST /webhooks/livekit`: присутствие участников, `participant.joined/left`, `room_finished` → `ended` | EMO-69 | ✓ |
+| `409 meeting_full` по участникам в комнате; потребитель `user.events`: `403 user_blocked`, удаление встреч по `user.deleted` | EMO-69 | ✓ |
+| Ограничение частоты `/join/{invite_code}` (`429`, Redis) | EMO-69 | спринт 4 |
 | Модерация (`mute`, `remove`), список участников | EMO-70 | спринт 4 |
 | `PUT /participants/me/consent`, `livekit_sync_queue`, запуск ML-агента | EMO-84 | спринт 5 |
 
-До EMO-69 предел в 10 участников держит сам LiveKit (`max_participants = 11` комнаты с учетом агента): лишнее
-подключение отвергается сервером, а не meeting-service.
+Предел в 10 участников проверяет meeting-service при входе – по присутствию из вебхуков. Гость, получивший токен, но
+еще не подключившийся, в этом счете не виден; такую гонку закрывает сама комната LiveKit (`max_participants = 11` с
+учетом агента).
+
+Потребитель `user.events` (группа `meeting`, с начала топика) запускается вместе с релеем outbox, если задан
+`KAFKA_BOOTSTRAP_SERVERS`. Вебхуки подписываются ключом `LIVEKIT_API_KEY`: в конфигурации LiveKit
+(`webhook.api_key`) должен стоять тот же ключ.
 
 ## Конфигурация
 

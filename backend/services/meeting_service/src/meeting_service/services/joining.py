@@ -21,7 +21,12 @@ from meeting_service.domain.consent import (
     check_notice_version,
     decide_consent,
 )
-from meeting_service.domain.errors import MeetingNotFound, ParticipantRemoved, ParticipantTokenInvalid
+from meeting_service.domain.errors import (
+    MeetingNotFound,
+    OrganizerBlocked,
+    ParticipantRemoved,
+    ParticipantTokenInvalid,
+)
 from meeting_service.domain.identifiers import MeetingId, ParticipantId
 from meeting_service.domain.livekit import LiveKitGateway, room_access, room_name
 from meeting_service.domain.meetings import Meeting, Organizer, is_invite_code
@@ -31,9 +36,11 @@ from meeting_service.domain.participants import (
     ConsentState,
     Participant,
     ParticipantRole,
+    ensure_seat_available,
     hash_participant_token,
     normalize_display_name,
 )
+from meeting_service.repositories.blocked_users import BlockedUsers
 from meeting_service.repositories.consents import ConsentLog
 from meeting_service.repositories.meetings import MeetingRepository
 from meeting_service.repositories.outbox import EventOutbox
@@ -146,6 +153,7 @@ class JoinAsOrganizer:
         self._session = session
         self._meetings = MeetingRepository(session)
         self._participants = ParticipantRepository(session)
+        self._blocked = BlockedUsers(session)
         self._journal = _ConsentJournal(session, notice)
         self._events = EventOutbox(session)
         self._notice = notice
@@ -163,8 +171,12 @@ class JoinAsOrganizer:
         bind_context(meeting_id=str(meeting_id))
         async with transaction(self._session):
             meeting = await self._meetings.get_owned(meeting_id, organizer.user_id)
+            # Access-токен заблокированного действует до 15 минут; вход во встречи закрывается сразу по user.blocked.
+            is_blocked = await self._blocked.is_blocked(organizer.user_id)
         if meeting is None:
             raise MeetingNotFound()
+        if is_blocked:
+            raise OrganizerBlocked()
         meeting.started(self._clock.now())
         consent_state = decide_consent(analysis_enabled=meeting.analysis_enabled, decision=consent)
 
@@ -182,6 +194,11 @@ class JoinAsOrganizer:
                 await self._events.add(meeting_started(started), occurred_at=now)
                 _logger.info("meeting started")
             participant = await self._participants.get_organizer(started.id, organizer.user_id)
+            ensure_seat_available(
+                await self._participants.count_online(
+                    started.id, excluding=participant.id if participant is not None else None
+                )
+            )
             if participant is None:
                 participant = self._new_participant(started, organizer, consent_state, now=now)
                 await self._participants.add(participant)
@@ -293,6 +310,7 @@ class JoinAsGuest:
             if current is None:
                 raise MeetingNotFound()
             current.ensure_open_for_guests()
+            ensure_seat_available(await self._participants.count_online(current.id))
             await self._participants.add(participant, token_hash=hash_participant_token(participant_token))
             await self._journal.record(current, participant, origin, decided_at=participant.created_at)
             await self._events.add(participant_registered(participant), occurred_at=participant.created_at)
@@ -321,12 +339,18 @@ class RejoinAsGuest:
         async with transaction(self._session):
             participant = await self._participants.get_by_token_hash(hash_participant_token(participant_token))
             meeting = await self._meetings.get(participant.meeting_id) if participant is not None else None
+            online_others = (
+                await self._participants.count_online(meeting.id, excluding=participant.id)
+                if participant is not None and meeting is not None
+                else 0
+            )
         if participant is None or meeting is None:
             raise ParticipantTokenInvalid()
         bind_context(meeting_id=str(meeting.id))
         if participant.is_removed:
             raise ParticipantRemoved()
         meeting.ensure_open_for_guests()
+        ensure_seat_available(online_others)
 
         await self._livekit.ensure_room(room_name(meeting))
         return JoinResult(

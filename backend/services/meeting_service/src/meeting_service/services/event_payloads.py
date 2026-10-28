@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from meeting_service.domain.livekit import LeaveReason
 from meeting_service.domain.meetings import Meeting, MeetingStatus
 from meeting_service.domain.participants import Participant
 from vks_contracts.meeting_events import (
@@ -14,6 +15,8 @@ from vks_contracts.meeting_events import (
     MeetingEnded,
     MeetingStarted,
     MeetingUpdated,
+    ParticipantJoined,
+    ParticipantLeft,
     ParticipantRegistered,
 )
 
@@ -26,6 +29,8 @@ __all__ = [
     "meeting_ended",
     "meeting_started",
     "meeting_updated",
+    "participant_joined",
+    "participant_left",
     "participant_registered",
 ]
 
@@ -90,6 +95,16 @@ def participant_registered(participant: Participant) -> ParticipantRegistered:
         display_name=participant.display_name,
         role=participant.role.value,
         consent_state=participant.consent_state.value,
+    )
+
+
+def participant_joined(participant: Participant, *, joined_at: datetime) -> ParticipantJoined:
+    return ParticipantJoined(meeting_id=participant.meeting_id, participant_id=participant.id, joined_at=joined_at)
+
+
+def participant_left(participant: Participant, *, left_at: datetime, reason: LeaveReason) -> ParticipantLeft:
+    return ParticipantLeft(
+        meeting_id=participant.meeting_id, participant_id=participant.id, left_at=left_at, reason=reason.value
     )
 
 

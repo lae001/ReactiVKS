@@ -15,7 +15,10 @@ import httpx
 from fastapi import FastAPI
 
 from meeting_service.adapters.livekit_server import LiveKitServerGateway
+from meeting_service.adapters.livekit_webhooks import LiveKitWebhookVerifier
+from meeting_service.api import webhooks
 from meeting_service.api.v1 import join, meetings, organizer_settings, participants
+from meeting_service.consumers.user_events import UserEventsHandler
 from meeting_service.models import OUTBOX
 from meeting_service.settings import ALEMBIC_INI, MeetingSettings
 from vks_common.app import HealthRegistry, create_app, use_database
@@ -23,12 +26,23 @@ from vks_common.auth import JwksKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
 from vks_common.db import Database, create_engine_from_settings
 from vks_common.db.migrations import check_schema_is_current, load_alembic_config
-from vks_common.kafka import OUTBOX_NOTIFY, EventProducer, OutboxRelay, log_unexpected_stop, run_outbox_relay
+from vks_common.kafka import (
+    OUTBOX_NOTIFY,
+    EventConsumer,
+    EventProducer,
+    OutboxRelay,
+    log_unexpected_stop,
+    run_consumer,
+    run_outbox_relay,
+)
 from vks_common.logging import get_logger
+from vks_contracts import Topic
 
 __all__ = ["create_application"]
 
 SCHEMA = "meeting"
+# Группа потребителей meeting-service (events.md, «Группы потребителей»).
+CONSUMER_GROUP = "meeting"
 
 _logger = get_logger(__name__)
 
@@ -69,7 +83,7 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
         health.register("livekit", livekit.check, critical=False)
 
         producer: EventProducer | None = None
-        relay_task: asyncio.Task[None] | None = None
+        tasks: list[asyncio.Task[None]] = []
         if resolved.kafka_bootstrap_servers:
             producer = EventProducer(
                 bootstrap_servers=resolved.kafka_bootstrap_servers, client_id=resolved.service_name
@@ -83,17 +97,32 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
             )
             # Некритична (conventions.md, §10): пока брокер недоступен, события копятся в outbox.
             health.register("kafka", producer.check, critical=False)
-            relay_task = asyncio.create_task(run_outbox_relay(producer, relay), name="outbox-relay")
-            relay_task.add_done_callback(log_unexpected_stop)
+            # user.events с начала: проекция блокировок строится по всей истории топика.
+            consumer = EventConsumer(
+                bootstrap_servers=resolved.kafka_bootstrap_servers,
+                topics=[Topic.USER_EVENTS],
+                group_id=CONSUMER_GROUP,
+                client_id=resolved.service_name,
+                handler=UserEventsHandler(session_factory=database.session_factory, clock=clock, livekit=livekit),
+                dead_letters=producer,
+                clock=clock,
+                auto_offset_reset="earliest",
+            )
+            tasks = [
+                asyncio.create_task(run_outbox_relay(producer, relay), name="outbox-relay"),
+                asyncio.create_task(run_consumer(consumer), name="user-events-consumer"),
+            ]
+            for task in tasks:
+                task.add_done_callback(log_unexpected_stop)
         else:
             _logger.warning("kafka is not configured: events stay in outbox")
         try:
             yield
         finally:
-            if relay_task is not None:
-                relay_task.cancel()
+            for task in tasks:
+                task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await relay_task
+                    await task
             if producer is not None:
                 await producer.stop()
             await livekit.aclose()
@@ -101,11 +130,15 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
 
     app = create_app(
         resolved,
-        routers=[meetings.router, join.router, participants.router, organizer_settings.router],
+        routers=[meetings.router, join.router, participants.router, organizer_settings.router, webhooks.router],
         lifespan=lifespan,
         title="ReactiVKS meeting-service",
     )
     app.state.clock = clock
+    # Проверка подписи вебхуков локальная, без сети: создается при сборке, а не в lifespan.
+    app.state.webhook_verifier = LiveKitWebhookVerifier(
+        api_key=resolved.livekit_api_key, api_secret=resolved.livekit_api_secret.get_secret_value()
+    )
     use_authentication(
         app,
         TokenVerifier(

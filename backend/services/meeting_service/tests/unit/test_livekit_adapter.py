@@ -1,13 +1,20 @@
+import base64
+import hashlib
 from collections.abc import AsyncIterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import aiohttp
 import jwt
 import pytest
+from google.protobuf.json_format import MessageToJson
+from livekit import api
+from livekit.protocol.models import DisconnectReason, ParticipantInfo, Room
+from livekit.protocol.webhook import WebhookEvent
 
 from meeting_service.adapters.livekit_server import LiveKitServerGateway
-from meeting_service.domain.errors import LiveKitUnavailable
-from meeting_service.domain.livekit import RoomAccess
+from meeting_service.adapters.livekit_webhooks import LiveKitWebhookVerifier
+from meeting_service.domain.errors import LiveKitUnavailable, WebhookRejected
+from meeting_service.domain.livekit import LeaveReason, RoomAccess, RoomEventKind
 
 API_KEY = "devkey"
 API_SECRET = "test-secret-0123456789abcdef0123456789"
@@ -74,3 +81,57 @@ async def test_transient_failure_is_retried(gateway: LiveKitServerGateway) -> No
     result = await gateway._call("CreateRoom", flaky)
 
     assert (result, attempts) == ("ok", 3)
+
+
+def signed(body: str, secret: str = API_SECRET) -> str:
+    digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+    return api.AccessToken(API_KEY, secret).with_sha256(digest).to_jwt()
+
+
+def webhook_body(event: str, **participant: object) -> str:
+    message = WebhookEvent(event=event, id="EV_1", created_at=1795158000, room=Room(name="0192-room"))
+    if participant:
+        message.participant.CopyFrom(ParticipantInfo(**participant))  # type: ignore[arg-type]  # поля по имени
+    return MessageToJson(message)
+
+
+def test_webhook_signed_with_api_key_is_parsed() -> None:
+    verifier = LiveKitWebhookVerifier(api_key=API_KEY, api_secret=API_SECRET)
+    body = webhook_body("participant_left", identity="p_0192", disconnect_reason=DisconnectReason.PARTICIPANT_REMOVED)
+
+    event = verifier.parse(body, signed(body))
+
+    assert (event.event_id, event.kind, event.room, event.identity) == (
+        "EV_1",
+        RoomEventKind.PARTICIPANT_LEFT,
+        "0192-room",
+        "p_0192",
+    )
+    assert event.occurred_at == datetime.fromtimestamp(1795158000, tz=UTC)
+    assert event.leave_reason is LeaveReason.REMOVED
+    assert event.is_agent is False
+
+
+def test_agent_and_unknown_events_are_recognized() -> None:
+    verifier = LiveKitWebhookVerifier(api_key=API_KEY, api_secret=API_SECRET)
+    agent = webhook_body("participant_joined", identity="agent-1", kind=ParticipantInfo.Kind.AGENT)
+    track = webhook_body("track_published")
+
+    assert verifier.parse(agent, signed(agent)).is_agent is True
+    assert verifier.parse(track, signed(track)).kind is RoomEventKind.OTHER
+
+
+@pytest.mark.parametrize(
+    "authorization",
+    [
+        pytest.param("", id="missing"),
+        pytest.param("not-a-jwt", id="garbage"),
+        pytest.param(signed("{}"), id="other-body"),
+        pytest.param(signed(webhook_body("room_finished"), secret="other-secret-0123456789abcdef01234"), id="key"),
+    ],
+)
+def test_webhook_without_valid_signature_is_rejected(authorization: str) -> None:
+    verifier = LiveKitWebhookVerifier(api_key=API_KEY, api_secret=API_SECRET)
+
+    with pytest.raises(WebhookRejected):
+        verifier.parse(webhook_body("room_finished"), authorization)
