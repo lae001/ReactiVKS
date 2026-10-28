@@ -5,7 +5,7 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 
 ## Требования
 
-- Node.js 22 LTS
+- Node.js 22.18 или новее (22 LTS; для `pnpm dev:api` нужна именно 22.18+)
 - pnpm 9 (`corepack enable` или `npm i -g pnpm@9`)
 
 ## Команды
