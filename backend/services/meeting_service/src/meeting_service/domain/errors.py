@@ -16,6 +16,8 @@ __all__ = [
     "MeetingNotStarted",
     "NoticeOutdated",
     "OrganizerBlocked",
+    "OrganizerNotRemovable",
+    "ParticipantNotFound",
     "ParticipantRemoved",
     "ParticipantTokenInvalid",
     "WebhookRejected",
@@ -42,6 +44,16 @@ class InvalidAnalysisFps(ValidationFailed):
 
 class MeetingNotFound(NotFound):
     """Встречи нет, она удалена или принадлежит другому организатору – ответ не различает эти случаи."""
+
+
+class ParticipantNotFound(NotFound):
+    """Участника нет в этой встрече."""
+
+
+class OrganizerNotRemovable(ValidationFailed):
+    """Организатор не удаляет себя из своей встречи: для этого встречу завершают."""
+
+    title = "Organizer cannot be removed"
 
 
 class MeetingNotStarted(Conflict):

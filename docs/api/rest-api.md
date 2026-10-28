@@ -248,9 +248,14 @@ cookie очищается. Выданный access-токен действует
 
 ### Участники и модерация
 
-- `GET /meetings/{meeting_id}/participants` → `200 {items: Participant[]}`.
-- `POST …/participants/{participant_id}/mute {"kind": "audio" | "video"}` → `204`; `409 meeting_ended`; `503`.
-- `POST …/participants/{participant_id}/remove` → `204`; повторный вход по токену этого участника – `409 participant_removed`.
+- `GET /meetings/{meeting_id}/participants` → `200 {items: Participant[]}` в порядке регистрации; `online` – участник
+  сейчас в комнате (по вебхукам LiveKit).
+- `POST …/participants/{participant_id}/mute {"kind": "audio" | "video"}` → `204` (идемпотентно; включить обратно может
+  только сам участник); `404` – нет такого участника; `409 meeting_ended` | `meeting_not_started` | `meeting_cancelled`;
+  `503`.
+- `POST …/participants/{participant_id}/remove` → `204` (идемпотентно); повторный вход по токену этого участника –
+  `409 participant_removed`. Отметка об удалении сохраняется до вызова LiveKit: при `503` вход уже закрыт, повтор
+  запроса доотключит участника. Организатора из своей встречи не удаляют – `422 validation_error`.
 
 ### `GET /join/{invite_code}` (без аутентификации)
 

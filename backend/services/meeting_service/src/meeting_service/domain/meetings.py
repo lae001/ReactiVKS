@@ -164,6 +164,10 @@ class Meeting:
 
     def ensure_open_for_guests(self) -> None:
         """Гость входит только в идущую встречу: до входа организатора ему отвечают «еще не началась»."""
+        self.ensure_in_progress()
+
+    def ensure_in_progress(self) -> None:
+        """Встреча идет: в ней есть кого модерировать и куда входить."""
         if self.status is MeetingStatus.SCHEDULED:
             raise MeetingNotStarted()
         self._ensure_not_closed()

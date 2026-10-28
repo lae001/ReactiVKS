@@ -23,7 +23,7 @@ from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from meeting_service.domain.errors import LiveKitUnavailable
-from meeting_service.domain.livekit import RoomAccess
+from meeting_service.domain.livekit import MediaKind, RoomAccess
 from meeting_service.main import create_application
 from meeting_service.settings import MeetingSettings
 from vks_common.auth import use_authentication
@@ -82,6 +82,8 @@ class FakeLiveKitGateway:
         self.rooms: set[str] = set()
         self.deleted: list[str] = []
         self.issued: list[RoomAccess] = []
+        self.muted: list[tuple[str, str, MediaKind]] = []
+        self.removed: list[tuple[str, str]] = []
 
     async def ensure_room(self, room: str) -> None:
         if not self.available:
@@ -97,6 +99,16 @@ class FakeLiveKitGateway:
     def issue_token(self, access: RoomAccess) -> str:
         self.issued.append(access)
         return f"lk:{access.room}:{access.identity}:{access.attributes['vks.consent']}"
+
+    async def mute(self, room: str, identity: str, kind: MediaKind) -> None:
+        if not self.available:
+            raise LiveKitUnavailable()
+        self.muted.append((room, identity, kind))
+
+    async def remove(self, room: str, identity: str) -> None:
+        if not self.available:
+            raise LiveKitUnavailable()
+        self.removed.append((room, identity))
 
 
 @pytest.fixture

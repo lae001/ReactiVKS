@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from meeting_service.adapters.livekit_server import LiveKitServerGateway
 from meeting_service.adapters.livekit_webhooks import LiveKitWebhookVerifier
 from meeting_service.api import webhooks
-from meeting_service.api.v1 import join, meetings, organizer_settings, participants
+from meeting_service.api.v1 import join, meetings, moderation, organizer_settings, participants
 from meeting_service.consumers.user_events import UserEventsHandler
 from meeting_service.models import OUTBOX
 from meeting_service.settings import ALEMBIC_INI, MeetingSettings
@@ -130,7 +130,14 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
 
     app = create_app(
         resolved,
-        routers=[meetings.router, join.router, participants.router, organizer_settings.router, webhooks.router],
+        routers=[
+            meetings.router,
+            moderation.router,
+            join.router,
+            participants.router,
+            organizer_settings.router,
+            webhooks.router,
+        ],
         lifespan=lifespan,
         title="ReactiVKS meeting-service",
     )
