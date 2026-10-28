@@ -22,6 +22,7 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 | `pnpm test`                         | Vitest + Testing Library                                                                     |
 | `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))     |
 | `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                            |
+| `pnpm test:e2e:lobby`               | Лобби в Chromium с фейковыми устройствами, режим mock, бэкенд не нужен (Playwright)          |
 
 ## LiveKit для разработки и e2e
 
