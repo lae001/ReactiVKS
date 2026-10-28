@@ -101,8 +101,9 @@ flowchart TB
 | Схема `meeting`: встречи, участники, журнал согласий, настройки организатора | EMO-51 | ✓ |
 | `POST/GET /meetings`, `GET /meetings/{id}`, `POST /meetings/{id}/join`, `POST /meetings/{id}/end` | EMO-53 | ✓ |
 | `GET/POST /join/{invite_code}`, `POST /participants/me/rejoin`, токены LiveKit с атрибутами `vks.*` | EMO-53 | ✓ |
+| События `meeting.created`, `meeting.started`, `participant.registered`, `consent.changed`, `meeting.ended` через outbox | EMO-52 | ✓ |
 | `PATCH/DELETE /meetings/{id}`, `Idempotency-Key`, `/settings` | EMO-68 | спринт 4 |
-| Вебхуки LiveKit, `meeting_full` по онлайн-участникам, `user_blocked`, ограничение частоты `/join` | EMO-69 | спринт 4 |
+| Вебхуки LiveKit, `participant.joined/left`, `meeting_full` по онлайн-участникам, `user_blocked`, ограничение частоты `/join` | EMO-69 | спринт 4 |
 | Модерация (`mute`, `remove`), список участников | EMO-70 | спринт 4 |
 | `PUT /participants/me/consent`, `livekit_sync_queue`, запуск ML-агента | EMO-84 | спринт 5 |
 
@@ -124,9 +125,11 @@ flowchart TB
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | – (обязательны) | Ключ и секрет API, те же, что у сервера LiveKit; секрет – не короче 32 символов |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | `21600` | Срок токена участника (6 ч) |
 | `LIVEKIT_TIMEOUT_SECONDS` | `3` | Таймаут вызова Server API; два повтора идемпотентных операций |
+| `KAFKA_BOOTSTRAP_SERVERS` | – | Брокер Kafka; не задан – события копятся в `meeting.outbox` |
+| `OUTBOX_POLL_INTERVAL_SECONDS` | `1` | Опрос outbox без сигнала о новой транзакции |
 
 Любая переменная с секретом может быть передана файлом: `<ИМЯ>_FILE=/run/secrets/…`.
 
-`/ready` проверяет PostgreSQL (критично) и LiveKit (`ListRooms`, некритично: без LiveKit не войти во встречу, но
-история и карточки работают).
+`/ready` проверяет PostgreSQL (критично), LiveKit (`ListRooms`) и Kafka (метаданные кластера) – обе некритичны: без
+LiveKit не войти во встречу, но история и карточки работают; без Kafka события ждут в outbox.
 

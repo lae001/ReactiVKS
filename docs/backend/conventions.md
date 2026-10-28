@@ -20,7 +20,7 @@
 | `vks_common.testing` | PostgreSQL в testcontainers с init-скриптом `deploy/`, изоляция откатом, `TokenFactory`, клиент приложения | ✓ |
 | `vks_common.auth` (дополнение) | `require_service` (`X-Service-Token`) | с первым `/internal/*` |
 | `vks_common.http` | Фабрика `httpx.AsyncClient` для внутренних вызовов (таймауты, повторы, заголовки) | с meeting-service |
-| `vks_common.kafka` | Публикация (`OutboxRelay`, `EventProducer`) и потребление (`EventConsumer`) событий Kafka на `aiokafka` | с первым событием |
+| `vks_common.kafka` | Публикация (`OutboxWriter`, `OutboxRelay`, `EventProducer`) и потребление (`EventConsumer`) событий Kafka на `aiokafka` ([спайк 3](kafka-spike.md)) | ✓ |
 | `vks_common.jobs` | Периодические задачи с распределенной блокировкой (см. [background-jobs.md](background-jobs.md)) | с первой задачей |
 | `/metrics` в `vks_common.app` | Метрики Prometheus | с мониторингом (спринт 6) |
 | `vks_contracts` (отдельный пакет) | Pydantic-модели событий ([events.md](../api/events.md)): конверт, payload, топики, разбор `parse_event`; модели внутренних API – с первым `/internal/*` | ✓ |

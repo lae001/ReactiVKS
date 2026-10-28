@@ -111,4 +111,4 @@ async def test_version_table_lives_in_service_schema(engine: AsyncEngine) -> Non
     async with engine.connect() as connection:
         result = await connection.execute(text("SELECT version_num FROM auth.alembic_version"))
 
-    assert result.scalar_one() == "0001"
+    assert result.scalar_one() == "0002"

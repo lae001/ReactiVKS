@@ -18,6 +18,10 @@ dependencies = [
     "pyjwt[crypto]==2.13.0",
     # UUIDv7 для идентификаторов (database.md): в стандартной библиотеке 3.12 его нет.
     "uuid6==2025.0.1",
+    # Kafka (ADR-012): публикация через outbox и потребление событий; lz4 – сжатие по conventions.md, §6.
+    "aiokafka[lz4]==0.14.0",
+    # Конверт и разбор событий – из контрактов, общих для производителя и потребителя.
+    "vks-contracts",
 ]
 
 [build-system]
@@ -26,3 +30,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vks_common"]
+
+[tool.uv.sources]
+vks-contracts = { workspace = true }

@@ -37,5 +37,10 @@ class MeetingSettings(DatabaseServiceSettings):
     # Таймаут вызова Server API (conventions.md, §5).
     livekit_timeout_seconds: float = Field(default=3.0, gt=0)
 
+    # Брокер Kafka. Не задан – события копятся в outbox и уйдут, когда брокер появится в настройках.
+    kafka_bootstrap_servers: str | None = None
+    # Как часто релей outbox проверяет таблицу без сигнала о новой транзакции.
+    outbox_poll_interval_seconds: float = Field(default=1.0, gt=0)
+
     def invite_url(self, invite_code: str) -> str:
         return f"{self.public_base_url.rstrip('/')}/j/{invite_code}"

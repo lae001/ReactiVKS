@@ -10,6 +10,7 @@
 | [conventions.md](conventions.md) | Общие правила сервисов: `vks_common`, ошибки, межсервисные вызовы, outbox, потребители Kafka, БД, health, журналы, тесты |
 | [database.md](database.md) | Физическая схема PostgreSQL: DDL, ограничения, индексы, роли |
 | [background-jobs.md](background-jobs.md) | Фоновые задачи и потребители событий всех сервисов |
+| [kafka-spike.md](kafka-spike.md) | Спайк 3: outbox, Kafka, потребитель – что проверено, замер задержки, ограничения |
 | [auth-service.md](auth-service.md) | Учетные записи, JWT, восстановление пароля, администрирование пользователей |
 | [meeting-service.md](meeting-service.md) | Встречи, участники, согласия, интеграция с LiveKit |
 | [realtime-service.md](realtime-service.md) | WebSocket-шлюз панели эмоций |
