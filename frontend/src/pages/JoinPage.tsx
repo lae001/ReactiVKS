@@ -1,16 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, LoaderCircle } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { ConsentFieldset } from '@/features/lobby/ConsentFieldset';
 import { DevicePreview } from '@/features/lobby/DevicePreview';
+import { POLL_INTERVAL_MS, useJoinFlow } from '@/features/lobby/use-join-flow';
 import {
   type ConsentChoice,
   type JoinFormErrors,
   validateJoinForm,
 } from '@/features/lobby/validate';
-import { meetingErrorMessage } from '@/features/meetings/errors';
+import { guestErrorMessage, meetingErrorMessage } from '@/features/meetings/errors';
 import { type JoinInfo, meetingsApi } from '@/shared/api/meetings';
 import { ApiError, fieldOf } from '@/shared/api/problem';
 import { paths } from '@/shared/config/routes';
@@ -42,6 +43,43 @@ function LobbyMessage({ title, text }: { title: string; text: string }) {
       </main>
     </LobbyShell>
   );
+}
+
+/** Экран вместо формы: после этих кодов вход по ссылке невозможен. */
+function terminalScreen(code: string, info: JoinInfo): { title: string; text: string } {
+  const contact = `Если это ошибка, свяжитесь с организатором – ${info.organizer_name}.`;
+  switch (code) {
+    case 'meeting_cancelled':
+      return {
+        title: 'Встреча отменена',
+        text: `Встреча «${info.title}» отменена организатором. ${contact}`,
+      };
+    case 'participant_removed':
+      return {
+        title: 'Вас удалили из встречи',
+        text: `Организатор удалил вас из встречи «${info.title}», вернуться по этой ссылке нельзя. ${contact}`,
+      };
+    case 'not_found':
+      return {
+        title: 'Приглашение не найдено',
+        text: 'Возможно, встречу удалили или ссылка устарела. Попросите организатора прислать ее еще раз.',
+      };
+    case 'forbidden':
+      return {
+        title: 'Нет доступа',
+        text: `Войти во встречу «${info.title}» по этой ссылке нельзя. ${contact}`,
+      };
+    case 'user_blocked':
+      return {
+        title: 'Доступ закрыт',
+        text: 'Ваша учетная запись заблокирована. Обратитесь к администратору системы.',
+      };
+    default:
+      return {
+        title: 'Встреча завершена',
+        text: `Встреча «${info.title}» уже закончилась. ${contact}`,
+      };
+  }
 }
 
 /**
@@ -81,12 +119,8 @@ export function JoinPage() {
 
   const info = query.data;
   if (info.status === 'ended' || info.status === 'cancelled') {
-    return (
-      <LobbyMessage
-        title={info.status === 'ended' ? 'Встреча завершена' : 'Встреча отменена'}
-        text={`Встреча «${info.title}» ${info.status === 'ended' ? 'уже закончилась' : 'отменена организатором'}. Если это ошибка, свяжитесь с организатором – ${info.organizer_name}.`}
-      />
-    );
+    const screen = terminalScreen(`meeting_${info.status}`, info);
+    return <LobbyMessage {...screen} />;
   }
   return <Lobby inviteCode={inviteCode} info={info} />;
 }
@@ -99,13 +133,37 @@ function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
   const [displayName, setDisplayName] = useState('');
   const [consent, setConsent] = useState<ConsentChoice | null>(null);
   const [errors, setErrors] = useState<JoinFormErrors>({});
-  const [waiting, setWaiting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [ended, setEnded] = useState<ApiError | null>(null);
   const queryClient = useQueryClient();
-  const join = useMutation({
-    mutationFn: (body: Parameters<typeof meetingsApi.joinMeeting>[1]) =>
-      meetingsApi.joinMeeting(inviteCode, body),
+
+  const flow = useJoinFlow({
+    inviteCode,
+    onJoined: (result) => {
+      setParticipantToken(result.participant_token);
+      const entry: RoomEntry = {
+        role: 'guest',
+        displayName: displayName.trim(),
+        consent: info.consent_notice ? (consent ?? 'denied') : 'not_required',
+        cameraOn: media.cameraOn,
+        micOn: media.micOn,
+        inviteCode,
+        participantId: result.participant_id,
+        meeting: result.meeting,
+      };
+      navigate(paths.room(result.meeting.id), { state: entry });
+    },
+    onFailed: (error) => {
+      if (error instanceof ApiError && error.code === 'notice_outdated') {
+        // Текст уведомления сменился: показываем новый и просим выбрать заново
+        setConsent(null);
+        void queryClient.invalidateQueries({ queryKey: ['join-info', inviteCode] });
+      }
+      if (error instanceof ApiError && error.code === 'validation_error') {
+        const issue = error.errors.find((i) => fieldOf(i) === 'display_name');
+        if (issue) return setErrors({ displayName: issue.msg });
+      }
+      setFormError(guestErrorMessage(error, 'войти во встречу'));
+    },
   });
 
   function submit(e: FormEvent) {
@@ -119,64 +177,14 @@ function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
     if (Object.keys(found).length > 0) return;
 
     setFormError(null);
-    join.mutate(
-      {
-        display_name: displayName.trim(),
-        consent: consent ?? undefined,
-        notice_version: info.consent_notice?.version,
-      },
-      {
-        onSuccess: (result) => {
-          setParticipantToken(result.participant_token);
-          const entry: RoomEntry = {
-            role: 'guest',
-            displayName: displayName.trim(),
-            consent: info.consent_notice ? (consent ?? 'denied') : 'not_required',
-            cameraOn: media.cameraOn,
-            micOn: media.micOn,
-            inviteCode,
-            participantId: result.participant_id,
-            meeting: result.meeting,
-          };
-          navigate(paths.room(result.meeting.id), { state: entry });
-        },
-        onError: (error) => {
-          if (!(error instanceof ApiError)) return setFormError(meetingErrorMessage(error));
-          switch (error.code) {
-            // Встреча еще не началась: клиент повторяет вход (опрос раз в 5 с – следующая задача)
-            case 'meeting_not_started':
-              return setWaiting(true);
-            case 'meeting_ended':
-            case 'meeting_cancelled':
-              return setEnded(error);
-            case 'notice_outdated':
-              // Текст уведомления сменился: показываем новый и просим выбрать заново
-              setConsent(null);
-              void queryClient.invalidateQueries({ queryKey: ['join-info', inviteCode] });
-              return setFormError(
-                'Уведомление об анализе эмоций обновилось. Прочитайте его и выберите вариант заново.',
-              );
-            case 'validation_error': {
-              const issue = error.errors.find((i) => fieldOf(i) === 'display_name');
-              if (issue) return setErrors({ displayName: issue.msg });
-              return setFormError(meetingErrorMessage(error, 'войти во встречу'));
-            }
-            default:
-              return setFormError(meetingErrorMessage(error, 'войти во встречу'));
-          }
-        },
-      },
-    );
+    flow.submit({
+      display_name: displayName.trim(),
+      consent: consent ?? undefined,
+      notice_version: info.consent_notice?.version,
+    });
   }
 
-  if (ended) {
-    return (
-      <LobbyMessage
-        title={ended.code === 'meeting_cancelled' ? 'Встреча отменена' : 'Встреча завершена'}
-        text={`Встреча «${info.title}» ${ended.code === 'meeting_cancelled' ? 'отменена организатором' : 'уже закончилась'}. Если это ошибка, свяжитесь с организатором – ${info.organizer_name}.`}
-      />
-    );
-  }
+  if (flow.terminal) return <LobbyMessage {...terminalScreen(flow.terminal.code, info)} />;
 
   return (
     <LobbyShell>
@@ -235,7 +243,7 @@ function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
             />
           )}
 
-          {waiting ? (
+          {flow.phase === 'waiting' ? (
             <div
               role="status"
               className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-accent p-4 text-sm"
@@ -244,25 +252,34 @@ function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
                 <LoaderCircle className="size-4 animate-spin" aria-hidden />
                 Встреча еще не началась
               </p>
-              <p className="text-muted-foreground">Обновите страницу, когда встреча начнётся.</p>
+              <p className="text-muted-foreground">
+                Проверяем каждые {POLL_INTERVAL_MS / 1000} секунд и войдем сами, как только
+                организатор начнет встречу. Эту страницу можно не обновлять.
+              </p>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="self-start"
-                onClick={() => setWaiting(false)}
+                onClick={flow.cancel}
               >
                 Отменить ожидание
               </Button>
             </div>
           ) : (
             <>
+              {flow.phase === 'timed_out' && (
+                <p role="alert" className="text-sm text-destructive">
+                  Встреча не началась за 10 минут, ждать мы перестали. Узнайте у организатора, когда
+                  она начнется, и нажмите «Войти во встречу» снова.
+                </p>
+              )}
               {formError && (
                 <p role="alert" className="text-sm text-destructive">
                   {formError}
                 </p>
               )}
-              <Button type="submit" size="lg" disabled={problem !== null || join.isPending}>
+              <Button type="submit" size="lg" disabled={problem !== null || flow.pending}>
                 Войти во встречу
               </Button>
             </>

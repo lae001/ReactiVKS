@@ -52,3 +52,14 @@ export function meetingErrorMessage(error: unknown, action = 'выполнить
       return `Не удалось ${action}. Повторите попытку позже.${error.requestId ? ` Код обращения: ${error.requestId}.` : ''}`;
   }
 }
+
+/**
+ * То же для гостя встречи. Для него 401 по `Participant`-токену значит не «войдите снова»,
+ * а что организатор удалил его или токен перестал действовать.
+ */
+export function guestErrorMessage(error: unknown, action = 'выполнить действие'): string {
+  if (error instanceof ApiError && error.code === 'unauthorized') {
+    return 'Вас удалили из встречи или сессия недействительна.';
+  }
+  return meetingErrorMessage(error, action);
+}
