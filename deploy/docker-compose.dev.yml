@@ -1,7 +1,8 @@
 # Инфраструктура для локальной разработки (EMO-13): сервисы запускаются на хосте (uv run …) и ходят сюда
-# по localhost. Kafka, LiveKit и сами сервисы в контейнерах добавляются вместе с задачами, которым они нужны.
+# по localhost. Kafka – для событий (спайк 3, EMO-52), LiveKit – для видеовстреч (EMO-53). Сами сервисы
+# в контейнерах появятся с docker-compose.yml (EMO-71).
 #
-#   docker compose -f deploy/docker-compose.dev.yml up -d
+#   docker compose -f deploy/docker-compose.dev.yml up -d --wait
 #
 # Пароли по умолчанию – только для разработки; переопределяются через deploy/.env (шаблон – .env.example).
 name: vks-dev
@@ -42,5 +43,79 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis-dev-password}
 
+  kafka:
+    # Тот же образ – в интеграционных тестах vks_common.kafka (testcontainers).
+    image: apache/kafka:4.1.0
+    environment:
+      CLUSTER_ID: reactivks-dev-cluster-01
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # INTERNAL – для контейнеров (kafka-ui, kafka-init), EXTERNAL – для сервисов, запущенных на хосте.
+      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Топики создает kafka-init по deploy/kafka/topics.yaml (events.md): опечатка в имени топика – ошибка, а не
+      # новый пустой топик.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "127.0.0.1:9092:9092"
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  kafka-init:
+    image: apache/kafka:4.1.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/create-topics.sh"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+    volumes:
+      - ./kafka:/scripts:ro
+    restart: "no"
+
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.3.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: vks-dev
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+      DYNAMIC_CONFIG_ENABLED: "false"
+    ports:
+      # 8080 занят: на него dev-сервер фронтенда проксирует /ws (будущий шлюз).
+      - "127.0.0.1:8090:8080"
+
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    # host-сеть – рекомендованный режим для WebRTC: без NAT Docker и проброса диапазонов портов.
+    # Порты: 7880 (сигнализация и Server API), 7881/tcp, 7882/udp (ICE), 3478/udp (TURN).
+    network_mode: host
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      # Секрет – не короче 32 символов (требование LiveKit к ключам вне режима --dev).
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-dev-secret-change-me-0123456789abcdef}"
+      NODE_IP: ${LIVEKIT_NODE_IP:-}
+    volumes:
+      - ./livekit/livekit.dev.yaml:/etc/livekit.yaml:ro
+
 volumes:
   pgdata:
+  kafkadata:

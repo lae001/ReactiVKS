@@ -1,0 +1,21 @@
+# LiveKit для dev-окружения (спайк 1, EMO-30; выдача токенов meeting-service, EMO-53). Контейнер в network_mode: host.
+# Ключи API передаются переменной LIVEKIT_KEYS ("<key>: <secret>") из deploy/.env, не хранятся здесь.
+# Production-конфигурация (TURN/TLS через Nginx, домены, вебхуки) – docs/api/livekit-integration.md, EMO-71.
+port: 7880
+bind_addresses:
+  - ""                    # все интерфейсы: второй компьютер в локальной сети подключается по IP хоста
+rtc:
+  tcp_port: 7881
+  udp_port: 7882          # мультиплексированный UDP-порт вместо диапазона
+  use_external_ip: false  # в dev адрес узла – локальный IP интерфейса (или NODE_IP)
+turn:
+  enabled: true
+  udp_port: 3478          # TURN/UDP; TURN/TLS (5349) нужен только за строгими межсетевыми экранами – в production
+room:
+  empty_timeout: 300
+  departure_timeout: 20
+  max_participants: 11
+# Вебхуки включаются вместе с meeting-service:
+# TODO(EMO-69): webhook: {api_key: <key>, urls: ["http://127.0.0.1:8002/webhooks/livekit"]}
+logging:
+  level: info
