@@ -25,7 +25,15 @@ from meeting_service.services.joining import (
     RejoinAsGuest,
     RequestOrigin,
 )
-from meeting_service.services.meetings import CreateMeeting, EndMeeting, GetMeeting, ListMeetings
+from meeting_service.services.meetings import (
+    CreateMeeting,
+    DeleteMeeting,
+    EndMeeting,
+    GetMeeting,
+    ListMeetings,
+    UpdateMeeting,
+)
+from meeting_service.services.organizer_settings import GetOrganizerSettings, SaveOrganizerSettings
 from meeting_service.settings import MeetingSettings
 from vks_common.auth import CurrentUser
 from vks_common.clock import Clock
@@ -34,16 +42,20 @@ from vks_common.db import get_session
 __all__ = [
     "CallingOrganizer",
     "CreateMeetingScenario",
+    "DeleteMeetingScenario",
     "EndMeetingScenario",
     "GetJoinInfoScenario",
     "GetMeetingScenario",
+    "GetOrganizerSettingsScenario",
     "GuestToken",
     "JoinAsGuestScenario",
     "JoinAsOrganizerScenario",
     "ListMeetingsScenario",
     "Origin",
     "RejoinAsGuestScenario",
+    "SaveOrganizerSettingsScenario",
     "Settings",
+    "UpdateMeetingScenario",
 ]
 
 
@@ -124,14 +136,36 @@ def build_get_meeting(session: Session) -> GetMeeting:
     return GetMeeting(session=session)
 
 
+def build_update_meeting(session: Session, clock: CurrentClock) -> UpdateMeeting:
+    return UpdateMeeting(session=session, clock=clock)
+
+
 def build_end_meeting(session: Session, clock: CurrentClock, livekit: LiveKit) -> EndMeeting:
     return EndMeeting(session=session, clock=clock, livekit=livekit)
+
+
+def build_delete_meeting(session: Session, clock: CurrentClock, livekit: LiveKit) -> DeleteMeeting:
+    return DeleteMeeting(session=session, clock=clock, livekit=livekit)
 
 
 CreateMeetingScenario = Annotated[CreateMeeting, Depends(build_create_meeting)]
 ListMeetingsScenario = Annotated[ListMeetings, Depends(build_list_meetings)]
 GetMeetingScenario = Annotated[GetMeeting, Depends(build_get_meeting)]
+UpdateMeetingScenario = Annotated[UpdateMeeting, Depends(build_update_meeting)]
 EndMeetingScenario = Annotated[EndMeeting, Depends(build_end_meeting)]
+DeleteMeetingScenario = Annotated[DeleteMeeting, Depends(build_delete_meeting)]
+
+
+def build_get_organizer_settings(session: Session) -> GetOrganizerSettings:
+    return GetOrganizerSettings(session=session)
+
+
+def build_save_organizer_settings(session: Session, clock: CurrentClock) -> SaveOrganizerSettings:
+    return SaveOrganizerSettings(session=session, clock=clock)
+
+
+GetOrganizerSettingsScenario = Annotated[GetOrganizerSettings, Depends(build_get_organizer_settings)]
+SaveOrganizerSettingsScenario = Annotated[SaveOrganizerSettings, Depends(build_save_organizer_settings)]
 
 
 def build_join_as_organizer(session: Session, clock: CurrentClock, livekit: LiveKit) -> JoinAsOrganizer:

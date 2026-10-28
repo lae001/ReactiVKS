@@ -1,4 +1,4 @@
-"""Встречи организатора: создание, история, карточка, завершение."""
+"""Встречи организатора: создание, история, карточка, изменение, завершение, удаление."""
 
 from __future__ import annotations
 
@@ -16,8 +16,10 @@ from meeting_service.domain.meetings import (
     EndReason,
     Meeting,
     MeetingCursor,
+    MeetingEdit,
     MeetingOverview,
     MeetingQuery,
+    MeetingStatus,
     Organizer,
     check_analysis_fps,
     invite_code_from,
@@ -26,14 +28,20 @@ from meeting_service.domain.meetings import (
 from meeting_service.repositories.meetings import InviteCodeTaken, MeetingPage, MeetingRepository
 from meeting_service.repositories.organizer_settings import OrganizerSettingsRepository
 from meeting_service.repositories.outbox import EventOutbox
-from meeting_service.services.event_payloads import meeting_created, meeting_ended
+from meeting_service.services.event_payloads import (
+    meeting_closed,
+    meeting_created,
+    meeting_deleted,
+    meeting_ended,
+    meeting_updated,
+)
 from vks_common.clock import Clock
 from vks_common.db import transaction
 from vks_common.errors import InternalError
 from vks_common.ids import new_id
 from vks_common.logging import bind_context, get_logger
 
-__all__ = ["CreateMeeting", "EndMeeting", "GetMeeting", "ListMeetings"]
+__all__ = ["CreateMeeting", "DeleteMeeting", "EndMeeting", "GetMeeting", "ListMeetings", "UpdateMeeting"]
 
 _logger = get_logger(__name__)
 
@@ -133,6 +141,29 @@ class GetMeeting:
             return await self._meetings.overview(meeting)
 
 
+class UpdateMeeting:
+    """Изменение встречи организатором (``PATCH``). Без изменений – ни записи, ни события."""
+
+    def __init__(self, *, session: AsyncSession, clock: Clock) -> None:
+        self._session = session
+        self._meetings = MeetingRepository(session)
+        self._events = EventOutbox(session)
+        self._clock = clock
+
+    async def execute(self, *, owner_id: UserId, meeting_id: MeetingId, edit: MeetingEdit) -> MeetingOverview:
+        now = self._clock.now()
+        async with transaction(self._session):
+            # Под блокировкой: одновременный первый вход организатора не должен пропустить смену параметров анализа.
+            meeting = await self._meetings.lock_owned(meeting_id, owner_id)
+            if meeting is None:
+                raise MeetingNotFound()
+            edited = meeting.edited(edit)
+            if edited is not meeting:
+                await self._meetings.save_details(edited, now=now)
+                await self._events.add(meeting_updated(edited), occurred_at=now)
+            return await self._meetings.overview(edited)
+
+
 class EndMeeting:
     """Завершение встречи организатором. Повторный вызов отвечает тем же, ничего не меняя."""
 
@@ -158,16 +189,50 @@ class EndMeeting:
         if ended is not meeting:
             bind_context(meeting_id=str(meeting.id))
             _logger.info("meeting ended", reason=EndReason.ORGANIZER.value)
-            await self._close_room(ended)
+            await _close_room(self._livekit, ended)
         return overview
 
-    async def _close_room(self, meeting: Meeting) -> None:
-        """Отключить участников – после фиксации: завершение в БД не откатывается из-за медиасервера.
 
-        Если LiveKit недоступен, встреча все равно завершена: пустую комнату он закроет сам через
-        ``empty_timeout``, а новые токены для нее уже не выдаются.
-        """
-        try:
-            await self._livekit.delete_room(room_name(meeting))
-        except LiveKitUnavailable:
-            _logger.warning("room was not closed: livekit unavailable")
+class DeleteMeeting:
+    """Удаление встречи организатором: идущая сначала завершается, незапущенная – отменяется.
+
+    Удаление мягкое; аналитику встречи потребители удаляют по событию ``meeting.deleted``. Повторное удаление –
+    «не найдена»: удаленной встречи для организатора больше нет.
+    """
+
+    def __init__(self, *, session: AsyncSession, clock: Clock, livekit: LiveKitGateway) -> None:
+        self._session = session
+        self._meetings = MeetingRepository(session)
+        self._events = EventOutbox(session)
+        self._clock = clock
+        self._livekit = livekit
+
+    async def execute(self, *, owner_id: UserId, meeting_id: MeetingId) -> None:
+        now = self._clock.now()
+        async with transaction(self._session):
+            meeting = await self._meetings.lock_owned(meeting_id, owner_id)
+            if meeting is None:
+                raise MeetingNotFound()
+            closed = meeting.closed(now)
+            if closed is not meeting:
+                await self._meetings.save_lifecycle(closed, now=now)
+                await self._events.add(meeting_closed(closed), occurred_at=now)
+            await self._meetings.soft_delete(meeting.id, now=now)
+            await self._events.add(meeting_deleted(closed), occurred_at=now)
+
+        bind_context(meeting_id=str(meeting.id))
+        _logger.info("meeting deleted", status=meeting.status.value)
+        if meeting.status is MeetingStatus.ACTIVE:
+            await _close_room(self._livekit, closed)
+
+
+async def _close_room(livekit: LiveKitGateway, meeting: Meeting) -> None:
+    """Отключить участников – после фиксации: завершение в БД не откатывается из-за медиасервера.
+
+    Если LiveKit недоступен, встреча все равно завершена: пустую комнату он закроет сам через ``empty_timeout``,
+    а новые токены для нее уже не выдаются.
+    """
+    try:
+        await livekit.delete_room(room_name(meeting))
+    except LiveKitUnavailable:
+        _logger.warning("room was not closed: livekit unavailable")

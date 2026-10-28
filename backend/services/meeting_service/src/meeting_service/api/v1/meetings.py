@@ -12,18 +12,25 @@ from fastapi.exceptions import RequestValidationError
 from meeting_service.api.v1.dependencies import (
     CallingOrganizer,
     CreateMeetingScenario,
+    DeleteMeetingScenario,
     EndMeetingScenario,
     GetMeetingScenario,
     JoinAsOrganizerScenario,
     ListMeetingsScenario,
     Origin,
     Settings,
+    UpdateMeetingScenario,
 )
 from meeting_service.domain.consent import ConsentDecision
 from meeting_service.domain.identifiers import MeetingId
 from meeting_service.domain.meetings import InvalidCursor, MeetingCursor, MeetingOverview, MeetingQuery, MeetingStatus
 from meeting_service.schemas.join import JoinResultResponse, OrganizerJoinRequest
-from meeting_service.schemas.meetings import CreateMeetingRequest, MeetingPageResponse, MeetingResponse
+from meeting_service.schemas.meetings import (
+    CreateMeetingRequest,
+    MeetingPageResponse,
+    MeetingResponse,
+    UpdateMeetingRequest,
+)
 
 __all__ = ["router"]
 
@@ -103,6 +110,43 @@ async def read_meeting(
 ) -> MeetingResponse:
     overview = await scenario.execute(owner_id=organizer.user_id, meeting_id=MeetingId(meeting_id))
     return _response(overview, settings)
+
+
+@router.patch(
+    "/{meeting_id}",
+    summary="Изменить встречу",
+    responses={
+        **_NOT_FOUND,
+        status.HTTP_409_CONFLICT: {"description": "meeting_not_editable – встреча уже началась"},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Название, время или частота анализа"},
+    },
+)
+async def update_meeting(
+    meeting_id: UUID,
+    body: UpdateMeetingRequest,
+    organizer: CallingOrganizer,
+    scenario: UpdateMeetingScenario,
+    settings: Settings,
+) -> MeetingResponse:
+    """Название меняется в любом статусе; время и параметры анализа – только у встречи в статусе `scheduled`."""
+    overview = await scenario.execute(
+        owner_id=organizer.user_id, meeting_id=MeetingId(meeting_id), edit=body.to_domain()
+    )
+    return _response(overview, settings)
+
+
+@router.delete(
+    "/{meeting_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить встречу",
+    responses=_NOT_FOUND,
+)
+async def delete_meeting(meeting_id: UUID, organizer: CallingOrganizer, scenario: DeleteMeetingScenario) -> None:
+    """Идущая встреча сначала завершается (участники отключаются), незапущенная – отменяется.
+
+    Аналитика встречи удаляется по событию `meeting.deleted`.
+    """
+    await scenario.execute(owner_id=organizer.user_id, meeting_id=MeetingId(meeting_id))
 
 
 @router.post(

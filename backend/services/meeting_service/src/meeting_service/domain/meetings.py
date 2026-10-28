@@ -8,7 +8,7 @@ import json
 import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime
-from enum import StrEnum
+from enum import Enum, StrEnum
 from uuid import UUID
 
 from meeting_service.domain.errors import (
@@ -16,6 +16,7 @@ from meeting_service.domain.errors import (
     InvalidTitle,
     MeetingCancelled,
     MeetingEnded,
+    MeetingNotEditable,
     MeetingNotStarted,
 )
 from meeting_service.domain.identifiers import MeetingId, UserId
@@ -26,15 +27,18 @@ __all__ = [
     "MAX_ANALYSIS_FPS",
     "MAX_TITLE_LENGTH",
     "MIN_ANALYSIS_FPS",
+    "UNCHANGED",
     "AnalysisDefaults",
     "EndReason",
     "InvalidCursor",
     "Meeting",
     "MeetingCursor",
+    "MeetingEdit",
     "MeetingOverview",
     "MeetingQuery",
     "MeetingStatus",
     "Organizer",
+    "Unchanged",
     "check_analysis_fps",
     "invite_code_from",
     "is_invite_code",
@@ -66,6 +70,15 @@ class EndReason(StrEnum):
     ADMIN = "admin"
 
 
+class Unchanged(Enum):
+    """Поле не передано в ``PATCH`` – в отличие от явного ``null`` (``scheduled_at: null`` – встреча «сейчас»)."""
+
+    UNCHANGED = "unchanged"
+
+
+UNCHANGED = Unchanged.UNCHANGED
+
+
 @dataclass(frozen=True, slots=True)
 class Organizer:
     """Вызывающий организатор – по проверенному access-токену."""
@@ -80,6 +93,16 @@ class AnalysisDefaults:
 
     enabled: bool = True
     fps: int = DEFAULT_ANALYSIS_FPS
+
+
+@dataclass(frozen=True, slots=True)
+class MeetingEdit:
+    """Изменение параметров встречи. ``None`` (и ``UNCHANGED`` у времени) – поле оставить как есть."""
+
+    title: str | None = None
+    scheduled_at: datetime | None | Unchanged = UNCHANGED
+    analysis_enabled: bool | None = None
+    analysis_fps: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +181,42 @@ class Meeting:
         if self.status is MeetingStatus.SCHEDULED:
             raise MeetingNotStarted("Meeting that has not started can be cancelled, not ended")
         return replace(self, status=MeetingStatus.ENDED, ended_at=now, end_reason=reason)
+
+    def edited(self, edit: MeetingEdit) -> Meeting:
+        """Встреча с новыми параметрами; без изменений – тот же объект.
+
+        Название меняется в любом статусе. Время и анализ – только до начала: идущей встречей уже пользуются
+        участники и ML-агент, а у прошедшей это история. Переданное, но совпадающее значение изменением не считается –
+        форма фронтенда может прислать все поля разом.
+        """
+        changed = replace(
+            self,
+            title=normalize_title(edit.title) if edit.title is not None else self.title,
+            scheduled_at=self.scheduled_at if isinstance(edit.scheduled_at, Unchanged) else edit.scheduled_at,
+            analysis_enabled=self.analysis_enabled if edit.analysis_enabled is None else edit.analysis_enabled,
+            analysis_fps=self.analysis_fps if edit.analysis_fps is None else check_analysis_fps(edit.analysis_fps),
+        )
+        if changed == self:
+            return self
+        settings_changed = (changed.scheduled_at, changed.analysis_enabled, changed.analysis_fps) != (
+            self.scheduled_at,
+            self.analysis_enabled,
+            self.analysis_fps,
+        )
+        if settings_changed and self.status is not MeetingStatus.SCHEDULED:
+            raise MeetingNotEditable()
+        return changed
+
+    def closed(self, now: datetime) -> Meeting:
+        """Перед удалением: идущая встреча завершается организатором, незапущенная отменяется.
+
+        Завершенная и отмененная остаются как есть – удаляется уже закрытая встреча.
+        """
+        if self.status is MeetingStatus.ACTIVE:
+            return self.ended(now, EndReason.ORGANIZER)
+        if self.status is MeetingStatus.SCHEDULED:
+            return replace(self, status=MeetingStatus.CANCELLED)
+        return self
 
     def _ensure_not_closed(self) -> None:
         if self.status is MeetingStatus.ENDED:

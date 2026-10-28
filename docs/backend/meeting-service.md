@@ -102,7 +102,8 @@ flowchart TB
 | `POST/GET /meetings`, `GET /meetings/{id}`, `POST /meetings/{id}/join`, `POST /meetings/{id}/end` | EMO-53 | ✓ |
 | `GET/POST /join/{invite_code}`, `POST /participants/me/rejoin`, токены LiveKit с атрибутами `vks.*` | EMO-53 | ✓ |
 | События `meeting.created`, `meeting.started`, `participant.registered`, `consent.changed`, `meeting.ended` через outbox | EMO-52 | ✓ |
-| `PATCH/DELETE /meetings/{id}`, `Idempotency-Key`, `/settings` | EMO-68 | спринт 4 |
+| `PATCH/DELETE /meetings/{id}` (события `meeting.updated`, `meeting.cancelled`, `meeting.deleted`), `GET/PUT /settings` | EMO-68 | ✓ |
+| `Idempotency-Key` для `POST /meetings` (Redis) | EMO-68 | спринт 4 |
 | Вебхуки LiveKit, `participant.joined/left`, `meeting_full` по онлайн-участникам, `user_blocked`, ограничение частоты `/join` | EMO-69 | спринт 4 |
 | Модерация (`mute`, `remove`), список участников | EMO-70 | спринт 4 |
 | `PUT /participants/me/consent`, `livekit_sync_queue`, запуск ML-агента | EMO-84 | спринт 5 |

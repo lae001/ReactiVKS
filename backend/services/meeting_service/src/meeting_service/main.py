@@ -16,7 +16,7 @@ from aiokafka.errors import KafkaError
 from fastapi import FastAPI
 
 from meeting_service.adapters.livekit_server import LiveKitServerGateway
-from meeting_service.api.v1 import join, meetings, participants
+from meeting_service.api.v1 import join, meetings, organizer_settings, participants
 from meeting_service.models import OUTBOX
 from meeting_service.settings import ALEMBIC_INI, MeetingSettings
 from vks_common.app import HealthRegistry, create_app, use_database
@@ -104,7 +104,7 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
 
     app = create_app(
         resolved,
-        routers=[meetings.router, join.router, participants.router],
+        routers=[meetings.router, join.router, participants.router, organizer_settings.router],
         lifespan=lifespan,
         title="ReactiVKS meeting-service",
     )

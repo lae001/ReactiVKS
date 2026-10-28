@@ -8,9 +8,22 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
 
-from meeting_service.domain.meetings import MAX_ANALYSIS_FPS, MAX_TITLE_LENGTH, MIN_ANALYSIS_FPS, MeetingOverview
+from meeting_service.domain.meetings import (
+    MAX_ANALYSIS_FPS,
+    MAX_TITLE_LENGTH,
+    MIN_ANALYSIS_FPS,
+    UNCHANGED,
+    MeetingEdit,
+    MeetingOverview,
+)
 
-__all__ = ["CreateMeetingRequest", "MeetingPageResponse", "MeetingResponse", "MeetingStatusValue"]
+__all__ = [
+    "CreateMeetingRequest",
+    "MeetingPageResponse",
+    "MeetingResponse",
+    "MeetingStatusValue",
+    "UpdateMeetingRequest",
+]
 
 MeetingStatusValue = Literal["scheduled", "active", "ended", "cancelled"]
 
@@ -22,6 +35,27 @@ class CreateMeetingRequest(BaseModel):
     scheduled_at: AwareDatetime | None = Field(default=None, description="null – встреча «сейчас»")
     analysis_enabled: bool | None = None
     analysis_fps: int | None = Field(default=None, ge=MIN_ANALYSIS_FPS, le=MAX_ANALYSIS_FPS)
+
+
+class UpdateMeetingRequest(BaseModel):
+    """Частичное изменение: не переданное поле не меняется. ``scheduled_at: null`` – перенести встречу на «сейчас».
+
+    Время и параметры анализа меняются только до начала встречи (``409 meeting_not_editable``).
+    """
+
+    title: str | None = Field(default=None, min_length=1, max_length=MAX_TITLE_LENGTH)
+    scheduled_at: AwareDatetime | None = None
+    analysis_enabled: bool | None = None
+    analysis_fps: int | None = Field(default=None, ge=MIN_ANALYSIS_FPS, le=MAX_ANALYSIS_FPS)
+
+    def to_domain(self) -> MeetingEdit:
+        return MeetingEdit(
+            title=self.title,
+            # Явный null отличается от отсутствующего поля только по списку переданных полей.
+            scheduled_at=self.scheduled_at if "scheduled_at" in self.model_fields_set else UNCHANGED,
+            analysis_enabled=self.analysis_enabled,
+            analysis_fps=self.analysis_fps,
+        )
 
 
 class MeetingResponse(BaseModel):
