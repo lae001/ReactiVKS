@@ -36,15 +36,21 @@ test('лобби: устройства, выбор запоминается, з�
     .poll(async () => Number(await meter.getAttribute('aria-valuenow')), { timeout: 10_000 })
     .toBeGreaterThan(0);
 
-  // выбор микрофона запоминается и подставляется после перезагрузки
+  // выбор микрофона запоминается в localStorage
   const options = await mic.locator('option').all();
   const last = options[options.length - 1];
   const chosen = (await last?.getAttribute('value')) ?? '';
   await mic.selectOption(chosen);
   const saved = await page.evaluate(() => localStorage.getItem('vks_device_prefs'));
   expect(JSON.parse(saved ?? '{}')).toMatchObject({ micId: chosen });
+
+  // После перезагрузки Chromium в одноразовом контексте выдает новые deviceId, поэтому запомненный
+  // id уже недействителен: лобби должно тихо взять устройство по умолчанию, без ошибки.
+  // Подстановку совпавшего id проверяют модульные тесты (use-local-media.test.tsx).
   await page.reload();
-  await expect(mic).toHaveValue(chosen);
+  await expect(mic.locator('option')).not.toHaveCount(0);
+  await expect(mic).toBeEnabled();
+  await expect(page.getByRole('alert')).toHaveCount(0);
 
   // вход: имя, явное согласие, комната
   await page.getByLabel('Как вас представить').fill('Анна Тестова');

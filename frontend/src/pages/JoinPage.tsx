@@ -11,7 +11,7 @@ import {
   type JoinFormErrors,
   validateJoinForm,
 } from '@/features/lobby/validate';
-import { guestErrorMessage, meetingErrorMessage } from '@/features/meetings/errors';
+import { joinErrorMessage, meetingErrorMessage } from '@/features/meetings/errors';
 import { type JoinInfo, meetingsApi } from '@/shared/api/meetings';
 import { ApiError, fieldOf } from '@/shared/api/problem';
 import { paths } from '@/shared/config/routes';
@@ -162,7 +162,7 @@ function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
         const issue = error.errors.find((i) => fieldOf(i) === 'display_name');
         if (issue) return setErrors({ displayName: issue.msg });
       }
-      setFormError(guestErrorMessage(error, 'войти во встречу'));
+      setFormError(joinErrorMessage(error));
     },
   });
 
