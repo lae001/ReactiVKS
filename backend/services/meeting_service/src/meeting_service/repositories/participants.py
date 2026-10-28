@@ -76,6 +76,20 @@ class ParticipantRepository:
             .values(consent_state=state.value, updated_at=now)
         )
 
+    async def list_for_meeting(self, meeting_id: MeetingId) -> list[Participant]:
+        """Участники встречи в порядке регистрации; в встрече их не больше нескольких десятков."""
+        statement = (
+            select(ParticipantRow)
+            .where(ParticipantRow.meeting_id == meeting_id)
+            .order_by(ParticipantRow.created_at, ParticipantRow.id)
+        )
+        return [_to_domain(row) for row in (await self._session.execute(statement)).scalars()]
+
+    async def save_removed(self, participant_id: ParticipantId, *, now: datetime) -> None:
+        await self._session.execute(
+            update(ParticipantRow).where(ParticipantRow.id == participant_id).values(is_removed=True, updated_at=now)
+        )
+
     async def mark_joined(self, participant_id: ParticipantId, *, at: datetime, now: datetime) -> None:
         """Отметить вход в комнату. ``least``/``greatest``: опоздавший вебхук не сдвигает отметки в неверную сторону."""
         await self._session.execute(

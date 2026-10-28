@@ -33,6 +33,7 @@ from meeting_service.services.meetings import (
     ListMeetings,
     UpdateMeeting,
 )
+from meeting_service.services.moderation import ListParticipants, MuteParticipant, RemoveParticipant
 from meeting_service.services.organizer_settings import GetOrganizerSettings, SaveOrganizerSettings
 from meeting_service.services.webhooks import HandleLiveKitWebhook
 from meeting_service.settings import MeetingSettings
@@ -53,8 +54,11 @@ __all__ = [
     "JoinAsGuestScenario",
     "JoinAsOrganizerScenario",
     "ListMeetingsScenario",
+    "ListParticipantsScenario",
+    "MuteParticipantScenario",
     "Origin",
     "RejoinAsGuestScenario",
+    "RemoveParticipantScenario",
     "SaveOrganizerSettingsScenario",
     "Settings",
     "UpdateMeetingScenario",
@@ -205,3 +209,20 @@ def build_handle_livekit_webhook(session: Session, clock: CurrentClock, verifier
 
 
 HandleLiveKitWebhookScenario = Annotated[HandleLiveKitWebhook, Depends(build_handle_livekit_webhook)]
+
+
+def build_list_participants(session: Session) -> ListParticipants:
+    return ListParticipants(session=session)
+
+
+def build_mute_participant(session: Session, livekit: LiveKit) -> MuteParticipant:
+    return MuteParticipant(session=session, livekit=livekit)
+
+
+def build_remove_participant(session: Session, clock: CurrentClock, livekit: LiveKit) -> RemoveParticipant:
+    return RemoveParticipant(session=session, clock=clock, livekit=livekit)
+
+
+ListParticipantsScenario = Annotated[ListParticipants, Depends(build_list_participants)]
+MuteParticipantScenario = Annotated[MuteParticipant, Depends(build_mute_participant)]
+RemoveParticipantScenario = Annotated[RemoveParticipant, Depends(build_remove_participant)]

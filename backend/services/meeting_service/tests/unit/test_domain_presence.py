@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from meeting_service.domain.errors import MeetingFull
+from meeting_service.domain.errors import MeetingFull, OrganizerNotRemovable
 from meeting_service.domain.identifiers import MeetingId, ParticipantId
 from meeting_service.domain.livekit import meeting_id_of_room, participant_id_of_identity
 from meeting_service.domain.participants import (
@@ -77,3 +77,15 @@ def test_foreign_identities_are_not_participants(identity: str | None) -> None:
 
 def test_foreign_room_is_not_a_meeting() -> None:
     assert meeting_id_of_room("lobby-test") is None
+
+
+def test_removed_guest_is_marked_once() -> None:
+    removed = make_participant().removed()
+
+    assert removed.is_removed is True
+    assert removed.removed() is removed
+
+
+def test_organizer_cannot_be_removed_from_own_meeting() -> None:
+    with pytest.raises(OrganizerNotRemovable):
+        make_participant(role=ParticipantRole.ORGANIZER).removed()

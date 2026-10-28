@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 
-from meeting_service.domain.errors import InvalidDisplayName, MeetingFull
+from meeting_service.domain.errors import InvalidDisplayName, MeetingFull, OrganizerNotRemovable
 from meeting_service.domain.identifiers import MeetingId, ParticipantId, UserId
 
 __all__ = [
@@ -77,6 +77,14 @@ class Participant:
 
     def with_consent(self, state: ConsentState) -> Participant:
         return replace(self, consent_state=state)
+
+    def removed(self) -> Participant:
+        """Удален организатором: повторный вход по токену закрыт. Повторное удаление – тот же объект."""
+        if self.role is ParticipantRole.ORGANIZER:
+            raise OrganizerNotRemovable("Organizer cannot be removed from own meeting")
+        if self.is_removed:
+            return self
+        return replace(self, is_removed=True)
 
 
 def ensure_seat_available(online_others: int) -> None:

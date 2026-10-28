@@ -107,7 +107,7 @@ flowchart TB
 | `POST /webhooks/livekit`: присутствие участников, `participant.joined/left`, `room_finished` → `ended` | EMO-69 | ✓ |
 | `409 meeting_full` по участникам в комнате; потребитель `user.events`: `403 user_blocked`, удаление встреч по `user.deleted` | EMO-69 | ✓ |
 | Ограничение частоты `/join/{invite_code}` (`429`, Redis) | EMO-69 | спринт 4 |
-| Модерация (`mute`, `remove`), список участников | EMO-70 | спринт 4 |
+| Модерация (`mute`, `remove`), список участников с присутствием | EMO-70 | ✓ |
 | `PUT /participants/me/consent`, `livekit_sync_queue`, запуск ML-агента | EMO-84 | спринт 5 |
 
 Предел в 10 участников проверяет meeting-service при входе – по присутствию из вебхуков. Гость, получивший токен, но

@@ -14,7 +14,7 @@ from livekit.protocol.webhook import WebhookEvent
 from meeting_service.adapters.livekit_server import LiveKitServerGateway
 from meeting_service.adapters.livekit_webhooks import LiveKitWebhookVerifier
 from meeting_service.domain.errors import LiveKitUnavailable, WebhookRejected
-from meeting_service.domain.livekit import LeaveReason, RoomAccess, RoomEventKind
+from meeting_service.domain.livekit import LeaveReason, MediaKind, RoomAccess, RoomEventKind
 
 API_KEY = "devkey"
 API_SECRET = "test-secret-0123456789abcdef0123456789"
@@ -65,6 +65,13 @@ async def test_unreachable_livekit_is_reported_after_retries(gateway: LiveKitSer
         await gateway.ensure_room("0192-room")
 
     assert isinstance(raised.value.__cause__, aiohttp.ClientError)
+
+
+async def test_moderation_reports_unreachable_livekit(gateway: LiveKitServerGateway) -> None:
+    with pytest.raises(LiveKitUnavailable):
+        await gateway.mute("0192-room", "p_0192", MediaKind.AUDIO)
+    with pytest.raises(LiveKitUnavailable):
+        await gateway.remove("0192-room", "p_0192")
 
 
 async def test_transient_failure_is_retried(gateway: LiveKitServerGateway) -> None:

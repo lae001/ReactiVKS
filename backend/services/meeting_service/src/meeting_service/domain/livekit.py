@@ -22,6 +22,7 @@ __all__ = [
     "ROOM_EMPTY_TIMEOUT_SECONDS",
     "LeaveReason",
     "LiveKitGateway",
+    "MediaKind",
     "RoomAccess",
     "RoomEvent",
     "RoomEventKind",
@@ -37,6 +38,13 @@ ROOM_EMPTY_TIMEOUT_SECONDS = 300
 ROOM_DEPARTURE_TIMEOUT_SECONDS = 20
 # Не более 10 человек одновременно; одиннадцатое место – ML-агент.
 MAX_ROOM_PARTICIPANTS = 11
+
+
+class MediaKind(StrEnum):
+    """Что выключает модерация: микрофон (и звук демонстрации экрана) или камеру (и саму демонстрацию)."""
+
+    AUDIO = "audio"
+    VIDEO = "video"
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +76,14 @@ class LiveKitGateway(Protocol):
 
     def issue_token(self, access: RoomAccess) -> str:
         """Токен доступа участника к комнате (подписывается локально, без сети)."""
+        ...
+
+    async def mute(self, room: str, identity: str, kind: MediaKind) -> None:
+        """Выключить опубликованные треки участника этого вида. Участника нет в комнате – не ошибка."""
+        ...
+
+    async def remove(self, room: str, identity: str) -> None:
+        """Отключить участника от комнаты. Участника нет в комнате – не ошибка."""
         ...
 
 

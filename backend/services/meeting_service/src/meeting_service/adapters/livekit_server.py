@@ -1,13 +1,15 @@
 """``LiveKitGateway`` над Server API LiveKit (пакет ``livekit-api``).
 
 Параметры вызовов – conventions.md, §5: таймаут 3 с, два повтора идемпотентных операций (``CreateRoom``
-идемпотентна по имени, ``DeleteRoom`` – по смыслу) с задержкой 100 и 400 мс. После повторов –
+идемпотентна по имени, ``DeleteRoom``, ``MutePublishedTrack`` и ``RemoveParticipant`` – по смыслу) с задержкой 100 и
+400 мс. После повторов –
 :class:`LiveKitUnavailable` (``503 livekit_unavailable``).
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
 from typing import TypeVar
@@ -20,6 +22,7 @@ from meeting_service.domain.livekit import (
     MAX_ROOM_PARTICIPANTS,
     ROOM_DEPARTURE_TIMEOUT_SECONDS,
     ROOM_EMPTY_TIMEOUT_SECONDS,
+    MediaKind,
     RoomAccess,
 )
 from vks_common.logging import get_logger
@@ -33,6 +36,7 @@ _T = TypeVar("_T")
 # Что участник может публиковать: камера, микрофон и демонстрация экрана со звуком.
 _PUBLISH_SOURCES = ["camera", "microphone", "screen_share", "screen_share_audio"]
 _RETRY_DELAYS_SECONDS = (0.1, 0.4)
+_TRACK_TYPES = {MediaKind.AUDIO: api.TrackType.AUDIO, MediaKind.VIDEO: api.TrackType.VIDEO}
 # Ошибки сервера (5xx) и сети – повод повторить; 4xx – ошибка запроса, повтор ее не исправит.
 _SERVER_ERROR_STATUS = 500
 
@@ -84,6 +88,32 @@ class LiveKitServerGateway:
             await self._call("DeleteRoom", lambda: self._api.room.delete_room(api.DeleteRoomRequest(room=room)))
         except api.TwirpError as error:
             # Комнаты уже нет (закрылась по empty_timeout) – цель достигнута.
+            if error.code != api.TwirpErrorCode.NOT_FOUND:
+                raise
+
+    async def mute(self, room: str, identity: str, kind: MediaKind) -> None:
+        """``GetParticipant`` → ``MutePublishedTrack`` для каждого невыключенного трека вида ``kind``.
+
+        Обе операции идемпотентны: выключенный трек выключается еще раз без ошибки.
+        """
+        target = api.RoomParticipantIdentity(room=room, identity=identity)
+        try:
+            participant = await self._call("GetParticipant", lambda: self._api.room.get_participant(target))
+        except api.TwirpError as error:
+            if error.code == api.TwirpErrorCode.NOT_FOUND:
+                return  # участник уже вышел – выключать нечего
+            raise
+        for track in participant.tracks:
+            if track.type != _TRACK_TYPES[kind] or track.muted:
+                continue
+            request = api.MuteRoomTrackRequest(room=room, identity=identity, track_sid=track.sid, muted=True)
+            await self._call("MutePublishedTrack", functools.partial(self._api.room.mute_published_track, request))
+
+    async def remove(self, room: str, identity: str) -> None:
+        target = api.RoomParticipantIdentity(room=room, identity=identity)
+        try:
+            await self._call("RemoveParticipant", lambda: self._api.room.remove_participant(target))
+        except api.TwirpError as error:
             if error.code != api.TwirpErrorCode.NOT_FOUND:
                 raise
 
