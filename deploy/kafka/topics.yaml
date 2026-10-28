@@ -1,0 +1,35 @@
+# Топики Kafka – docs/api/events.md. Создаются kafka-init (create-topics.sh), автосоздание отключено.
+# Формат намеренно плоский: скрипт разбирает его awk без внешних зависимостей.
+# retention_ms: 1 ч = 3600000, 7 сут = 604800000, 14 сут = 1209600000.
+topics:
+  - name: emotion.samples
+    partitions: 6
+    retention_ms: 3600000
+  - name: ml.status
+    partitions: 3
+    retention_ms: 3600000
+  - name: meeting.events
+    partitions: 3
+    retention_ms: 604800000
+  - name: report.events
+    partitions: 3
+    retention_ms: 604800000
+  - name: user.events
+    partitions: 1
+    retention_ms: 604800000
+  # DLQ входных топиков потребителей: 1 партиция, 14 сут, разбор вручную.
+  - name: emotion.samples.dlq
+    partitions: 1
+    retention_ms: 1209600000
+  - name: ml.status.dlq
+    partitions: 1
+    retention_ms: 1209600000
+  - name: meeting.events.dlq
+    partitions: 1
+    retention_ms: 1209600000
+  - name: report.events.dlq
+    partitions: 1
+    retention_ms: 1209600000
+  - name: user.events.dlq
+    partitions: 1
+    retention_ms: 1209600000
