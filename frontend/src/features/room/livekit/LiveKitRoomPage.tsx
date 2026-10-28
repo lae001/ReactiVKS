@@ -14,8 +14,10 @@ import { RoomMessage } from '../RoomMessage';
 import { type LiveKitMeeting, LiveKitRoomView, type RoomConnection } from './LiveKitRoomView';
 
 /**
- * Токен LiveKit: при первом входе – из ответа лобби (`entry.livekit`), иначе и при каждом
- * «Подключиться снова» – новый: гость через rejoin (Participant-токен), организатор через вход.
+ * Свежий токен LiveKit при каждом входе в комнату и при каждом «Подключиться снова»: гость через
+ * rejoin (Participant-токен), организатор через вход. Токен из ответа лобби в state не передается:
+ * иначе удаленный гость мог бы вернуться в комнату перезагрузкой страницы (удаление блокирует
+ * именно rejoin, `participant_removed`).
  */
 async function fetchConnection(
   meeting: LiveKitMeeting & { analysis_enabled: boolean },
@@ -43,14 +45,11 @@ export function LiveKitRoomPage({
   meeting: LiveKitMeeting & { analysis_enabled: boolean };
   entry: RoomEntry;
 }) {
-  // 0 – первый вход (токен из лобби, если он есть); дальше каждый номер – новый запрос токена
+  // каждый номер попытки – новый запрос токена
   const [attempt, setAttempt] = useState(0);
   const query = useQuery({
     queryKey: ['room-connection', meeting.id, entry.role, attempt],
-    queryFn: () =>
-      attempt === 0 && entry.livekit
-        ? Promise.resolve(entry.livekit)
-        : fetchConnection(meeting, entry),
+    queryFn: () => fetchConnection(meeting, entry),
     staleTime: Infinity,
     gcTime: 0,
     retry: false,

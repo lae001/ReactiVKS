@@ -61,14 +61,7 @@ const fail = (status: number, code: string) =>
 describe('токен комнаты', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('из лобби: токен и адрес берутся из ответа входа, без нового запроса', async () => {
-    const rejoin = vi.spyOn(meetingsApi, 'rejoin');
-    renderPage({ ...guest, livekit: { url: 'ws://lobby', token: 'tok-lobby' } });
-    expect(await screen.findByTestId('conn')).toHaveTextContent('ws://lobby tok-lobby');
-    expect(rejoin).not.toHaveBeenCalled();
-  });
-
-  it('гость после перезагрузки (нет токена в state): rejoin по Participant-токену', async () => {
+  it('гость: каждый вход в комнату – rejoin по Participant-токену (удаленный не вернется перезагрузкой)', async () => {
     const rejoin = vi.spyOn(meetingsApi, 'rejoin').mockResolvedValue(joinResult('tok-rejoin'));
     renderPage(guest);
     expect(await screen.findByTestId('conn')).toHaveTextContent('ws://new tok-rejoin');
@@ -82,15 +75,18 @@ describe('токен комнаты', () => {
     expect(join).toHaveBeenCalledWith('m-1', 'denied');
   });
 
-  it('«Подключиться снова» запрашивает новый токен, а не берет старый из лобби', async () => {
+  it('«Подключиться снова» запрашивает новый токен', async () => {
     const user = userEvent.setup();
-    const rejoin = vi.spyOn(meetingsApi, 'rejoin').mockResolvedValue(joinResult('tok-fresh'));
-    renderPage({ ...guest, livekit: { url: 'ws://lobby', token: 'tok-lobby' } });
-    await screen.findByText(/tok-lobby/);
+    const rejoin = vi
+      .spyOn(meetingsApi, 'rejoin')
+      .mockResolvedValueOnce(joinResult('tok-first'))
+      .mockResolvedValueOnce(joinResult('tok-fresh'));
+    renderPage(guest);
+    await screen.findByText(/tok-first/);
 
     await user.click(screen.getByRole('button', { name: 'reconnect' }));
     await waitFor(() => expect(screen.getByTestId('conn')).toHaveTextContent('tok-fresh'));
-    expect(rejoin).toHaveBeenCalledTimes(1);
+    expect(rejoin).toHaveBeenCalledTimes(2);
   });
 });
 

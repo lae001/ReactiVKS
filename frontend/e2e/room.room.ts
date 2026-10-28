@@ -151,14 +151,71 @@ test('режим http: организатор создает и начинает
   await expect(panel).toContainText('Анна Гостева');
   await expect(panel).toContainText('Иван Петров');
   await expect(panel).toContainText('Организатор');
-  await expect(guest.getByRole('tab')).toContainText('2');
+  await expect(guest.getByRole('tab', { name: /Участники · 2/ })).toBeVisible();
 
-  // 10. выход гостя: экран выхода, у организатора остается одна плитка
-  await guest.getByRole('button', { name: 'Выйти' }).click();
-  await expect(guest.getByRole('heading', { name: 'Вы вышли из встречи' })).toBeVisible();
+  // 10. чат на LiveKit (lk.chat): сообщения доходят в обе стороны
+  await guest.getByRole('button', { name: 'Чат' }).click();
+  await org.getByRole('button', { name: 'Чат' }).click();
+  await guest.getByLabel('Сообщение').fill('Привет от гостя');
+  await guest.getByRole('button', { name: 'Отправить' }).click();
+  await expect(org.getByRole('list').getByText('Привет от гостя')).toBeVisible();
+  await org.getByLabel('Сообщение').fill('Ответ организатора');
+  await org.getByRole('button', { name: 'Отправить' }).click();
+  await expect(guest.getByRole('list').getByText('Ответ организатора')).toBeVisible();
+  await expect(guest.getByRole('list').getByText(/^Вы ·/)).toBeVisible();
+
+  // 11. модерация: выключить микрофон и камеру гостя (REST → LiveKit), каждое с подтверждением
+  await org.getByRole('button', { name: 'Участники' }).click();
+  const confirmIn = (page: Page, label: string) =>
+    page.getByRole('alertdialog').getByRole('button', { name: label });
+  await org.getByRole('button', { name: 'Выключить микрофон: Анна Гостева' }).click();
+  await expect(guest.getByRole('button', { name: 'Микрофон' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await confirmIn(org, 'Выключить микрофон').click();
+  await expect(guest.getByRole('button', { name: 'Микрофон' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await org.getByRole('button', { name: 'Выключить камеру: Анна Гостева' }).click();
+  await confirmIn(org, 'Выключить камеру').click();
+  await expect(guest.getByRole('button', { name: 'Камера' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+
+  // 12. удаление: гость видит «Вас удалили из встречи», перезагрузкой вернуться нельзя
+  await org.getByRole('button', { name: 'Удалить из встречи: Анна Гостева' }).click();
+  await confirmIn(org, 'Удалить из встречи').click();
+  await expect(guest.getByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
   await expect(org.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '1', {
     timeout: 20_000,
   });
+  await guest.reload();
+  await expect(guest.getByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
+
+  // 13. по ссылке-приглашению гость входит заново как новый участник
+  await guest.goto(`/j/${code}`);
+  await guest.getByLabel('Как вас представить').fill('Анна Гостева');
+  await guest.getByRole('radio', { name: /Разрешаю анализ/ }).check();
+  await guest.getByRole('button', { name: 'Войти во встречу' }).click();
+  await expect(guest.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
+  await expect(org.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '2', {
+    timeout: 20_000,
+  });
+
+  // 14. завершение встречи организатором: подтверждение, карточка у него, экран у гостя
+  await org.getByRole('button', { name: 'Завершить встречу' }).click();
+  await confirmIn(org, 'Завершить встречу').click();
+  await expect(org).toHaveURL(new RegExp(`/meetings/${meetingId}$`));
+  await expect(guest.getByRole('heading', { name: 'Встреча завершена' })).toBeVisible({
+    timeout: 20_000,
+  });
+  const ended = await org.request.get(`/api/v1/meetings/${meetingId}`, {
+    headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+  });
+  expect(await ended.json()).toMatchObject({ status: 'ended' });
 
   await orgContext.close();
   await guestContext.close();

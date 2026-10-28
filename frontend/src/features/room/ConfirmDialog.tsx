@@ -12,12 +12,18 @@ export function ConfirmDialog({
   confirmLabel,
   onCancel,
   onConfirm,
+  busy = false,
+  error = null,
 }: {
   title: string;
   text: string;
   confirmLabel: string;
   onCancel: () => void;
   onConfirm: () => void;
+  /** Запрос уже отправлен: подтверждение отключено */
+  busy?: boolean;
+  /** Сообщение, если запрос не удался; диалог остается открытым для повтора */
+  error?: string | null;
 }) {
   const confirmRef = useRef<HTMLButtonElement>(null);
   useEffect(() => confirmRef.current?.focus(), []);
@@ -40,11 +46,16 @@ export function ConfirmDialog({
         <p id="confirm-text" className="text-sm text-room-muted">
           {text}
         </p>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="room" onClick={onCancel}>
             Отмена
           </Button>
-          <Button ref={confirmRef} variant="destructive" onClick={onConfirm}>
+          <Button ref={confirmRef} variant="destructive" onClick={onConfirm} disabled={busy}>
             {confirmLabel}
           </Button>
         </div>

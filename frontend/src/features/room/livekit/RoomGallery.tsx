@@ -25,10 +25,14 @@ export function RoomGallery() {
       className="flex min-h-0 flex-1 flex-col"
       data-lk-theme="default"
     >
-      <div className="min-h-0 flex-1 p-2" data-testid="lk-gallery" data-tiles={tracks.length}>
-        <GridLayout tracks={pagination.tracks} style={{ height: '100%' }}>
-          <ParticipantTile />
-        </GridLayout>
+      {/* Размер области задает только раскладка страницы: GridLayout лежит внутри абсолютно, и
+          высота видео не влияет на высоту галереи (иначе панель управления «плывет» при двух видео) */}
+      <div className="relative min-h-0 flex-1" data-testid="lk-gallery" data-tiles={tracks.length}>
+        <div className="absolute inset-2">
+          <GridLayout tracks={pagination.tracks} style={{ height: '100%' }}>
+            <ParticipantTile />
+          </GridLayout>
+        </div>
       </div>
       <PagerNav
         currentPage={pagination.currentPage}

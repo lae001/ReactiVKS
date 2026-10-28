@@ -3,7 +3,7 @@ import type { ConsentState, JoinedMeeting, ParticipantRole } from '@/shared/api/
 /**
  * С чем пользователь входит в комнату: передается из лобби через state навигации.
  * Сведения о встрече и id участника берутся из ответа POST /join/{invite_code}; токен LiveKit
- * комната получит в ветке с LiveKitRoom.
+ * в state не передается: комната всегда запрашивает свежий (rejoin / вход организатора).
  */
 export interface RoomEntry {
   role: ParticipantRole;
@@ -16,8 +16,6 @@ export interface RoomEntry {
   participantId?: string;
   /** Встреча из JoinResult: гость не может запросить GET /meetings/{id} (он только для владельца) */
   meeting?: JoinedMeeting;
-  /** Адрес и токен LiveKit из ответа на вход; без них комната запросит новые (rejoin / вход организатора) */
-  livekit?: { url: string; token: string };
 }
 
 export function readRoomEntry(state: unknown): RoomEntry | null {
@@ -35,6 +33,5 @@ export function readRoomEntry(state: unknown): RoomEntry | null {
     inviteCode: s.inviteCode,
     participantId: s.participantId,
     meeting: s.meeting,
-    livekit: s.livekit,
   };
 }

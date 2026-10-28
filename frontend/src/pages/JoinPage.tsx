@@ -149,7 +149,6 @@ function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
         inviteCode,
         participantId: result.participant_id,
         meeting: result.meeting,
-        livekit: { url: result.livekit_url, token: result.livekit_token },
       };
       navigate(paths.room(result.meeting.id), { state: entry });
     },
