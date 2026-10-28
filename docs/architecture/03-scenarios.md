@@ -70,8 +70,8 @@ sequenceDiagram
 
     O->>FE: «Начать встречу», проверка камеры/микрофона
     FE->>M: POST /api/v1/meetings/{id}/join {consent}
+    M->>LK: CreateRoom(name = meeting_id, empty_timeout) – идемпотентна, до транзакции
     alt встреча в статусе scheduled
-        M->>LK: CreateRoom(name = meeting_id, empty_timeout)
         M-)K: meeting.events: meeting.started (outbox)
         opt analysis_enabled
             M->>LK: CreateDispatch(agent = emotion-agent, metadata = {fps})
@@ -81,6 +81,7 @@ sequenceDiagram
         end
     end
     M->>M: participant (role = organizer), consent в журнал
+    M-)K: meeting.events: participant.registered (outbox, первый вход)
     M-->>FE: {participant_id, livekit_url, livekit_token}
     FE->>LK: connect(livekit_token), публикация камеры и микрофона
     FE->>RT: WSS /ws + subscribe {meeting_id}
@@ -104,12 +105,13 @@ sequenceDiagram
     FE->>M: GET /api/v1/join/{invite_code}
     M-->>FE: {title, organizer_name, status, analysis_enabled, consent_notice {version, text}}
     P->>FE: проверка устройств, имя, решение о согласии
-    FE->>M: POST /api/v1/join/{invite_code} {display_name, consent: granted | denied}
+    FE->>M: POST /api/v1/join/{invite_code} {display_name, consent: granted | denied, notice_version}
     alt встреча не начата
         M-->>FE: 409 meeting_not_started (FE ждет и повторяет запрос)
     else встреча активна
-        M->>M: participant (role = guest), consent в журнал, participant_token
-        M-)K: meeting.events: participant.registered, consent.changed (outbox)
+        M->>LK: CreateRoom – идемпотентна, на случай закрытой по empty_timeout комнаты
+        M->>M: participant (role = guest), consent в журнал, participant_token (хранится хеш)
+        M-)K: meeting.events: participant.registered {consent_state} (outbox)
         M-->>FE: {participant_id, participant_token, livekit_url, livekit_token}
     end
     Note over M: livekit_token содержит атрибуты vks.role, vks.consent<br/>и запрет canUpdateOwnMetadata

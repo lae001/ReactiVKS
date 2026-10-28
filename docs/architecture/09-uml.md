@@ -63,7 +63,9 @@ flowchart LR
 
 ## 9.2 Диаграмма компонентов
 
-Предоставляемые интерфейсы обозначены «◯ имя», требуемые – стрелкой к интерфейсу.
+Предоставляемые интерфейсы обозначены «◯ имя», требуемые – стрелкой к интерфейсу. Библиотеки `vks_common` (шасси)
+и `vks_contracts` (контракты событий) входят в каждый Python-сервис; события сервисов с БД идут в Kafka только
+через outbox – таблицу своей схемы и фоновый `OutboxRelay` ([ADR-011](../adr/ADR-011-transactional-outbox.md)).
 
 ```mermaid
 flowchart TB
@@ -80,7 +82,8 @@ flowchart TB
         M_API["◯ Meetings REST API"]
         M_INT["◯ Internal API"]
         M_WH["◯ LiveKit Webhook"]
-        M_GW["LiveKitGateway"]
+        M_GW["«interface» LiveKitGateway"]
+        M_OB["outbox + OutboxRelay"]
     end
 
     subgraph RT["«component» realtime-service"]
@@ -95,6 +98,11 @@ flowchart TB
         ML_AG["Agent worker"]
         ML_CL["«interface» EmotionClassifier"]
         ML_FD["«interface» FaceDetector"]
+    end
+
+    subgraph LIBS["«library» общие пакеты backend/libs"]
+        L_COM["vks_common: конфиг, ошибки RFC 9457,<br/>JWT/JWKS, БД, outbox, Kafka"]
+        L_CON["vks_contracts: конверт и payload событий"]
     end
 
     subgraph LK["«component» LiveKit Server"]
@@ -117,7 +125,7 @@ flowchart TB
     ML_AG --> LK_AG
     ML_AG --> S_EM
     ML_CL & ML_FD --- ONNX
-    MEET --> S_MT
+    M_OB --> S_MT
     AUTH --> S_MT
     AN --> S_MT
     RT --> S_EM & S_MT
@@ -126,12 +134,15 @@ flowchart TB
     AN --> M_INT
     MEET & AN & RT --> A_JWKS
     AUTH & MEET & AN --> DB
+    AUTH & MEET & RT & AN -. «use» .-> LIBS
+    ML -. «use» .-> L_CON
 ```
 
 ## 9.3 Диаграмма классов предметной области
 
 Доменные сущности сервисов (слой `domain/`); сервисы не разделяют классы – связи между контекстами идут через
-идентификаторы и события.
+идентификаторы и события. Сущности неизменяемы: переход состояния возвращает новый объект. Для auth и meeting
+диаграмма повторяет реализованный код; операции следующих задач помечены «план» в таблице под диаграммой.
 
 ```mermaid
 classDiagram
@@ -139,61 +150,97 @@ classDiagram
 
     namespace auth {
         class User {
-            +UUID id
-            +Email email
+            <<entity>>
+            +UserId id
+            +str email
             +str display_name
             +Role role
             +UserStatus status
-            +block()
-            +unblock()
-            +change_password(hasher, new)
+            +ensure_can_sign_in()
+            +renamed(display_name) User
         }
         class RefreshToken {
-            +UUID id
-            +UUID family_id
+            <<entity>>
+            +RefreshTokenId id
+            +SessionFamilyId family_id
+            +bytes token_hash
             +datetime expires_at
             +datetime revoked_at
-            +rotate() RefreshToken
-            +is_active(now) bool
+            +RefreshTokenId replaced_by
+            +is_expired(now) bool
+            +rotated(successor, now) RefreshToken
+        }
+        class TokenSigner {
+            <<interface>>
+            +sign(claims) str
+            +published_keys() list
+        }
+        class PasswordHasher {
+            <<interface>>
+            +hash(password) str
+            +verify(password, hash) bool
         }
     }
 
     namespace meeting {
         class Meeting {
-            +UUID id
-            +UUID owner_id
+            <<entity>>
+            +MeetingId id
+            +UserId owner_id
+            +str owner_name
             +str title
-            +InviteCode invite_code
+            +str invite_code
             +MeetingStatus status
-            +AnalysisSettings analysis
-            +datetime scheduled_at
-            +start(now)
-            +end(reason, now)
-            +cancel()
-            +can_join(participant_count) bool
+            +bool analysis_enabled
+            +int analysis_fps
+            +schedule(organizer, title, …) Meeting
+            +started(now) Meeting
+            +ensure_open_for_guests()
+            +ended(now, reason) Meeting
         }
-        class AnalysisSettings {
+        class AnalysisDefaults {
             <<value object>>
             +bool enabled
             +int fps
         }
         class Participant {
-            +UUID id
-            +UUID meeting_id
-            +UUID user_id
+            <<entity>>
+            +ParticipantId id
+            +MeetingId meeting_id
+            +UserId user_id
             +str display_name
             +ParticipantRole role
             +ConsentState consent_state
             +bool is_removed
-            +decide_consent(decision, notice) ConsentRecord
-            +remove()
-            +livekit_identity() str
+            +livekit_identity str
+            +with_consent(state) Participant
+        }
+        class ConsentNotice {
+            <<value object>>
+            +str version
+            +str text_md
         }
         class ConsentRecord {
             <<immutable>>
-            +Decision decision
+            +ConsentState decision
             +str notice_version
+            +str display_name
+            +str meeting_title
             +datetime decided_at
+        }
+        class LiveKitGateway {
+            <<interface>>
+            +public_url str
+            +ensure_room(room)
+            +delete_room(room)
+            +issue_token(RoomAccess) str
+        }
+        class RoomAccess {
+            <<value object>>
+            +str room
+            +str identity
+            +str name
+            +Mapping attributes
         }
     }
 
@@ -233,15 +280,43 @@ classDiagram
     }
 
     User "1" --> "*" RefreshToken
-    Meeting "1" *-- "1" AnalysisSettings
+    Meeting ..> AnalysisDefaults : параметры по умолчанию
     Meeting "1" *-- "*" Participant
     Participant "1" --> "*" ConsentRecord
+    ConsentRecord ..> ConsentNotice : версия текста
+    LiveKitGateway ..> RoomAccess
+    RoomAccess ..> Participant : room_access(meeting, participant)
     SecondBucket ..> EmotionVector
     Report "1" o-- "*" Marker
     KeyMomentDetector ..> Marker : создает
 ```
 
+| Класс | Реализовано | План |
+|---|---|---|
+| `User`, `RefreshToken`, `TokenSigner`, `PasswordHasher` | Вход, ротация refresh-токенов с отзывом семьи, профиль, смена пароля (EMO-33, EMO-67) | `block()`, `unblock()` – администрирование (EMO-67) |
+| `Meeting` | Создание, вход организатора (`scheduled → active`), завершение, правила входа гостя (EMO-53) | `cancelled(now)` – `DELETE` (EMO-68), проверка `meeting_full` по онлайн-участникам (EMO-69) |
+| `Participant`, `ConsentRecord`, `ConsentNotice` | Регистрация организатора и гостя, решение о согласии и журнал (EMO-53) | `removed()` – модерация (EMO-70), отзыв согласия (EMO-84) |
+| `LiveKitGateway` | `CreateRoom`, `DeleteRoom`, токены с атрибутами `vks.*` (EMO-53) | `UpdateParticipant`, `MutePublishedTrack`, `RemoveParticipant`, `CreateDispatch` (EMO-70, EMO-84) |
+| analytics | – | EMO-86, EMO-87 |
+
 ## 9.4 Диаграммы состояний
+
+### Встреча
+
+```mermaid
+stateDiagram-v2
+    [*] --> scheduled: POST /meetings
+    scheduled --> active: первый вход организатора (POST /join)
+    scheduled --> cancelled: DELETE (EMO-68)
+    active --> ended: POST /end или вебхук room_finished (EMO-69)
+    scheduled --> scheduled: POST /end – 409 meeting_not_started
+    ended --> ended: POST /end – без изменений
+    ended --> [*]
+    cancelled --> [*]
+```
+
+Гость входит только в `active`: в `scheduled` – `409 meeting_not_started` (клиент повторяет), в `ended` и
+`cancelled` – `409 meeting_ended` / `meeting_cancelled`.
 
 ### Согласие участника
 
