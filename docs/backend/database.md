@@ -49,8 +49,8 @@ ALTER ROLE analytics_svc SET search_path = analytics, public;
 
 ## Схема `auth`
 
-Миграция `0001_users_and_refresh_tokens` создает `users` и `refresh_tokens`; `password_reset_tokens` и `outbox`
-создаются миграциями задач восстановления пароля и событий `user.events`.
+Миграция `0001_users_and_refresh_tokens` создает `users` и `refresh_tokens`, миграция `0002_outbox` – `outbox` событий
+`user.events` (EMO-67); `password_reset_tokens` создается миграцией задачи восстановления пароля.
 
 ```sql
 -- Схема auth (владелец auth_svc).

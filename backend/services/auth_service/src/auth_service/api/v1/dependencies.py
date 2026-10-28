@@ -16,6 +16,7 @@ from starlette.requests import Request
 from auth_service.domain.passwords import PasswordHasher
 from auth_service.domain.signing import TokenSigner
 from auth_service.services.accounts import RegisterOrganizer
+from auth_service.services.administration import DeleteUser, ListUsers, UpdateUser
 from auth_service.services.keys import PublishedKeys
 from auth_service.services.profile import ChangePassword, GetProfile, RenameUser
 from auth_service.services.sessions import Login, Logout, RefreshSession, TokenPolicy
@@ -26,7 +27,9 @@ from vks_common.db import get_session
 __all__ = [
     "ChangePasswordScenario",
     "CurrentClock",
+    "DeleteUserScenario",
     "GetProfileScenario",
+    "ListUsersScenario",
     "LoginScenario",
     "LogoutScenario",
     "PublishedKeysScenario",
@@ -34,6 +37,7 @@ __all__ = [
     "RegisterOrganizerScenario",
     "RenameUserScenario",
     "Settings",
+    "UpdateUserScenario",
 ]
 
 
@@ -141,3 +145,20 @@ def build_change_password(session: Session, hasher: Hasher, clock: CurrentClock)
 
 
 ChangePasswordScenario = Annotated[ChangePassword, Depends(build_change_password)]
+
+
+def build_list_users(session: Session) -> ListUsers:
+    return ListUsers(session=session)
+
+
+def build_update_user(session: Session, clock: CurrentClock) -> UpdateUser:
+    return UpdateUser(session=session, clock=clock)
+
+
+def build_delete_user(session: Session, clock: CurrentClock) -> DeleteUser:
+    return DeleteUser(session=session, clock=clock)
+
+
+ListUsersScenario = Annotated[ListUsers, Depends(build_list_users)]
+UpdateUserScenario = Annotated[UpdateUser, Depends(build_update_user)]
+DeleteUserScenario = Annotated[DeleteUser, Depends(build_delete_user)]

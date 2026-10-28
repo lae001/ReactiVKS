@@ -40,6 +40,11 @@ class AuthSettings(PasswordHashingSettings):
     auth_refresh_cookie_secure: bool = True
     auth_registration_enabled: bool = True
 
+    # Брокер Kafka для user.events. Не задан – события копятся в outbox и уйдут, когда брокер появится в настройках.
+    kafka_bootstrap_servers: str | None = None
+    # Как часто релей outbox проверяет таблицу без сигнала о новой транзакции.
+    outbox_poll_interval_seconds: float = Field(default=1.0, gt=0)
+
     @model_validator(mode="after")
     def _cookie_is_secure_in_production(self) -> Self:
         """Refresh-cookie без ``Secure`` в production ушла бы по открытому HTTP – это не настройка, а утечка."""
