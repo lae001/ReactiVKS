@@ -75,7 +75,7 @@ exclude = ["(^|/)migrations/"]
 
 [[tool.mypy.overrides]]
 # Пакеты без маркера py.typed.
-module = ["testcontainers.*", "docker.*", "asyncpg.*", "uuid6.*"]
+module = ["testcontainers.*", "docker.*", "asyncpg.*", "uuid6.*", "aiokafka.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ type = "layers"
 containers = ["vks_common"]
 layers = [
     "testing",
-    "app",
+    "app | kafka",
     "auth | db",
     "problem_details | middleware",
     "logging",

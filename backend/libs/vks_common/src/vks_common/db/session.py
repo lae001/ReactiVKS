@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 
 from sqlalchemy import text
@@ -16,13 +16,22 @@ from starlette.requests import Request
 __all__ = ["Database", "create_session_factory", "get_database", "get_session", "transaction"]
 
 
-def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+def create_session_factory(
+    engine: AsyncEngine, *, info: Mapping[str, object] | None = None
+) -> async_sessionmaker[AsyncSession]:
     """Фабрика сессий сервиса.
 
     ``expire_on_commit=False``: прочитанные атрибуты остаются доступны после коммита – репозиторий преобразует
-    строку в доменную сущность, когда транзакция уже закрыта.
+    строку в доменную сущность, когда транзакция уже закрыта. ``info`` копируется в ``session.info`` каждой сессии –
+    так outbox находит, кого разбудить после фиксации (``vks_common.kafka.OUTBOX_NOTIFY``).
     """
-    return async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=False)
+    return async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        info=dict(info) if info else None,
+    )
 
 
 @asynccontextmanager
@@ -46,9 +55,9 @@ class Database:
     порядка запуска.
     """
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, *, session_info: Mapping[str, object] | None = None) -> None:
         self._engine = engine
-        self._session_factory = create_session_factory(engine)
+        self._session_factory = create_session_factory(engine, info=session_info)
 
     @property
     def engine(self) -> AsyncEngine:
