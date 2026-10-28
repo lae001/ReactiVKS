@@ -23,7 +23,7 @@
 | `vks_common.kafka` | Публикация (`OutboxRelay`, `EventProducer`) и потребление (`EventConsumer`) событий Kafka на `aiokafka` | с первым событием |
 | `vks_common.jobs` | Периодические задачи с распределенной блокировкой (см. [background-jobs.md](background-jobs.md)) | с первой задачей |
 | `/metrics` в `vks_common.app` | Метрики Prometheus | с мониторингом (спринт 6) |
-| `vks_contracts` (отдельный пакет) | Pydantic-модели событий и внутренних API ([events.md](../api/events.md)) | с первым событием |
+| `vks_contracts` (отдельный пакет) | Pydantic-модели событий ([events.md](../api/events.md)): конверт, payload, топики, разбор `parse_event`; модели внутренних API – с первым `/internal/*` | ✓ |
 
 ## 2. Устройство сервиса
 
