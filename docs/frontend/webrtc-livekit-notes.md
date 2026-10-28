@@ -62,8 +62,9 @@ Homebrew (`brew install livekit livekit-cli`). **В `deploy/` образ LiveKit
 - Страница собирается, проходят типизация, линтер и модульные тесты. Пагинация галереи на 13 и 25 участниках
   проверена модульным тестом на подменённых дорожках (`LiveKitGallery.test.tsx`), без браузера и сервера.
 - e2e `frontend/e2e/livekit.lk.ts` (два контекста Chromium, `livekit-server --dev`) проверяет видео (`videoWidth > 0`)
-  и входящий звук (`inbound-rtp` audio, рост `bytesReceived` через `getStats`). Проверка звука добавлена в
-  код, но **в этой сессии ещё не запускалась** – запуск и результат записываются в отчёт о статусе спринта.
+  и входящий звук (`inbound-rtp` audio, рост `bytesReceived` через `getStats`). Запуск 2026-10-28
+  (Chromium headless shell 156, `livekit-server` 1.13.9 `--dev`, один воркер): оба теста, этот и
+  `livekit-smoke` (галерея на 10 участников), прошли.
 - Не проверено: реальные устройства и Safari/Firefox, закрытые UDP-порты (см. раздел 5).
 
 ## 5. Открытые вопросы (спринты 2–3)
