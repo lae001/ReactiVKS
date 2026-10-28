@@ -10,6 +10,10 @@ export default defineConfig(({ mode }) => {
   // Адрес бэкенда для dev-прокси; по умолчанию – локальный auth-service (backend/services/auth_service)
   const apiTarget =
     loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_API_TARGET || 'http://127.0.0.1:8001';
+  // Временный dev-сервер вместо meeting-service (dev-api/README.md); удаляется вместе с ним
+  const meetingTarget =
+    loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_MEETING_API_TARGET ||
+    'http://127.0.0.1:8002';
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
@@ -18,6 +22,12 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
+        // Пути meeting-service идут на dev-api (8002), остальное /api – на auth-service (8001).
+        // Правило с регулярным выражением стоит выше общего '/api': Vite берет первое совпадение
+        '^/api/v1/(meetings|join|participants|settings)': {
+          target: meetingTarget,
+          changeOrigin: true,
+        },
         // Один origin для SPA и API: так работает cookie vks_refresh (SameSite=Strict, Path=/api/v1/auth)
         '/api': { target: apiTarget, changeOrigin: true },
         '/ws': { target: 'ws://localhost:8080', ws: true },
