@@ -5,7 +5,8 @@ UV ?= uv
 # Пакеты workspace: mypy проверяет их по одному – у каждого свой tests/conftest.py.
 PACKAGES := $(wildcard libs/*) $(wildcard services/*)
 
-.PHONY: help sync lint format type imports test test-unit cov check migrate migrate-auth migrate-meeting jwt-key run-auth
+.PHONY: help sync lint format type imports test test-unit cov check migrate migrate-auth migrate-meeting jwt-key run-auth \
+	run-meeting
 
 help: ## Список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -67,3 +68,11 @@ run-auth: ## auth-service на http://127.0.0.1:$(AUTH_PORT) (нужны make mi
 	@test -f $(AUTH_ENV_FILE) || { echo "нет $(AUTH_ENV_FILE): cp services/auth_service/.env.example $(AUTH_ENV_FILE)"; exit 1; }
 	$(UV) run --env-file $(AUTH_ENV_FILE) uvicorn auth_service.main:create_application --factory \
 		--host 127.0.0.1 --port $(AUTH_PORT)
+
+MEETING_ENV_FILE ?= services/meeting_service/.env
+MEETING_PORT ?= 8002
+
+run-meeting: ## meeting-service на http://127.0.0.1:$(MEETING_PORT) (нужны make migrate, LiveKit, auth-service и .env)
+	@test -f $(MEETING_ENV_FILE) || { echo "нет $(MEETING_ENV_FILE): cp services/meeting_service/.env.example $(MEETING_ENV_FILE)"; exit 1; }
+	$(UV) run --env-file $(MEETING_ENV_FILE) uvicorn meeting_service.main:create_application --factory \
+		--host 127.0.0.1 --port $(MEETING_PORT)

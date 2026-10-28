@@ -176,3 +176,63 @@ type = "forbidden"
 source_modules = ["auth_service.api"]
 forbidden_modules = ["auth_service.repositories", "auth_service.models", "auth_service.adapters"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "meeting-service: слои сверху вниз (в скобках – слои, которых еще нет)"
+type = "layers"
+containers = ["meeting_service"]
+layers = [
+    "main",
+    "api | (consumers) | (workers)",
+    "schemas | services",
+    "repositories | adapters | (clients)",
+    "models",
+    "domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "meeting-service: домен без фреймворков и инфраструктуры (разрешен только vks_common.errors)"
+type = "forbidden"
+source_modules = ["meeting_service.domain"]
+forbidden_modules = [
+    "fastapi",
+    "starlette",
+    "pydantic",
+    "pydantic_settings",
+    "sqlalchemy",
+    "alembic",
+    "livekit",
+    "aiohttp",
+    "httpx",
+    "structlog",
+    "vks_common.app",
+    "vks_common.auth",
+    "vks_common.clock",
+    "vks_common.config",
+    "vks_common.db",
+    "vks_common.ids",
+    "vks_common.logging",
+    "vks_common.middleware",
+    "vks_common.problem_details",
+    "vks_common.testing",
+]
+
+[[tool.importlinter.contracts]]
+name = "meeting-service: сценарии получают адаптеры через порты и не видят ORM и настройки"
+type = "forbidden"
+source_modules = ["meeting_service.services"]
+forbidden_modules = [
+    "meeting_service.adapters",
+    "meeting_service.models",
+    "meeting_service.settings",
+    "meeting_service.api",
+    "livekit",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "meeting-service: входы вызывают сценарии, а не репозитории, модели и адаптеры"
+type = "forbidden"
+source_modules = ["meeting_service.api"]
+forbidden_modules = ["meeting_service.repositories", "meeting_service.models", "meeting_service.adapters"]
+allow_indirect_imports = true
