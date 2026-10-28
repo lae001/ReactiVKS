@@ -251,13 +251,15 @@ export function createApp({
     return ctx.auth;
   }
 
-  function guest(ctx: Ctx): { meeting: Meeting; participant: Stored } {
+  /** Гость по Participant-токену. Удаленный участник для всех, кроме rejoin, – 401 (токен больше не действует). */
+  function guest(ctx: Ctx, allowRemoved = false): { meeting: Meeting; participant: Stored } {
     if (ctx.auth?.kind !== 'participant') return fail('unauthorized');
     const info = tokens.get(ctx.auth.token);
     if (!info) return fail('unauthorized');
     const meeting = meetings.find((m) => m.id === info.meetingId);
     const participant = meeting && listOf(meeting.id).find((p) => p.id === info.participantId);
     if (!meeting || !participant) return fail('unauthorized');
+    if (participant.is_removed && !allowRemoved) return fail('unauthorized');
     return { meeting, participant };
   }
 
@@ -573,7 +575,7 @@ export function createApp({
   });
 
   route('POST', '/api/v1/participants/me/rejoin', async (ctx) => {
-    const { meeting: m, participant } = guest(ctx);
+    const { meeting: m, participant } = guest(ctx, true);
     if (participant.is_removed) fail('participant_removed');
     if (m.status === 'ended' || m.status === 'cancelled') fail('meeting_ended');
     participant.online = true;

@@ -533,6 +533,14 @@ describe('dev-api: участники и модерация', () => {
     const rejoin = await call('POST', '/api/v1/participants/me/rejoin', { headers: auth });
     expect(rejoin.status).toBe(409);
     expect(rejoin.body).toMatchObject({ code: 'participant_removed' });
+
+    // остальные запросы по токену удаленного участника – 401 (на фронтенде это «Вас удалили…»)
+    const consent = await call('PUT', '/api/v1/participants/me/consent', {
+      headers: auth,
+      body: { decision: 'granted' },
+    });
+    expect(consent.status).toBe(401);
+    expect(live.gateway.updateAttributes).not.toHaveBeenCalled();
   });
 });
 
