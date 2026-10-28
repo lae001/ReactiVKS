@@ -4,23 +4,45 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from meeting_service.domain.meetings import Meeting
+from meeting_service.domain.meetings import Meeting, MeetingStatus
 from meeting_service.domain.participants import Participant
 from vks_contracts.meeting_events import (
     ConsentChanged,
+    MeetingCancelled,
     MeetingCreated,
+    MeetingDeleted,
     MeetingEnded,
     MeetingStarted,
+    MeetingUpdated,
     ParticipantRegistered,
 )
 
-__all__ = ["consent_changed", "meeting_created", "meeting_ended", "meeting_started", "participant_registered"]
+__all__ = [
+    "consent_changed",
+    "meeting_cancelled",
+    "meeting_closed",
+    "meeting_created",
+    "meeting_deleted",
+    "meeting_ended",
+    "meeting_started",
+    "meeting_updated",
+    "participant_registered",
+]
 
 
 def meeting_created(meeting: Meeting) -> MeetingCreated:
     return MeetingCreated(
         meeting_id=meeting.id,
         owner_id=meeting.owner_id,
+        title=meeting.title,
+        scheduled_at=meeting.scheduled_at,
+        analysis_enabled=meeting.analysis_enabled,
+    )
+
+
+def meeting_updated(meeting: Meeting) -> MeetingUpdated:
+    return MeetingUpdated(
+        meeting_id=meeting.id,
         title=meeting.title,
         scheduled_at=meeting.scheduled_at,
         analysis_enabled=meeting.analysis_enabled,
@@ -44,6 +66,21 @@ def meeting_ended(meeting: Meeting) -> MeetingEnded:
     if meeting.ended_at is None or meeting.end_reason is None:  # pragma: no cover - ended() выставляет оба
         raise ValueError("завершенная встреча без ended_at или end_reason")
     return MeetingEnded(meeting_id=meeting.id, ended_at=meeting.ended_at, reason=meeting.end_reason.value)
+
+
+def meeting_cancelled(meeting: Meeting) -> MeetingCancelled:
+    return MeetingCancelled(meeting_id=meeting.id)
+
+
+def meeting_closed(meeting: Meeting) -> MeetingEnded | MeetingCancelled:
+    """Событие закрытия встречи перед удалением (``Meeting.closed``): завершение или отмена."""
+    if meeting.status is MeetingStatus.CANCELLED:
+        return meeting_cancelled(meeting)
+    return meeting_ended(meeting)
+
+
+def meeting_deleted(meeting: Meeting) -> MeetingDeleted:
+    return MeetingDeleted(meeting_id=meeting.id)
 
 
 def participant_registered(participant: Participant) -> ParticipantRegistered:

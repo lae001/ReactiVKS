@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from meeting_service.domain.identifiers import UserId
@@ -21,3 +24,15 @@ class OrganizerSettingsRepository:
         if row is None:
             return AnalysisDefaults()
         return AnalysisDefaults(enabled=row.analysis_enabled_default, fps=row.analysis_fps_default)
+
+    async def save_defaults(self, user_id: UserId, defaults: AnalysisDefaults, *, now: datetime) -> None:
+        """Записать настройки; строки еще нет – создать. Из одновременных сохранений побеждает последнее."""
+        values = {
+            "analysis_enabled_default": defaults.enabled,
+            "analysis_fps_default": defaults.fps,
+            "updated_at": now,
+        }
+        statement = insert(OrganizerSettingsRow).values(user_id=user_id, **values)
+        await self._session.execute(
+            statement.on_conflict_do_update(index_elements=[OrganizerSettingsRow.user_id], set_=values)
+        )

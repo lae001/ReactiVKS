@@ -128,6 +128,26 @@ class MeetingRepository:
             )
         )
 
+    async def save_details(self, meeting: Meeting, *, now: datetime) -> None:
+        """Записать название, время и параметры анализа."""
+        await self._session.execute(
+            update(MeetingRow)
+            .where(MeetingRow.id == meeting.id)
+            .values(
+                title=meeting.title,
+                scheduled_at=meeting.scheduled_at,
+                analysis_enabled=meeting.analysis_enabled,
+                analysis_fps=meeting.analysis_fps,
+                updated_at=now,
+            )
+        )
+
+    async def soft_delete(self, meeting_id: MeetingId, *, now: datetime) -> None:
+        """Пометить удаленной: встреча пропадает из всех запросов, строку физически удалит очистка через 30 дней."""
+        await self._session.execute(
+            update(MeetingRow).where(MeetingRow.id == meeting_id).values(deleted_at=now, updated_at=now)
+        )
+
     async def overview(self, meeting: Meeting) -> MeetingOverview:
         statement = select(func.count(ParticipantRow.id)).where(ParticipantRow.meeting_id == meeting.id)
         count = (await self._session.execute(statement)).scalar_one()

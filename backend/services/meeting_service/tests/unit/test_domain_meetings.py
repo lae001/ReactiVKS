@@ -8,6 +8,7 @@ from meeting_service.domain.errors import (
     InvalidTitle,
     MeetingCancelled,
     MeetingEnded,
+    MeetingNotEditable,
     MeetingNotStarted,
 )
 from meeting_service.domain.identifiers import MeetingId, UserId
@@ -16,6 +17,7 @@ from meeting_service.domain.meetings import (
     InvalidCursor,
     Meeting,
     MeetingCursor,
+    MeetingEdit,
     MeetingStatus,
     Organizer,
     invite_code_from,
@@ -155,3 +157,73 @@ def test_cursor_survives_round_trip() -> None:
 def test_foreign_cursor_is_refused(value: str) -> None:
     with pytest.raises(InvalidCursor):
         MeetingCursor.decode(value)
+
+
+def test_edit_changes_title_and_schedule_of_scheduled_meeting() -> None:
+    meeting = make_meeting(scheduled_at=NOW + timedelta(days=1))
+
+    edited = meeting.edited(MeetingEdit(title="  Ретро ", scheduled_at=None, analysis_fps=5))
+
+    assert (edited.title, edited.scheduled_at, edited.analysis_fps) == ("Ретро", None, 5)
+
+
+def test_edit_without_changes_returns_same_meeting() -> None:
+    meeting = make_meeting()
+
+    assert meeting.edited(MeetingEdit(title="Планерка", analysis_enabled=True)) is meeting
+
+
+@pytest.mark.parametrize("status", [MeetingStatus.ACTIVE, MeetingStatus.ENDED, MeetingStatus.CANCELLED])
+def test_title_can_be_changed_in_any_status(status: MeetingStatus) -> None:
+    meeting = make_meeting(status=status, started_at=NOW, ended_at=NOW)
+
+    assert meeting.edited(MeetingEdit(title="Итоги")).title == "Итоги"
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        pytest.param(MeetingEdit(analysis_enabled=False), id="analysis"),
+        pytest.param(MeetingEdit(analysis_fps=2), id="fps"),
+        pytest.param(MeetingEdit(scheduled_at=NOW), id="schedule"),
+    ],
+)
+def test_started_meeting_keeps_schedule_and_analysis(edit: MeetingEdit) -> None:
+    meeting = make_meeting(status=MeetingStatus.ACTIVE, started_at=NOW)
+
+    with pytest.raises(MeetingNotEditable):
+        meeting.edited(edit)
+
+
+def test_same_analysis_settings_are_accepted_after_start() -> None:
+    meeting = make_meeting(status=MeetingStatus.ACTIVE, started_at=NOW)
+
+    assert meeting.edited(MeetingEdit(analysis_enabled=True, analysis_fps=3)) is meeting
+
+
+def test_edit_checks_title_and_fps() -> None:
+    meeting = make_meeting()
+
+    with pytest.raises(InvalidTitle):
+        meeting.edited(MeetingEdit(title=" "))
+    with pytest.raises(InvalidAnalysisFps):
+        meeting.edited(MeetingEdit(analysis_fps=6))
+
+
+def test_closing_active_meeting_ends_it_by_organizer() -> None:
+    meeting = make_meeting(status=MeetingStatus.ACTIVE, started_at=NOW)
+
+    closed = meeting.closed(NOW + timedelta(hours=1))
+
+    assert (closed.status, closed.end_reason) == (MeetingStatus.ENDED, EndReason.ORGANIZER)
+
+
+def test_closing_scheduled_meeting_cancels_it() -> None:
+    assert make_meeting().closed(NOW).status is MeetingStatus.CANCELLED
+
+
+@pytest.mark.parametrize("status", [MeetingStatus.ENDED, MeetingStatus.CANCELLED])
+def test_closing_closed_meeting_changes_nothing(status: MeetingStatus) -> None:
+    meeting = make_meeting(status=status, started_at=NOW, ended_at=NOW)
+
+    assert meeting.closed(NOW) is meeting

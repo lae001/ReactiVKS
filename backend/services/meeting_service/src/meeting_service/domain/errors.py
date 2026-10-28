@@ -10,6 +10,7 @@ __all__ = [
     "LiveKitUnavailable",
     "MeetingCancelled",
     "MeetingEnded",
+    "MeetingNotEditable",
     "MeetingNotFound",
     "MeetingNotStarted",
     "NoticeOutdated",
@@ -55,6 +56,13 @@ class MeetingEnded(Conflict):
 class MeetingCancelled(Conflict):
     code = "meeting_cancelled"
     title = "Meeting is cancelled"
+
+
+class MeetingNotEditable(Conflict):
+    """Время и параметры анализа меняются только у встречи, которая еще не началась."""
+
+    code = "meeting_not_editable"
+    title = "Meeting can no longer be changed"
 
 
 class ConsentRequired(Conflict):
