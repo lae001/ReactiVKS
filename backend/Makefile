@@ -6,7 +6,7 @@ UV ?= uv
 PACKAGES := $(wildcard libs/*) $(wildcard services/*)
 
 .PHONY: help sync lint format type imports test test-unit cov check migrate migrate-auth migrate-meeting jwt-key run-auth \
-	run-meeting
+	run-meeting contracts-snapshot
 
 help: ## Список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -45,6 +45,9 @@ cov: ## Тесты с покрытием и порогом 60 %
 	$(UV) run pytest --cov --cov-report=term --cov-fail-under=60
 
 check: lint type imports test ## Все проверки, как в CI
+
+contracts-snapshot: ## Обновить снимок JSON Schema событий (вместе с docs/api/events.md)
+	$(UV) run vks-contracts-schema > libs/vks_contracts/tests/snapshots/events.schema.json
 
 # БД из deploy/docker-compose.dev.yml; для другой – make migrate AUTH_DATABASE_URL=… MEETING_DATABASE_URL=…
 AUTH_DATABASE_URL ?= postgresql+asyncpg://auth_svc:auth-dev-password@localhost:5432/vks

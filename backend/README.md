@@ -21,6 +21,7 @@ Python-сервисы и общая библиотека в одном uv worksp
 | `make test` / `make test-unit` | Все тесты / только без Docker |
 | `make cov` | Тесты с покрытием, порог 60 % |
 | `make check` | Все проверки, как в CI |
+| `make contracts-snapshot` | Обновить снимок JSON Schema событий – вместе с `docs/api/events.md` |
 | `make migrate` | Миграции всех сервисов к БД из `deploy/docker-compose.dev.yml` (`migrate-auth`, `migrate-meeting` – по одному) |
 | `make jwt-key` | Ключ подписи JWT для локального запуска (`secrets/`, в git не попадает) |
 | `make run-auth` | auth-service на http://127.0.0.1:8001 (`AUTH_PORT=…` – другой порт) |
@@ -72,6 +73,7 @@ Pre-commit (из корня репозитория, один раз на кло�
 backend/
 ├── conftest.py          # общие фикстуры тестов (PostgreSQL в контейнере)
 ├── libs/vks_common/     # шасси: конфиг, журналы, ошибки, фабрика приложения, БД, проверка JWT
+├── libs/vks_contracts/  # контракты событий Kafka: конверт, payload, топики (только pydantic)
 └── services/
     ├── auth_service/    # учетные записи, вход, JWT RS256 и JWKS
     └── meeting_service/ # встречи, участники, согласия, токены LiveKit

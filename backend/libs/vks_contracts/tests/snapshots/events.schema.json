@@ -1,0 +1,777 @@
+{
+  "envelope": {
+    "description": "Значение сообщения Kafka: метаданные и payload.\n\n``payload`` в конверте – словарь: модель payload выбирается по ``type`` и ``version`` (:func:`parse_event`).",
+    "properties": {
+      "correlation_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "request_id исходного запроса",
+        "title": "Correlation Id"
+      },
+      "event_id": {
+        "description": "UUIDv7 – для идемпотентной обработки",
+        "format": "uuid",
+        "title": "Event Id",
+        "type": "string"
+      },
+      "occurred_at": {
+        "format": "date-time",
+        "title": "Occurred At",
+        "type": "string"
+      },
+      "payload": {
+        "additionalProperties": true,
+        "title": "Payload",
+        "type": "object"
+      },
+      "producer": {
+        "examples": [
+          "meeting-service"
+        ],
+        "minLength": 1,
+        "title": "Producer",
+        "type": "string"
+      },
+      "type": {
+        "title": "Type",
+        "type": "string"
+      },
+      "version": {
+        "minimum": 1,
+        "title": "Version",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "event_id",
+      "type",
+      "version",
+      "occurred_at",
+      "producer",
+      "payload"
+    ],
+    "title": "EventEnvelope",
+    "type": "object"
+  },
+  "events": {
+    "consent.changed.v1": {
+      "payload": {
+        "properties": {
+          "consent_state": {
+            "enum": [
+              "granted",
+              "denied",
+              "revoked",
+              "not_required"
+            ],
+            "title": "Consent State",
+            "type": "string"
+          },
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "notice_version": {
+            "title": "Notice Version",
+            "type": "string"
+          },
+          "participant_id": {
+            "format": "uuid",
+            "title": "Participant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "participant_id",
+          "consent_state",
+          "notice_version",
+          "decided_at"
+        ],
+        "title": "ConsentChanged",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "emotion.sample.v1": {
+      "payload": {
+        "$defs": {
+          "EmotionProbabilities": {
+            "description": "Сглаженные вероятности 7 классов.",
+            "properties": {
+              "angry": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Angry",
+                "type": "number"
+              },
+              "disgust": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Disgust",
+                "type": "number"
+              },
+              "fear": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Fear",
+                "type": "number"
+              },
+              "happy": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Happy",
+                "type": "number"
+              },
+              "neutral": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Neutral",
+                "type": "number"
+              },
+              "sad": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Sad",
+                "type": "number"
+              },
+              "surprise": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Surprise",
+                "type": "number"
+              }
+            },
+            "required": [
+              "angry",
+              "disgust",
+              "fear",
+              "happy",
+              "sad",
+              "surprise",
+              "neutral"
+            ],
+            "title": "EmotionProbabilities",
+            "type": "object"
+          }
+        },
+        "description": "Отсчет распознавания по одному участнику. Без координат лица и без кадров (ADR-009).",
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confidence"
+          },
+          "dominant": {
+            "anyOf": [
+              {
+                "enum": [
+                  "angry",
+                  "disgust",
+                  "fear",
+                  "happy",
+                  "sad",
+                  "surprise",
+                  "neutral"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dominant"
+          },
+          "face_box_area": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Доля площади кадра",
+            "title": "Face Box Area"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "participant_id": {
+            "format": "uuid",
+            "title": "Participant Id",
+            "type": "string"
+          },
+          "probs": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EmotionProbabilities"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "raw_dominant": {
+            "anyOf": [
+              {
+                "enum": [
+                  "angry",
+                  "disgust",
+                  "fear",
+                  "happy",
+                  "sad",
+                  "surprise",
+                  "neutral"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "До сглаживания – для отладки качества",
+            "title": "Raw Dominant"
+          },
+          "state": {
+            "enum": [
+              "analyzing",
+              "no_face",
+              "camera_off",
+              "no_consent"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "ts": {
+            "description": "Время получения кадра сервисом",
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "participant_id",
+          "ts",
+          "state",
+          "probs",
+          "model_version"
+        ],
+        "title": "EmotionSample",
+        "type": "object"
+      },
+      "topic": "emotion.samples"
+    },
+    "meeting.cancelled.v1": {
+      "payload": {
+        "properties": {
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id"
+        ],
+        "title": "MeetingCancelled",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "meeting.created.v1": {
+      "payload": {
+        "properties": {
+          "analysis_enabled": {
+            "title": "Analysis Enabled",
+            "type": "boolean"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "owner_id",
+          "title",
+          "scheduled_at",
+          "analysis_enabled"
+        ],
+        "title": "MeetingCreated",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "meeting.deleted.v1": {
+      "payload": {
+        "description": "Потребители удаляют свои данные встречи.",
+        "properties": {
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id"
+        ],
+        "title": "MeetingDeleted",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "meeting.ended.v1": {
+      "payload": {
+        "properties": {
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "organizer",
+              "empty_timeout",
+              "admin"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "ended_at",
+          "reason"
+        ],
+        "title": "MeetingEnded",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "meeting.started.v1": {
+      "payload": {
+        "properties": {
+          "analysis_enabled": {
+            "title": "Analysis Enabled",
+            "type": "boolean"
+          },
+          "analysis_fps": {
+            "maximum": 5,
+            "minimum": 2,
+            "title": "Analysis Fps",
+            "type": "integer"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "owner_id",
+          "title",
+          "started_at",
+          "analysis_enabled",
+          "analysis_fps"
+        ],
+        "title": "MeetingStarted",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "meeting.updated.v1": {
+      "payload": {
+        "properties": {
+          "analysis_enabled": {
+            "title": "Analysis Enabled",
+            "type": "boolean"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "title",
+          "scheduled_at",
+          "analysis_enabled"
+        ],
+        "title": "MeetingUpdated",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "ml.status.v1": {
+      "payload": {
+        "description": "Состояние анализа встречи: при старте и остановке задания, при смене состояния и каждые 5 с.",
+        "properties": {
+          "effective_fps": {
+            "minimum": 0,
+            "title": "Effective Fps",
+            "type": "number"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "degraded",
+              "stopped"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "target_fps": {
+            "maximum": 5,
+            "minimum": 2,
+            "title": "Target Fps",
+            "type": "integer"
+          },
+          "worker_id": {
+            "title": "Worker Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "state",
+          "effective_fps",
+          "target_fps",
+          "worker_id"
+        ],
+        "title": "MlStatus",
+        "type": "object"
+      },
+      "topic": "ml.status"
+    },
+    "participant.joined.v1": {
+      "payload": {
+        "properties": {
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "participant_id": {
+            "format": "uuid",
+            "title": "Participant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "participant_id",
+          "joined_at"
+        ],
+        "title": "ParticipantJoined",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "participant.left.v1": {
+      "payload": {
+        "properties": {
+          "left_at": {
+            "format": "date-time",
+            "title": "Left At",
+            "type": "string"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "participant_id": {
+            "format": "uuid",
+            "title": "Participant Id",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "left",
+              "removed",
+              "disconnected"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "participant_id",
+          "left_at",
+          "reason"
+        ],
+        "title": "ParticipantLeft",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "participant.registered.v1": {
+      "payload": {
+        "properties": {
+          "consent_state": {
+            "enum": [
+              "granted",
+              "denied",
+              "revoked",
+              "not_required"
+            ],
+            "title": "Consent State",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "participant_id": {
+            "format": "uuid",
+            "title": "Participant Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "organizer",
+              "guest"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "participant_id",
+          "display_name",
+          "role",
+          "consent_state"
+        ],
+        "title": "ParticipantRegistered",
+        "type": "object"
+      },
+      "topic": "meeting.events"
+    },
+    "report.failed.v1": {
+      "payload": {
+        "properties": {
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "owner_id",
+          "reason"
+        ],
+        "title": "ReportFailed",
+        "type": "object"
+      },
+      "topic": "report.events"
+    },
+    "report.ready.v1": {
+      "payload": {
+        "properties": {
+          "meeting_id": {
+            "format": "uuid",
+            "title": "Meeting Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "owner_id"
+        ],
+        "title": "ReportReady",
+        "type": "object"
+      },
+      "topic": "report.events"
+    },
+    "user.blocked.v1": {
+      "payload": {
+        "properties": {
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "UserBlocked",
+        "type": "object"
+      },
+      "topic": "user.events"
+    },
+    "user.deleted.v1": {
+      "payload": {
+        "description": "meeting-service удаляет встречи пользователя (с публикацией ``meeting.deleted``).",
+        "properties": {
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "UserDeleted",
+        "type": "object"
+      },
+      "topic": "user.events"
+    },
+    "user.unblocked.v1": {
+      "payload": {
+        "properties": {
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "UserUnblocked",
+        "type": "object"
+      },
+      "topic": "user.events"
+    }
+  }
+}
