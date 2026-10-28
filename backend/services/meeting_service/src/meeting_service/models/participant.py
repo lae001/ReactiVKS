@@ -31,7 +31,9 @@ class ParticipantRow(Base):
     participant_token_hash: Mapped[bytes | None] = mapped_column(LargeBinary)
     # Удален организатором: повторный вход по токену этого участника запрещен.
     is_removed: Mapped[bool] = mapped_column(server_default=false())
+    # Присутствие в комнате – по вебхукам LiveKit: в комнате, если последний вход позже последнего выхода.
     first_joined_at: Mapped[datetime | None]
+    last_joined_at: Mapped[datetime | None]
     last_left_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())

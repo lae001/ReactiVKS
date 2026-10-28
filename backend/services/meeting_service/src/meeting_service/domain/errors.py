@@ -1,6 +1,6 @@
 """Ошибки, которые обнаруживают правила meeting-service. Коды – из реестра docs/api/rest-api.md."""
 
-from vks_common.errors import Conflict, DependencyUnavailable, NotFound, Unauthorized, ValidationFailed
+from vks_common.errors import Conflict, DependencyUnavailable, Forbidden, NotFound, Unauthorized, ValidationFailed
 
 __all__ = [
     "ConsentRequired",
@@ -10,12 +10,15 @@ __all__ = [
     "LiveKitUnavailable",
     "MeetingCancelled",
     "MeetingEnded",
+    "MeetingFull",
     "MeetingNotEditable",
     "MeetingNotFound",
     "MeetingNotStarted",
     "NoticeOutdated",
+    "OrganizerBlocked",
     "ParticipantRemoved",
     "ParticipantTokenInvalid",
+    "WebhookRejected",
 ]
 
 
@@ -65,6 +68,20 @@ class MeetingNotEditable(Conflict):
     title = "Meeting can no longer be changed"
 
 
+class MeetingFull(Conflict):
+    """В комнате уже 10 участников – предел встречи."""
+
+    code = "meeting_full"
+    title = "Meeting is full"
+
+
+class OrganizerBlocked(Forbidden):
+    """Администратор заблокировал организатора: его access-токен еще действует, но во встречи он не входит."""
+
+    code = "user_blocked"
+    title = "User is blocked"
+
+
 class ConsentRequired(Conflict):
     """Анализ во встрече включен, а решения о согласии в запросе нет."""
 
@@ -95,3 +112,7 @@ class LiveKitUnavailable(DependencyUnavailable):
 
     code = "livekit_unavailable"
     title = "Media server is unavailable"
+
+
+class WebhookRejected(Unauthorized):
+    """Вебхук без подписи LiveKit или с чужой подписью."""

@@ -6,5 +6,15 @@ from meeting_service.models.meeting import MeetingRow
 from meeting_service.models.organizer_settings import OrganizerSettingsRow
 from meeting_service.models.outbox import OUTBOX
 from meeting_service.models.participant import ParticipantRow
+from meeting_service.models.webhooks import BlockedUserRow, ProcessedWebhookRow
 
-__all__ = ["OUTBOX", "Base", "ConsentRow", "MeetingRow", "OrganizerSettingsRow", "ParticipantRow"]
+__all__ = [
+    "OUTBOX",
+    "Base",
+    "BlockedUserRow",
+    "ConsentRow",
+    "MeetingRow",
+    "OrganizerSettingsRow",
+    "ParticipantRow",
+    "ProcessedWebhookRow",
+]

@@ -218,6 +218,15 @@ class Meeting:
             return replace(self, status=MeetingStatus.CANCELLED)
         return self
 
+    def room_closed(self, now: datetime) -> Meeting:
+        """LiveKit закрыл пустую комнату (``room_finished``): идущая встреча завершается по ``empty_timeout``.
+
+        Встреча, завершенная организатором раньше (его ``DeleteRoom`` и вызвал вебхук), остается как есть.
+        """
+        if self.status is MeetingStatus.ACTIVE:
+            return self.ended(now, EndReason.EMPTY_TIMEOUT)
+        return self
+
     def _ensure_not_closed(self) -> None:
         if self.status is MeetingStatus.ENDED:
             raise MeetingEnded()

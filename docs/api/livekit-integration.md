@@ -53,12 +53,14 @@ emotion-ml-service. Клиентская часть использует офи�
 
 ## Вебхуки (LiveKit → meeting-service)
 
-Адрес: `http://meeting-service:8002/webhooks/livekit` (внутренняя сеть). Проверка подписи – `WebhookReceiver` SDK.
+Адрес: `http://meeting-service:8002/webhooks/livekit` (внутренняя сеть). Проверка подписи – `WebhookReceiver` SDK
+(JWT ключом API с SHA-256 тела; не та подпись – `401`). Каждый вебхук обрабатывается один раз: `event.id` отмечается в
+`processed_webhooks` в той же транзакции, что и его эффект. Прочие события принимаются (`204`) и пропускаются.
 
 | Событие | Обработка |
 |---|---|
-| `participant_joined` | `first_joined_at`, событие `participant.joined` (для агента – игнорируется) |
-| `participant_left` | `last_left_at`, событие `participant.left` |
+| `participant_joined` | `first_joined_at`, `last_joined_at`, событие `participant.joined` (для агента – игнорируется) |
+| `participant_left` | `last_left_at`, событие `participant.left`: `reason` – `left` (вышел сам), `removed` (удален организатором), иначе `disconnected` |
 | `room_finished` | Если встреча `active` – перевод в `ended` (`reason = empty_timeout`), событие `meeting.ended` |
 | `track_published` | Не используется в MVP (ML получает события напрямую из комнаты) |
 

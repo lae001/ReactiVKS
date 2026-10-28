@@ -154,7 +154,10 @@ async def delete_meeting(meeting_id: UUID, organizer: CallingOrganizer, scenario
     summary="Вход организатора",
     responses={
         **_NOT_FOUND,
-        status.HTTP_409_CONFLICT: {"description": "meeting_ended | meeting_cancelled | consent_required"},
+        status.HTTP_403_FORBIDDEN: {"description": "user_blocked – организатор заблокирован администратором"},
+        status.HTTP_409_CONFLICT: {
+            "description": "meeting_ended | meeting_cancelled | meeting_full | consent_required"
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "livekit_unavailable"},
     },
 )
@@ -169,7 +172,6 @@ async def join_meeting(
 
     Решение о согласии обязательно, если в встрече включен анализ эмоций.
     """
-    # TODO(EMO-69): 403 user_blocked – по проекции блокировок из user.events.
     consent = body.consent if body is not None else None
     result = await scenario.execute(
         organizer=organizer,

@@ -100,6 +100,19 @@ class MeetingRepository:
         row = (await self._session.execute(_owned(meeting_id, owner_id).with_for_update())).scalar_one_or_none()
         return _to_domain(row) if row is not None else None
 
+    async def lock(self, meeting_id: MeetingId) -> Meeting | None:
+        """Без области владельца, под ``FOR UPDATE`` – для вебхука LiveKit: он приходит от имени комнаты."""
+        statement = (
+            select(MeetingRow).where(MeetingRow.id == meeting_id, MeetingRow.deleted_at.is_(None)).with_for_update()
+        )
+        row = (await self._session.execute(statement)).scalar_one_or_none()
+        return _to_domain(row) if row is not None else None
+
+    async def list_owned_ids(self, owner_id: UserId) -> list[MeetingId]:
+        """Все неудаленные встречи организатора – для удаления по ``user.deleted``."""
+        statement = select(MeetingRow.id).where(MeetingRow.owner_id == owner_id, MeetingRow.deleted_at.is_(None))
+        return [MeetingId(meeting_id) for meeting_id in (await self._session.execute(statement)).scalars()]
+
     async def get(self, meeting_id: MeetingId) -> Meeting | None:
         """Без области владельца – для гостя, чье право на встречу подтверждено его токеном."""
         statement = select(MeetingRow).where(MeetingRow.id == meeting_id, MeetingRow.deleted_at.is_(None))

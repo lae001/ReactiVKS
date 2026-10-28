@@ -4,6 +4,9 @@
 работе. Каждый тест работает в транзакции, которая откатывается по его окончании.
 """
 
+import base64
+import hashlib
+import itertools
 from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,6 +15,10 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from fastapi import FastAPI
+from google.protobuf.json_format import MessageToJson
+from livekit import api
+from livekit.protocol.models import DisconnectReason, ParticipantInfo, Room
+from livekit.protocol.webhook import WebhookEvent
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -164,3 +171,66 @@ def organizer_headers(tokens: TokenFactory) -> OrganizerHeaders:
         return {"Authorization": f"Bearer {tokens.issue(user_id=user_id or uuid4(), name=name)}"}
 
     return headers
+
+
+class LiveKitWebhooks:
+    """Вебхуки LiveKit, подписанные как их подписывает сервер: JWT ключом API с SHA-256 тела.
+
+    Каждое событие получает свой ``id`` и момент на секунду позже предыдущего – как последовательность в комнате.
+    """
+
+    def __init__(self, client: httpx.AsyncClient, settings: MeetingSettings) -> None:
+        self._client = client
+        self._api_key = settings.livekit_api_key
+        self._api_secret = settings.livekit_api_secret.get_secret_value()
+        self._sequence = itertools.count(1)
+        self._started = int(datetime(2026, 11, 20, 7, 0, tzinfo=UTC).timestamp())
+
+    def body(
+        self,
+        event: str,
+        *,
+        room: str,
+        identity: str | None = None,
+        event_id: str | None = None,
+        created_at: int | None = None,
+        is_agent: bool = False,
+        disconnect_reason: int = DisconnectReason.CLIENT_INITIATED,
+    ) -> str:
+        number = next(self._sequence)
+        message = WebhookEvent(
+            event=event,
+            id=event_id or f"EV_{uuid4().hex[:12]}",
+            created_at=created_at if created_at is not None else self._started + number,
+            room=Room(name=room),
+        )
+        if identity is not None:
+            message.participant.CopyFrom(
+                ParticipantInfo(
+                    identity=identity,
+                    kind=ParticipantInfo.Kind.AGENT if is_agent else ParticipantInfo.Kind.STANDARD,
+                    disconnect_reason=disconnect_reason,  # type: ignore[arg-type]  # protobuf-перечисление – int
+                )
+            )
+        return MessageToJson(message)
+
+    def sign(self, body: str) -> str:
+        digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+        return api.AccessToken(self._api_key, self._api_secret).with_sha256(digest).to_jwt()
+
+    async def post(self, body: str, *, authorization: str | None = None) -> httpx.Response:
+        return await self._client.post(
+            "/webhooks/livekit",
+            content=body,
+            headers={"Authorization": authorization or self.sign(body), "Content-Type": "application/webhook+json"},
+        )
+
+    async def send(self, event: str, **fields: object) -> httpx.Response:
+        response = await self.post(self.body(event, **fields))  # type: ignore[arg-type]  # поля body по имени
+        assert response.status_code == 204, response.text
+        return response
+
+
+@pytest.fixture
+def webhooks(client: httpx.AsyncClient, settings: MeetingSettings) -> LiveKitWebhooks:
+    return LiveKitWebhooks(client, settings)

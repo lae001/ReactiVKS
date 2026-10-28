@@ -190,7 +190,7 @@ type = "layers"
 containers = ["meeting_service"]
 layers = [
     "main",
-    "api | (consumers) | (workers)",
+    "api | consumers | (workers)",
     "schemas | services",
     "repositories | adapters | (clients)",
     "models",
@@ -240,6 +240,6 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "meeting-service: входы вызывают сценарии, а не репозитории, модели и адаптеры"
 type = "forbidden"
-source_modules = ["meeting_service.api"]
+source_modules = ["meeting_service.api", "meeting_service.consumers"]
 forbidden_modules = ["meeting_service.repositories", "meeting_service.models", "meeting_service.adapters"]
 allow_indirect_imports = true

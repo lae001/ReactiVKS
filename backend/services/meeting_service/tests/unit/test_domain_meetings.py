@@ -227,3 +227,18 @@ def test_closing_closed_meeting_changes_nothing(status: MeetingStatus) -> None:
     meeting = make_meeting(status=status, started_at=NOW, ended_at=NOW)
 
     assert meeting.closed(NOW) is meeting
+
+
+def test_closed_room_ends_active_meeting_by_empty_timeout() -> None:
+    meeting = make_meeting(status=MeetingStatus.ACTIVE, started_at=NOW)
+
+    ended = meeting.room_closed(NOW + timedelta(minutes=5))
+
+    assert (ended.status, ended.end_reason) == (MeetingStatus.ENDED, EndReason.EMPTY_TIMEOUT)
+
+
+@pytest.mark.parametrize("status", [MeetingStatus.SCHEDULED, MeetingStatus.ENDED, MeetingStatus.CANCELLED])
+def test_closed_room_leaves_meeting_that_is_not_active(status: MeetingStatus) -> None:
+    meeting = make_meeting(status=status, started_at=NOW, ended_at=NOW)
+
+    assert meeting.room_closed(NOW) is meeting

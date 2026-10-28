@@ -19,7 +19,7 @@ router = APIRouter(
 @router.post(
     "/me/rejoin",
     summary="Новый токен LiveKit",
-    responses={status.HTTP_409_CONFLICT: {"description": "meeting_ended | participant_removed"}},
+    responses={status.HTTP_409_CONFLICT: {"description": "meeting_ended | participant_removed | meeting_full"}},
 )
 async def rejoin(token: GuestToken, scenario: RejoinAsGuestScenario) -> JoinResultResponse:
     """Гость после перезагрузки вкладки получает новый токен LiveKit, не проходя лобби заново."""
