@@ -153,7 +153,9 @@ cookie очищается. Выданный access-токен действует
 
 - `GET` → `200 User`.
 - `PATCH {"display_name"}` → `200 User`. Claim `name` в access-токене обновится при следующем `refresh`.
-- `POST /users/me/password {"current_password", "new_password"}` → `204` (остальные сессии завершаются); `401 invalid_credentials`;
+- `POST /users/me/password {"current_password", "new_password"}` → `204`: все сессии завершаются (refresh-токены
+  отзываются – cookie `vks_refresh` с `Path=/api/v1/auth` сюда не приходит, и текущую сессию сервер не отличает),
+  выданный access-токен действует до истечения срока, клиент входит заново с новым паролем; `401 invalid_credentials`;
   `422` (политика пароля – как при регистрации).
 
 ### `/admin/users`

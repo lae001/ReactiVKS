@@ -80,6 +80,17 @@ class RefreshTokenRepository:
             raise TypeError("UPDATE должен вернуть CursorResult")
         return result.rowcount
 
+    async def revoke_all_for_user(self, user_id: UserId, *, at: datetime) -> int:
+        """Отозвать все живые токены пользователя – все его сессии на всех устройствах. Возвращает, сколько."""
+        result = await self._session.execute(
+            update(RefreshTokenRow)
+            .where(RefreshTokenRow.user_id == user_id, RefreshTokenRow.revoked_at.is_(None))
+            .values(revoked_at=at)
+        )
+        if not isinstance(result, CursorResult):  # pragma: no cover - UPDATE всегда возвращает CursorResult
+            raise TypeError("UPDATE должен вернуть CursorResult")
+        return result.rowcount
+
 
 def _to_domain(row: RefreshTokenRow) -> RefreshToken:
     return RefreshToken(
