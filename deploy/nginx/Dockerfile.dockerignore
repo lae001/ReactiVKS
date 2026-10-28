@@ -1,0 +1,8 @@
+# Контекст образа nginx – корень репозитория; нужны только frontend/ и конфигурация nginx.
+*
+!frontend
+!deploy/nginx/nginx.conf
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report

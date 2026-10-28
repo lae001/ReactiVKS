@@ -90,6 +90,13 @@ LiveKit работает в `network_mode: host`: для медиатрафик�
 
 Суммарные лимиты ≈ 11,5 ГБ ОЗУ – остается запас для ОС и кеша страниц (важен для Kafka).
 
+**Состояние (EMO-71, спринт 4).** В `deploy/docker-compose.yml` – `nginx` (статика SPA и маршрутизация `/api/v1/*`,
+HTTP без TLS), `auth-service`, `meeting-service`, `migrate-auth` и `migrate-meeting`, `postgres`, `redis`, `kafka`,
+`kafka-init`, `livekit` (конфигурация – переменной `LIVEKIT_CONFIG`, вебхуки на `127.0.0.1:8002`), `kafka-ui` в профиле
+`dev`. Образы Python-сервисов собирает один `backend/Dockerfile` с аргументом `PACKAGE`. Сервисы следующих спринтов
+(`realtime`, `analytics`, `emotion-ml`), TLS и TURN/TLS через `stream`, `pg-backup` и профиль `monitoring` добавляются
+вместе с ними. Запуск – [deploy/README.md](../../deploy/README.md).
+
 Основные параметры брокера (`deploy/kafka/server.properties` или переменные окружения образа):
 
 | Параметр | Значение | Зачем |

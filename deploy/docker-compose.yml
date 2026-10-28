@@ -1,0 +1,280 @@
+# Система целиком в контейнерах (EMO-71; 06-deployment.md, раздел 6.4): nginx со статикой SPA, auth- и
+# meeting-service, PostgreSQL, Redis, Kafka, LiveKit. Секреты – deploy/.env (шаблон – .env.example) и
+# deploy/secrets/jwt-private.pem.
+#
+#   cp deploy/.env.example deploy/.env      # заполнить пароли и ключи
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build --wait
+#
+# Порядок старта: postgres → migrate-* (миграции ролями сервисов) → сервисы → nginx; kafka → kafka-init (топики).
+# Не запускается одновременно с docker-compose.dev.yml: LiveKit обоих в сети хоста на одних портах.
+name: vks
+
+x-backend: &backend
+  restart: unless-stopped
+  networks: [backend]
+  # LiveKit в сети хоста: сервисы ходят к нему через host.docker.internal.
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+services:
+  nginx:
+    build:
+      context: ..
+      dockerfile: deploy/nginx/Dockerfile
+    image: vks/nginx
+    restart: unless-stopped
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      meeting-service:
+        condition: service_healthy
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+    networks: [edge, backend]
+
+  auth-service:
+    <<: *backend
+    build:
+      context: ../backend
+      args:
+        PACKAGE: auth-service
+    image: vks/auth-service
+    # Compose без Swarm монтирует секрет с правами файла на хосте (0600): процесс читает ключ под UID его владельца.
+    user: "${SECRETS_UID:-1000}"
+    command:
+      - uvicorn
+      - auth_service.main:create_application
+      - --factory
+      - --host=0.0.0.0
+      - --port=8001
+      # За nginx: адрес клиента – из X-Forwarded-For.
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    environment:
+      ENV: ${ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://auth_svc:${AUTH_DB_PASSWORD:?}@postgres:5432/vks
+      JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private_key
+      AUTH_REGISTRATION_ENABLED: ${AUTH_REGISTRATION_ENABLED:-true}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    secrets: [jwt_private_key]
+    depends_on:
+      migrate-auth:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck: &ready
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  meeting-service:
+    <<: *backend
+    build:
+      context: ../backend
+      args:
+        PACKAGE: meeting-service
+    image: vks/meeting-service
+    command:
+      - uvicorn
+      - meeting_service.main:create_application
+      - --factory
+      - --host=0.0.0.0
+      - --port=8002
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    environment:
+      ENV: ${ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://meeting_svc:${MEETING_DB_PASSWORD:?}@postgres:5432/vks
+      JWKS_URL: http://auth-service:8001/api/v1/auth/.well-known/jwks.json
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      LIVEKIT_URL: http://host.docker.internal:7880
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    # Вебхуки LiveKit: он в сети хоста, поэтому порт открыт только на 127.0.0.1 (наружу его не пускает и nginx).
+    ports:
+      - "127.0.0.1:${MEETING_WEBHOOK_PORT:-8002}:8002"
+    depends_on:
+      migrate-meeting:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *ready
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/ready', timeout=2)"]
+
+  # Миграции выполняет роль сервиса, а не суперпользователь (database.md): однократно перед стартом сервиса.
+  migrate-auth:
+    image: vks/auth-service
+    build:
+      context: ../backend
+      args:
+        PACKAGE: auth-service
+    command: ["alembic", "-c", "services/auth_service/alembic.ini", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auth_svc:${AUTH_DB_PASSWORD:?}@postgres:5432/vks
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    restart: "no"
+
+  migrate-meeting:
+    image: vks/meeting-service
+    build:
+      context: ../backend
+      args:
+        PACKAGE: meeting-service
+    command: ["alembic", "-c", "services/meeting_service/alembic.ini", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://meeting_svc:${MEETING_DB_PASSWORD:?}@postgres:5432/vks
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: vks
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?}
+      MEETING_DB_PASSWORD: ${MEETING_DB_PASSWORD:?}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD:?}
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vks"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Без AOF и снимков: в Redis только эфемерные служебные ключи.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:?}"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+
+  kafka:
+    image: apache/kafka:4.1.0
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-reactivks-cluster-0001}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Брокер только во внутренней сети backend (06-deployment.md, 6.3).
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms768m -Xmx768m
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  # Топики – по deploy/kafka/topics.yaml (events.md); повторный запуск ничего не меняет.
+  kafka-init:
+    image: apache/kafka:4.1.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/create-topics.sh"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - ./kafka:/scripts:ro
+    networks: [backend]
+    restart: "no"
+
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.3.0
+    profiles: [dev]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: vks
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8090:8080"
+    networks: [backend]
+
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    restart: unless-stopped
+    # Сеть хоста – рекомендованный режим для WebRTC (06-deployment.md, 6.1).
+    network_mode: host
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?}: ${LIVEKIT_API_SECRET:?}"
+      NODE_IP: ${LIVEKIT_NODE_IP:-}
+      # Конфигурация – здесь, а не файлом: ключ подписи вебхуков совпадает с LIVEKIT_API_KEY без ручной правки.
+      # TURN/TLS через nginx stream и домены – при выкладке на сервер (06-deployment.md, 6.2).
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-false}
+        turn:
+          enabled: true
+          udp_port: 3478
+        room:
+          empty_timeout: 300
+          departure_timeout: 20
+          max_participants: 11
+        webhook:
+          api_key: ${LIVEKIT_API_KEY:?}
+          urls:
+            - http://127.0.0.1:${MEETING_WEBHOOK_PORT:-8002}/webhooks/livekit
+        logging:
+          level: info
+
+networks:
+  edge:
+  # Сеть сервисов. Порты PostgreSQL, Redis и Kafka не публикуются; internal не ставится – сервисам нужен LiveKit в
+  # сети хоста (host.docker.internal).
+  backend:
+
+secrets:
+  jwt_private_key:
+    file: ./secrets/jwt-private.pem
+
+volumes:
+  pgdata:
+  kafkadata:

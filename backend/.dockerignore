@@ -1,0 +1,12 @@
+# Контекст образа сервиса: только код и lock-файл.
+.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/tests
+**/.env
+**/.env.*
+secrets
+.coverage
+htmlcov

@@ -3,12 +3,39 @@
 | Файл | Назначение |
 |---|---|
 | `docker-compose.dev.yml` | Инфраструктура для локальной разработки: PostgreSQL 16, Redis 7, Kafka (KRaft), kafka-ui, LiveKit |
+| `docker-compose.yml` | Система целиком: nginx со статикой SPA, auth- и meeting-service, миграции, инфраструктура (EMO-71) |
+| `nginx/` | Образ nginx: сборка фронтенда и маршрутизация `/api/v1/*` по сервисам |
 | `postgres/init/` | Роли и схемы сервисов при создании тома ([database.md](../docs/backend/database.md#инициализация-бд)) |
 | `kafka/` | Топики ([events.md](../docs/api/events.md#топики)) и скрипт их создания для контейнера `kafka-init` |
 | `livekit/livekit.dev.yaml` | Конфигурация LiveKit для разработки ([livekit-integration.md](../docs/api/livekit-integration.md)) |
 | `.env.example` | Шаблон паролей; `deploy/.env` в git не попадает |
 
 Полная схема развертывания – [06-deployment.md](../docs/architecture/06-deployment.md).
+
+## Система целиком (`docker-compose.yml`)
+
+```bash
+cp deploy/.env.example deploy/.env           # заполнить пароли, LIVEKIT_API_KEY и LIVEKIT_API_SECRET (≥ 32 символов)
+(cd backend && make jwt-key) && cp backend/secrets/jwt-private.pem deploy/secrets/   # ключ подписи JWT
+docker compose -f deploy/docker-compose.dev.yml down                                 # LiveKit обоих – в сети хоста
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build --wait
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec auth-service \
+    vks-auth create-admin --email admin@example.ru --display-name "Администратор"
+```
+
+Открыть <http://localhost> (порт – `NGINX_HTTP_PORT`). Порядок старта: `postgres` → `migrate-auth`, `migrate-meeting`
+(миграции ролями сервисов) → `auth-service` → `meeting-service` → `nginx`; `kafka` → `kafka-init` (топики).
+Образы Python-сервисов собираются одним `backend/Dockerfile` с аргументом `PACKAGE`.
+
+| Путь | Куда |
+|---|---|
+| `/api/v1/auth/`, `/api/v1/users/`, `/api/v1/admin/users` | auth-service |
+| `/api/v1/meetings`, `/join/`, `/participants/`, `/settings`, `/admin/meetings`, `/admin/health` | meeting-service |
+| остальное | статика SPA (`index.html` для маршрутов фронтенда) |
+
+`/webhooks`, `/internal`, `/health`, `/ready` наружу не проксируются. LiveKit присылает вебхуки на
+`127.0.0.1:${MEETING_WEBHOOK_PORT}` – ключом `LIVEKIT_API_KEY`, конфигурация LiveKit задается в compose
+(`LIVEKIT_CONFIG`). kafka-ui – профиль `dev`: `--profile dev`, <http://127.0.0.1:8090>.
 
 ## Локальная разработка
 
