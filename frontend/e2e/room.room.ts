@@ -164,8 +164,25 @@ test('режим http: организатор создает и начинает
   await expect(guest.getByRole('list').getByText('Ответ организатора')).toBeVisible();
   await expect(guest.getByRole('list').getByText(/^Вы ·/)).toBeVisible();
 
-  // 11. модерация: выключить микрофон и камеру гостя (REST → LiveKit), каждое с подтверждением
-  await org.getByRole('button', { name: 'Участники' }).click();
+  // 11. согласие: PUT /participants/me/consent обновляет атрибут vks.consent в LiveKit, организатор видит
+  await org.getByRole('tab', { name: /Участники/ }).click();
+  const guestRow = org.getByRole('listitem').filter({ hasText: 'Анна Гостева' });
+  const consentToggle = (page: Page) => page.getByRole('button', { name: 'Анализ моих эмоций' });
+  await expect(guestRow).toContainText('Анализ разрешен');
+  await consentToggle(guest).click();
+  await expect(consentToggle(guest)).toHaveAttribute('aria-pressed', 'false');
+  await expect(guestRow).toContainText('Анализ отключен');
+  await consentToggle(guest).click();
+  await expect(guestRow).toContainText('Анализ разрешен');
+  // у организатора то же через Bearer и ?meeting_id=
+  await consentToggle(org).click();
+  await expect(consentToggle(org)).toHaveAttribute('aria-pressed', 'true');
+  // панель эмоций – на моке, и это сказано в интерфейсе
+  await org.getByRole('button', { name: 'Эмоции' }).click();
+  await expect(org.getByRole('note')).toContainText('Демонстрационные данные');
+
+  // 12. модерация: выключить микрофон и камеру гостя (REST → LiveKit), каждое с подтверждением
+  await org.getByRole('tab', { name: /Участники/ }).click();
   const confirmIn = (page: Page, label: string) =>
     page.getByRole('alertdialog').getByRole('button', { name: label });
   await org.getByRole('button', { name: 'Выключить микрофон: Анна Гостева' }).click();
@@ -185,7 +202,7 @@ test('режим http: организатор создает и начинает
     'false',
   );
 
-  // 12. удаление: гость видит «Вас удалили из встречи», перезагрузкой вернуться нельзя
+  // 13. удаление: гость видит «Вас удалили из встречи», перезагрузкой вернуться нельзя
   await org.getByRole('button', { name: 'Удалить из встречи: Анна Гостева' }).click();
   await confirmIn(org, 'Удалить из встречи').click();
   await expect(guest.getByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
@@ -195,7 +212,7 @@ test('режим http: организатор создает и начинает
   await guest.reload();
   await expect(guest.getByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
 
-  // 13. по ссылке-приглашению гость входит заново как новый участник
+  // 14. по ссылке-приглашению гость входит заново как новый участник
   await guest.goto(`/j/${code}`);
   await guest.getByLabel('Как вас представить').fill('Анна Гостева');
   await guest.getByRole('radio', { name: /Разрешаю анализ/ }).check();
@@ -205,7 +222,7 @@ test('режим http: организатор создает и начинает
     timeout: 20_000,
   });
 
-  // 14. завершение встречи организатором: подтверждение, карточка у него, экран у гостя
+  // 15. завершение встречи организатором: подтверждение, карточка у него, экран у гостя
   await org.getByRole('button', { name: 'Завершить встречу' }).click();
   await confirmIn(org, 'Завершить встречу').click();
   await expect(org).toHaveURL(new RegExp(`/meetings/${meetingId}$`));

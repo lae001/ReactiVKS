@@ -50,7 +50,13 @@ const person = (
   ...extra,
 });
 
-const meeting = { id: 'm-1', title: 'Планерка', invite_url: 'https://vks.test/j/abc' };
+const meeting = {
+  id: 'm-1',
+  title: 'Планерка',
+  analysis_enabled: true,
+  invite_url: 'https://vks.test/j/abc',
+  invite_code: 'abc',
+};
 const organizerEntry: RoomEntry = {
   role: 'organizer',
   displayName: 'Иван',
@@ -60,7 +66,7 @@ const organizerEntry: RoomEntry = {
 };
 const guestEntry: RoomEntry = { ...organizerEntry, role: 'guest', displayName: 'Анна' };
 
-function renderShell(entry: RoomEntry) {
+function renderShell(entry: RoomEntry, room: typeof meeting = meeting) {
   const router = createMemoryRouter(
     [
       {
@@ -68,7 +74,7 @@ function renderShell(entry: RoomEntry) {
         element: (
           <QueryClientProvider client={new QueryClient()}>
             <RoomShell
-              meeting={meeting}
+              meeting={room}
               entry={entry}
               deviceNotice={null}
               onDismissNotice={() => undefined}
@@ -292,5 +298,142 @@ describe('модерация организатора (REST, с подтверж
     await user.click(screen.getByRole('button', { name: 'Выйти' }));
     expect(lk.disconnect).toHaveBeenCalled();
     expect(end).not.toHaveBeenCalled();
+  });
+});
+
+describe('согласие на анализ (PUT /participants/me/consent)', () => {
+  const toggle = () => screen.getByRole('button', { name: 'Анализ моих эмоций' });
+
+  it('состояние кнопки – из атрибута vks.consent в LiveKit', () => {
+    lk.participants = [
+      person('p_g1', 'Анна', { 'vks.role': 'guest', 'vks.consent': 'granted' }, { isLocal: true }),
+    ];
+    renderShell(guestEntry);
+    expect(toggle()).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle()).toHaveTextContent('Анализ вкл.');
+  });
+
+  it('гость: отзыв идет с Participant-токеном (без meeting_id) и сразу виден', async () => {
+    lk.participants = [
+      person('p_g1', 'Анна', { 'vks.role': 'guest', 'vks.consent': 'granted' }, { isLocal: true }),
+    ];
+    const set = vi
+      .spyOn(meetingsApi, 'setConsent')
+      .mockResolvedValue({ consent_state: 'revoked', synced: true });
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(toggle());
+    expect(set).toHaveBeenCalledWith('revoked', undefined);
+    await waitFor(() => expect(toggle()).toHaveAttribute('aria-pressed', 'false'));
+    expect(screen.getByText(/Анализ ваших эмоций отключен/)).toBeInTheDocument();
+  });
+
+  it('организатор: Bearer и meeting_id; включение анализа', async () => {
+    const set = vi
+      .spyOn(meetingsApi, 'setConsent')
+      .mockResolvedValue({ consent_state: 'granted', synced: false });
+    const user = userEvent.setup();
+    renderShell(organizerEntry);
+    await user.click(toggle());
+    expect(set).toHaveBeenCalledWith('granted', { meetingId: 'm-1' });
+    await waitFor(() => expect(toggle()).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('во встрече анализ выключен – переключателя и вкладки «Эмоции» нет', () => {
+    renderShell(organizerEntry, { ...meeting, analysis_enabled: false });
+    expect(screen.queryByRole('button', { name: 'Анализ моих эмоций' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Эмоции' })).not.toBeInTheDocument();
+  });
+
+  it('analysis_disabled: сообщение, переключатель пропадает', async () => {
+    vi.spyOn(meetingsApi, 'setConsent').mockRejectedValue(
+      new ApiError({ status: 409, code: 'analysis_disabled', message: 'x' }),
+    );
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(toggle());
+    expect(await screen.findByRole('alert')).toHaveTextContent(/анализ эмоций выключен/);
+    expect(screen.queryByRole('button', { name: 'Анализ моих эмоций' })).not.toBeInTheDocument();
+  });
+
+  it('notice_outdated: показывается новое уведомление, согласие – после «Разрешаю анализ»', async () => {
+    const set = vi
+      .spyOn(meetingsApi, 'setConsent')
+      .mockRejectedValueOnce(new ApiError({ status: 409, code: 'notice_outdated', message: 'x' }))
+      .mockResolvedValueOnce({ consent_state: 'granted', synced: true });
+    const info = vi.spyOn(meetingsApi, 'getJoinInfo').mockResolvedValue({
+      title: 'Планерка',
+      organizer_name: 'Иван',
+      status: 'active',
+      scheduled_at: null,
+      analysis_enabled: true,
+      consent_notice: { version: 'v2', text_md: 'Новый текст уведомления' },
+    });
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(toggle());
+
+    const dialog = await screen.findByRole('alertdialog', {
+      name: 'Обновилось уведомление об анализе эмоций',
+    });
+    expect(info).toHaveBeenCalledWith('abc');
+    expect(within(dialog).getByText('Новый текст уведомления')).toBeVisible();
+    expect(set).toHaveBeenCalledTimes(1);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Разрешаю анализ' }));
+    await waitFor(() => expect(set).toHaveBeenCalledTimes(2));
+    expect(set).toHaveBeenLastCalledWith('granted', undefined);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('notice_outdated второй раз подряд – просим перезагрузить страницу, без цикла', async () => {
+    vi.spyOn(meetingsApi, 'setConsent').mockRejectedValue(
+      new ApiError({ status: 409, code: 'notice_outdated', message: 'x' }),
+    );
+    vi.spyOn(meetingsApi, 'getJoinInfo').mockResolvedValue({
+      title: 'Планерка',
+      organizer_name: 'Иван',
+      status: 'active',
+      scheduled_at: null,
+      analysis_enabled: true,
+      consent_notice: { version: 'v2', text_md: 'Текст' },
+    });
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(toggle());
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Разрешаю анализ' }));
+    expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toHaveTextContent(
+      /Перезагрузите страницу/,
+    );
+  });
+
+  it('401 гостя – «Вас удалили из встречи или сессия недействительна»', async () => {
+    vi.spyOn(meetingsApi, 'setConsent').mockRejectedValue(
+      new ApiError({ status: 401, code: 'unauthorized', message: 'x' }),
+    );
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(toggle());
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Вас удалили из встречи или сессия недействительна.',
+    );
+  });
+});
+
+describe('панель эмоций (на моке)', () => {
+  it('организатор: вкладка «Эмоции» с явной пометкой «Демонстрационные данные» и настоящими участниками', async () => {
+    const user = userEvent.setup();
+    renderShell(organizerEntry);
+    await user.click(screen.getByRole('button', { name: 'Эмоции' }));
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByRole('note')).toHaveTextContent(/Демонстрационные данные/);
+    expect(within(panel).getByText('Сводка встречи')).toBeInTheDocument();
+    expect(within(panel).getAllByText('Анна Гостева').length).toBeGreaterThan(0);
+  });
+
+  it('гость панели эмоций не видит', () => {
+    renderShell(guestEntry);
+    expect(screen.queryByRole('button', { name: 'Эмоции' })).not.toBeInTheDocument();
   });
 });

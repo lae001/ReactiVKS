@@ -14,6 +14,7 @@ export function ConfirmDialog({
   onConfirm,
   busy = false,
   error = null,
+  confirmVariant = 'destructive',
 }: {
   title: string;
   text: string;
@@ -24,6 +25,8 @@ export function ConfirmDialog({
   busy?: boolean;
   /** Сообщение, если запрос не удался; диалог остается открытым для повтора */
   error?: string | null;
+  /** Для безопасных действий (например, «Разрешаю анализ») – не красная кнопка */
+  confirmVariant?: 'destructive' | 'default';
 }) {
   const confirmRef = useRef<HTMLButtonElement>(null);
   useEffect(() => confirmRef.current?.focus(), []);
@@ -55,7 +58,7 @@ export function ConfirmDialog({
           <Button variant="room" onClick={onCancel}>
             Отмена
           </Button>
-          <Button ref={confirmRef} variant="destructive" onClick={onConfirm} disabled={busy}>
+          <Button ref={confirmRef} variant={confirmVariant} onClick={onConfirm} disabled={busy}>
             {confirmLabel}
           </Button>
         </div>

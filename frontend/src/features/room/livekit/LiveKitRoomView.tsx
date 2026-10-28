@@ -24,6 +24,7 @@ export interface RoomConnection {
 export interface LiveKitMeeting {
   id: string;
   title: string;
+  analysis_enabled: boolean;
   invite_url?: string;
   invite_code?: string;
 }

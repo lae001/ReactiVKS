@@ -19,10 +19,7 @@ import { type LiveKitMeeting, LiveKitRoomView, type RoomConnection } from './Liv
  * иначе удаленный гость мог бы вернуться в комнату перезагрузкой страницы (удаление блокирует
  * именно rejoin, `participant_removed`).
  */
-async function fetchConnection(
-  meeting: LiveKitMeeting & { analysis_enabled: boolean },
-  entry: RoomEntry,
-): Promise<RoomConnection> {
+async function fetchConnection(meeting: LiveKitMeeting, entry: RoomEntry): Promise<RoomConnection> {
   const result =
     entry.role === 'guest'
       ? await meetingsApi.rejoin()
@@ -38,13 +35,7 @@ async function fetchConnection(
 }
 
 /** Получает токен и открывает комнату на LiveKit; ошибки входа показывает отдельными экранами. */
-export function LiveKitRoomPage({
-  meeting,
-  entry,
-}: {
-  meeting: LiveKitMeeting & { analysis_enabled: boolean };
-  entry: RoomEntry;
-}) {
+export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; entry: RoomEntry }) {
   // каждый номер попытки – новый запрос токена
   const [attempt, setAttempt] = useState(0);
   const query = useQuery({

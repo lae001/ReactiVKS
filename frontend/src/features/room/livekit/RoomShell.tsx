@@ -20,13 +20,17 @@ import { Button } from '@/shared/ui/button';
 import { CopyLinkButton } from '@/shared/ui/copy-link-button';
 
 import { ChatPanel } from '../ChatPanel';
+import { EmotionPanel } from '@/features/emotions/EmotionPanel';
+
 import { ConfirmDialog } from '../ConfirmDialog';
 import { ControlBar } from '../ControlBar';
 import { ParticipantsPanel } from '../ParticipantsPanel';
 import type { SidePanelTab } from '../types';
 
 import { ConnectionBanner } from './ConnectionBanner';
+import { useConsentToggle } from './consent';
 import { DevicesMenu } from './DevicesMenu';
+import { EMOTIONS_MOCK_NOTICE, mockEmotionSnapshot } from './emotions-mock';
 import { confirmText, type PendingAction, useModeration } from './moderation';
 import { deviceFailureText } from './notice';
 import { isAgent, roomParticipants } from './participants';
@@ -83,7 +87,14 @@ export function RoomShell({
   const people = roomParticipants(live);
   // Индикатор виден всем, пока в комнате есть ML-агент (vks.kind = agent)
   const analysisRunning = live.some(isAgent);
-  const tabs: SidePanelTab[] = ['participants', 'chat'];
+  const self = people.find((p) => p.isSelf);
+  const consent = useConsentToggle({ meeting, entry, current: self?.consent ?? 'not_required' });
+  const analysisOn = meeting.analysis_enabled && !consent.disabled;
+  // Панель эмоций – только организатору и только если во встрече включен анализ
+  const showEmotions = isOrganizer && analysisOn;
+  const tabs: SidePanelTab[] = showEmotions
+    ? ['participants', 'emotions', 'chat']
+    : ['participants', 'chat'];
 
   async function toggle(kind: 'mic' | 'camera') {
     try {
@@ -160,12 +171,17 @@ export function RoomShell({
       </header>
 
       <ConnectionBanner />
-      {(deviceNotice || chatError) && (
+      <p className="sr-only" aria-live="polite">
+        {consent.announcement}
+      </p>
+      {(deviceNotice || chatError || consent.error) && (
         <p
           role="alert"
           className="flex items-center justify-between gap-3 bg-destructive/15 px-4 py-2 text-sm"
         >
-          {deviceNotice ?? 'Не удалось отправить сообщение. Проверьте соединение и повторите.'}
+          {deviceNotice ??
+            consent.error ??
+            'Не удалось отправить сообщение. Проверьте соединение и повторите.'}
           <Button
             variant="room"
             size="icon"
@@ -174,6 +190,7 @@ export function RoomShell({
             onClick={() => {
               onDismissNotice();
               setChatError(false);
+              consent.dismissError();
             }}
           >
             <X />
@@ -252,6 +269,17 @@ export function RoomShell({
                   }
                 />
               )}
+              {panel === 'emotions' && (
+                <div className="flex flex-col gap-4">
+                  <p
+                    role="note"
+                    className="rounded-md border border-signal/50 bg-signal/10 px-3 py-2 text-xs"
+                  >
+                    {EMOTIONS_MOCK_NOTICE}
+                  </p>
+                  <EmotionPanel participants={mockEmotionSnapshot(people)} elapsed={elapsed} />
+                </div>
+              )}
               {panel === 'chat' && (
                 <ChatPanel
                   messages={chat.chatMessages.map((m) => ({
@@ -270,6 +298,18 @@ export function RoomShell({
           </aside>
         )}
 
+        {consent.notice && (
+          <ConfirmDialog
+            title="Обновилось уведомление об анализе эмоций"
+            text={consent.notice}
+            confirmLabel="Разрешаю анализ"
+            confirmVariant="default"
+            busy={consent.pending}
+            error={consent.error}
+            onCancel={consent.dismissNotice}
+            onConfirm={() => void consent.acceptNotice()}
+          />
+        )}
         {pending && (
           <ConfirmDialog
             {...confirmText(pending)}
@@ -286,15 +326,15 @@ export function RoomShell({
       <RoomAudioRenderer />
       <ControlBar
         isOrganizer={isOrganizer}
-        analysisEnabled={false}
+        analysisEnabled={analysisOn}
         micOn={isMicrophoneEnabled}
         cameraOn={isCameraEnabled}
-        consent="not_required"
+        consent={consent.consent}
         panel={panel}
         devices={<DevicesMenu />}
         onToggleMic={() => void toggle('mic')}
         onToggleCamera={() => void toggle('camera')}
-        onToggleConsent={() => undefined}
+        onToggleConsent={() => void consent.toggle()}
         onTogglePanel={(tab) => setPanel((current) => (current === tab ? null : tab))}
         onLeave={() => void room.disconnect()}
         onEnd={isOrganizer ? () => ask({ kind: 'end' }) : undefined}
