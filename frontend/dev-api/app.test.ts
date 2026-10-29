@@ -773,3 +773,13 @@ describe('dev-api: у встречи есть владелец (claim sub)', () 
     );
   });
 });
+
+describe('dev-api: текст уведомления в лобби', () => {
+  it('без служебных слов: пользователь не видит «dev-api» и «черновик»', async () => {
+    const m = await activeMeeting();
+    const info = (await call('GET', `/api/v1/join/${m.invite_code}`)).body!;
+    const text = (info.consent_notice as { text_md: string }).text_md;
+    expect(text).toMatch(/распознает эмоции/);
+    expect(text).not.toMatch(/dev-api|черновик|mock|TODO/i);
+  });
+});
