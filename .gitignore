@@ -1,3 +1,6 @@
 # Секреты развертывания: в git только шаблоны (*.example).
 /deploy/.env
 /deploy/secrets/
+
+# Состояние scripts/dev.sh: журналы и PID
+/.dev/
