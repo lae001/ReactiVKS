@@ -8,6 +8,7 @@ import { Field, FormError } from '@/shared/ui/field';
 
 import { useAuth } from './auth-context';
 import { loginErrorMessage, serverFieldMessage } from './errors';
+import { setLoginNotice } from './notices';
 import { type LoginValues, loginSchema } from './schemas';
 
 /** Форма входа. После успеха переход выполняет GuestOnly: сессия стала authenticated. */
@@ -25,6 +26,7 @@ export function LoginForm() {
     setFormError(null);
     try {
       await login(values);
+      setLoginNotice(null);
     } catch (error) {
       if (error instanceof ApiError && error.code === 'validation_error') {
         const fieldIssues = error.errors.flatMap((issue) => {

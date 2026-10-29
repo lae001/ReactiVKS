@@ -23,6 +23,7 @@
     "test:e2e:livekit": "playwright test -c playwright.livekit.config.ts",
     "test:e2e:lobby": "playwright test -c playwright.lobby.config.ts",
     "test:e2e:room": "playwright test -c playwright.room.config.ts",
+    "test:e2e:real": "playwright test -c playwright.real.config.ts",
     "mockups": "playwright test -c playwright.mockups.config.ts",
     "mockups:live": "playwright test -c playwright.room-live.config.ts"
   },

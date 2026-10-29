@@ -78,17 +78,19 @@ src/
 Страницы ходят в meeting-service только через `src/shared/api/meetings` (`meetingsApi`). У интерфейса две
 реализации, выбор – переменная `VITE_API_MODE`:
 
-| Значение              | Что это                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `mock` (по умолчанию) | данные в памяти вкладки, те же проверки и коды ошибок, что в контракте; сеть не нужна      |
-| `http`                | meeting-service через `/api/v1`: настоящего пока нет, вместо него временный `pnpm dev:api` |
+| Значение              | Что это                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| `mock` (по умолчанию) | данные в памяти вкладки, те же проверки и коды ошибок, что в контракте; сеть не нужна                  |
+| `http`                | meeting-service через `/api/v1` (`make run-meeting` в `backend/`); облегченная замена – `pnpm dev:api` |
 
 Типы meeting-service написаны вручную (`meetings/types.ts`) и будут заменены на `pnpm gen:api`, когда появится
 OpenAPI. Отчет и панель эмоций остаются на тестовых данных (`src/shared/mocks/`) до analytics- и realtime-сервиса.
 
-Пока meeting-service не написан, для режима `http` есть временный [dev-api](dev-api/README.md)
-(`pnpm dev:api`, 127.0.0.1:8002, без проверки JWT). Прокси Vite направляет на него пути `meetings`, `join`,
-`participants`, `settings` (адрес – `VITE_DEV_MEETING_API_TARGET`), остальной `/api` – на auth-service.
+Прокси Vite направляет пути `meetings`, `join`, `participants`, `settings`, `admin/meetings` и `admin/health` на
+meeting-service (`127.0.0.1:8002`, адрес – `VITE_DEV_MEETING_API_TARGET`), остальной `/api` (`auth`, `users`,
+`admin/users`) – на auth-service (`127.0.0.1:8001`). На слабой машине вместо настоящего meeting-service можно
+запустить облегченный [dev-api](dev-api/README.md) (`pnpm dev:api`, тот же порт, без проверки JWT). Что подключено к
+бэкенду, а что осталось на моках, – в [docs/frontend/README.md](../docs/frontend/README.md#что-подключено-к-бэкенду-и-что-на-моках).
 
 ### Подключение к бэкенду в dev
 

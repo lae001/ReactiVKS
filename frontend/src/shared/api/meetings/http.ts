@@ -32,6 +32,16 @@ function participantAuth(): Record<string, string> {
 
 const enc = encodeURIComponent;
 
+/** Параметры `from`/`to` сервера – даты `YYYY-MM-DD`: datetime с временем дал бы `422`. */
+function dateParam(value: string | undefined): string | undefined {
+  return value ? value.slice(0, 10) : undefined;
+}
+
+/** Сервер принимает `limit` 1–100 и на других значениях отвечает `422`. */
+function limitParam(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : Math.min(Math.max(Math.trunc(value), 1), 100);
+}
+
 /** Реализация поверх настоящего meeting-service (docs/api/rest-api.md, раздел 3). */
 export function createHttpMeetingsApi(): MeetingsApi {
   return {
@@ -40,9 +50,9 @@ export function createHttpMeetingsApi(): MeetingsApi {
         query: {
           status: params.status?.join(','),
           q: params.q,
-          from: params.from,
-          to: params.to,
-          limit: params.limit,
+          from: dateParam(params.from),
+          to: dateParam(params.to),
+          limit: limitParam(params.limit),
           cursor: params.cursor,
         },
         signal,

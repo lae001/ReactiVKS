@@ -1,4 +1,5 @@
 import { apiFetch } from '@/shared/api/client';
+import { resolveApiMode } from '@/shared/api/meetings';
 import type { components } from '@/shared/api/schema';
 import { clearSession, setSession } from '@/shared/api/session';
 import type { User } from '@/shared/api/types';
@@ -52,11 +53,14 @@ export function updateProfile(body: Schemas['RenameRequest']): Promise<User> {
 }
 
 /**
- * МОК. POST /users/me/password описан в контракте (docs/api/rest-api.md), но в auth-service
- * еще не реализован. Когда появится – заменить тело на
- * `apiFetch('/api/v1/users/me/password', { method: 'POST', body })`; сигнатура останется прежней.
+ * Смена пароля. В режиме `http` – POST /users/me/password (204; сервер завершает все сессии
+ * пользователя; 401 `invalid_credentials` – неверный текущий пароль). В режиме `mock` пароль не
+ * меняется: форма и проверки настоящие. Режим читается при вызове, а не при загрузке модуля.
  */
 export async function changePassword(body: ChangePasswordRequest): Promise<void> {
-  void body;
+  if (resolveApiMode(import.meta.env.VITE_API_MODE) === 'http') {
+    await apiFetch('/api/v1/users/me/password', { method: 'POST', body });
+    return;
+  }
   await new Promise((resolve) => setTimeout(resolve, 400));
 }

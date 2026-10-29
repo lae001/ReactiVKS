@@ -1,8 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { resolveApiMode } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
+import { clearSession } from '@/shared/api/session';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
@@ -10,13 +13,17 @@ import { Field, FormError } from '@/shared/ui/field';
 
 import { changePassword } from './api';
 import { genericErrorMessage } from './errors';
+import { setLoginNotice } from './notices';
 import { type ChangePasswordValues, changePasswordSchema, PASSWORD_MIN } from './schemas';
 
 /**
- * Смена пароля. Эндпоинт POST /users/me/password в auth-service еще не реализован,
- * поэтому changePassword – мок: форма и проверки настоящие, пароль не меняется.
+ * Смена пароля. В режиме `http` – POST /users/me/password: сервер завершает все сессии, поэтому после
+ * успеха сессия в памяти очищается, и охранник RequireAuth уводит пользователя на /login. В режиме `mock` пароль не меняется:
+ * форма и проверки настоящие.
  */
 export function PasswordCard() {
+  const live = resolveApiMode(import.meta.env.VITE_API_MODE) === 'http';
+  const queryClient = useQueryClient();
   const [done, setDone] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -33,6 +40,13 @@ export function PasswordCard() {
     try {
       await changePassword(values);
       reset();
+      if (live) {
+        // Refresh-токены отозваны сервером: старый access-токен и кэш больше не нужны
+        setLoginNotice('password_changed');
+        clearSession();
+        queryClient.clear();
+        return; // на /login уведет RequireAuth
+      }
       setDone(true);
     } catch (error) {
       if (error instanceof ApiError && error.code === 'invalid_credentials') {
@@ -47,11 +61,12 @@ export function PasswordCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Пароль <Badge variant="outline">Тестовый режим</Badge>
+          Пароль {live ? null : <Badge variant="outline">Тестовый режим</Badge>}
         </CardTitle>
         <CardDescription>
-          Сервер пока не умеет менять пароль, поэтому здесь форма-макет: проверки работают, пароль
-          не меняется.
+          {live
+            ? 'После смены пароля все сессии завершатся, и нужно будет войти заново.'
+            : 'Тестовый режим: форма-макет, проверки работают, пароль не меняется.'}
         </CardDescription>
       </CardHeader>
       <CardContent>

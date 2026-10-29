@@ -356,6 +356,35 @@ describe('согласие на анализ (PUT /participants/me/consent)', ()
     expect(screen.queryByRole('button', { name: 'Анализ моих эмоций' })).not.toBeInTheDocument();
   });
 
+  it.each([404, 405])(
+    '%i (сервер не поддерживает согласие): переключатель остается, сообщение «Пока недоступно»',
+    async (status) => {
+      lk.participants = [
+        person(
+          'p_g1',
+          'Анна',
+          { 'vks.role': 'guest', 'vks.consent': 'granted' },
+          { isLocal: true },
+        ),
+      ];
+      vi.spyOn(meetingsApi, 'setConsent').mockRejectedValue(
+        new ApiError({
+          status,
+          code: status === 404 ? 'not_found' : 'unknown_error',
+          message: 'x',
+        }),
+      );
+      const user = userEvent.setup();
+      renderShell(guestEntry);
+      await user.click(toggle());
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Пока недоступно: сервер ещё не поддерживает эту функцию.',
+      );
+      expect(toggle()).toHaveAttribute('aria-pressed', 'true');
+      expect(toggle()).toHaveTextContent('Анализ вкл.');
+    },
+  );
+
   it('notice_outdated: показывается новое уведомление, согласие – после «Разрешаю анализ»', async () => {
     const set = vi
       .spyOn(meetingsApi, 'setConsent')

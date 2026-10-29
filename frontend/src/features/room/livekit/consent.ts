@@ -9,6 +9,8 @@ import type { RoomEntry } from '@/shared/lib/room-entry';
 
 import type { LiveKitMeeting } from './LiveKitRoomView';
 
+export const CONSENT_UNSUPPORTED = 'Пока недоступно: сервер ещё не поддерживает эту функцию.';
+
 /**
  * Переключатель «Анализ моих эмоций» (PUT /participants/me/consent): организатор – по Bearer с
  * `?meeting_id=`, гость – по Participant-токену. Источник истины – атрибут `vks.consent` в LiveKit:
@@ -57,6 +59,10 @@ export function useConsentToggle({
       if (e instanceof ApiError && e.code === 'analysis_disabled') {
         setDisabled(true);
         setError(meetingErrorMessage(e));
+      } else if (e instanceof ApiError && (e.status === 404 || e.status === 405)) {
+        // Сервер еще не умеет менять согласие (маршрута нет). Переключатель берет состояние из атрибута
+        // vks.consent, а он не менялся, поэтому остается в прежнем положении.
+        setError(CONSENT_UNSUPPORTED);
       } else if (e instanceof ApiError && e.code === 'notice_outdated') {
         await showNewNotice();
       } else {

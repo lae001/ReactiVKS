@@ -41,6 +41,15 @@ async function send(path: string, options: RequestOptions, token: string | null)
   }
 }
 
+async function isInvalidCredentials(response: Response): Promise<boolean> {
+  try {
+    const body = (await response.clone().json()) as { code?: unknown };
+    return body.code === 'invalid_credentials';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Тонкая обертка над fetch для REST API (docs/api/rest-api.md): JSON, Bearer-токен из сессии,
  * разбор problem+json в ApiError. На 401 один раз обновляет сессию и повторяет запрос;
@@ -51,7 +60,9 @@ export async function apiFetch<T = void>(path: string, options: RequestOptions =
   const sentToken = useAuth ? useSessionStore.getState().accessToken : null;
   let response = await send(path, options, sentToken);
 
-  if (response.status === 401 && useAuth) {
+  // invalid_credentials (неверный текущий пароль при его смене) – ответ по существу, а не просроченный токен:
+  // обмен refresh-токена и повтор здесь не нужны и только отозвали бы сессию.
+  if (response.status === 401 && useAuth && !(await isInvalidCredentials(response))) {
     // Если токен уже сменили, пока запрос был в пути, обмен делать не нужно – хватит повтора
     const current = useSessionStore.getState().accessToken;
     const fresh = current !== sentToken && current ? current : await refreshSession();
