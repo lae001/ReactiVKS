@@ -22,6 +22,7 @@ import {
 } from './disconnect';
 import { exitLink } from './exit-link';
 import { deviceFailureText } from './notice';
+import { clearRoomState, loadDevices } from './room-state';
 import { RoomShell } from './RoomShell';
 
 /** Сколько ждать подключения, прежде чем считать, что оно не состоялось (страховка от «вечного» ожидания) */
@@ -38,6 +39,8 @@ export interface LiveKitMeeting {
   analysis_enabled: boolean;
   invite_url?: string;
   invite_code?: string;
+  /** Начало встречи (есть у организатора; у гостя по контракту его нет – см. meeting-timer.ts) */
+  started_at?: string | null;
 }
 
 /**
@@ -61,6 +64,14 @@ export function LiveKitRoomView({
   // Комната на весь экран: страница под ней не прокручивается (на экранах выхода прокрутка возвращается)
   usePageScrollLock(end === null);
   const [deviceNotice, setDeviceNotice] = useState<string | null>(null);
+
+  // Последнее состояние микрофона и камеры этой вкладки: после обновления страницы выключенное остается выключенным.
+  // Первый вход берет значения из лобби (entry); запись обновляет RoomShell при каждом переключении.
+  const devices = useMemo(
+    () => loadDevices(meeting.id) ?? { mic: entry.micOn, camera: entry.cameraOn },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- читаем при входе и при новом подключении (токене)
+    [meeting.id, connection.token],
+  );
 
   // Подключалась ли комната: отмену попытки (StrictMode, смена токена) нельзя путать с обрывом связи
   const connected = useRef(false);
@@ -130,8 +141,8 @@ export function LiveKitRoomView({
       serverUrl={connection.url}
       token={connection.token}
       connect
-      video={entry.cameraOn}
-      audio={entry.micOn}
+      video={devices.camera}
+      audio={devices.mic}
       options={options}
       onConnected={() => {
         connected.current = true;
@@ -140,7 +151,12 @@ export function LiveKitRoomView({
         const wasConnected = connected.current;
         connected.current = false;
         if (isAbortedBeforeConnect(reason, wasConnected)) return;
-        setEnd(describeDisconnect(reason));
+        const next = describeDisconnect(reason);
+        // Завершение встречи и удаление участника: сохраненное состояние вкладки больше не нужно. Явный выход
+        // очищает RoomShell по кнопке «Выйти»: `CLIENT_INITIATED` приходит и при обновлении страницы (LiveKit
+        // отключается по beforeunload), а тогда состояние как раз должно сохраниться.
+        if (next.kind === 'meeting_ended' || next.kind === 'removed') clearRoomState(meeting.id);
+        setEnd(next);
       }}
       onError={(error) => {
         // отказ камеры или микрофона – не обрыв: встреча идет, причину показывает onMediaDeviceFailure

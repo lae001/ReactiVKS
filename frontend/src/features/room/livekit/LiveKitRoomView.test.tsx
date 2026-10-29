@@ -9,6 +9,8 @@ import { LiveKitRoomView } from './LiveKitRoomView';
 // Само видео не нужно: проверяются экраны после выхода из комнаты. Подмена LiveKitRoom отдает наружу
 // обработчики, чтобы тест мог «подключить» и «отключить» комнату по причине.
 const handlers: {
+  video?: boolean;
+  audio?: boolean;
   onConnected?: () => void;
   onDisconnected?: (reason?: DisconnectReason) => void;
   onError?: (error: Error) => void;
@@ -54,6 +56,46 @@ function disconnectWith(reason: DisconnectReason) {
 
 const links = () =>
   screen.queryAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')]);
+
+describe('микрофон и камера после обновления страницы', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('первый вход – значения из лобби; дальше последнее сохраненное состояние вкладки', () => {
+    const { unmount } = renderView({ ...guest, micOn: true, cameraOn: false });
+    expect([handlers.audio, handlers.video]).toEqual([true, false]);
+    unmount();
+
+    sessionStorage.setItem('vks.room.devices.m-1', '{"mic":false,"camera":true}');
+    renderView({ ...guest, micOn: true, cameraOn: false });
+    expect([handlers.audio, handlers.video]).toEqual([false, true]);
+  });
+
+  it.each([
+    ['завершение встречи', DisconnectReason.ROOM_DELETED],
+    ['удаление участника', DisconnectReason.PARTICIPANT_REMOVED],
+  ])('%s очищает сохраненное состояние', (_name, reason) => {
+    sessionStorage.setItem('vks.room.devices.m-1', '{"mic":false,"camera":true}');
+    sessionStorage.setItem('vks.room.chat.m-1', '[]');
+    renderView(guest);
+    disconnectWith(reason);
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it('отключение по инициативе клиента (в том числе при обновлении страницы, beforeunload) состояние сохраняет', () => {
+    sessionStorage.setItem('vks.room.devices.m-1', '{"mic":false,"camera":true}');
+    sessionStorage.setItem('vks.room.chat.m-1', '[]');
+    renderView(guest);
+    disconnectWith(DisconnectReason.CLIENT_INITIATED);
+    expect(sessionStorage.length).toBe(2);
+  });
+
+  it('обрыв связи оставляет состояние для «Подключиться снова»', () => {
+    sessionStorage.setItem('vks.room.devices.m-1', '{"mic":false,"camera":true}');
+    renderView(guest);
+    act(() => handlers.onError?.(ConnectionError.serverUnreachable('нет сервера')));
+    expect(sessionStorage.getItem('vks.room.devices.m-1')).not.toBeNull();
+  });
+});
 
 describe('выход из комнаты: у каждого экрана есть выход наружу', () => {
   it('«Вы вышли»: «Вернуться во встречу» и выход – «К встречам» организатору', () => {

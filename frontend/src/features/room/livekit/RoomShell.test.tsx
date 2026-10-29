@@ -18,17 +18,21 @@ const lk = vi.hoisted(() => ({
   setCamera: vi.fn(),
   publishData: vi.fn().mockResolvedValue(undefined),
   onData: undefined as ((message: unknown) => void) | undefined,
+  onSync: undefined as ((message: unknown) => void) | undefined,
 }));
 
 vi.mock('@livekit/components-react', () => ({
   useParticipants: () => lk.participants,
-  useDataChannel: (_topic: string, onMessage: (message: unknown) => void) => {
-    lk.onData = onMessage;
+  useDataChannel: (topic: string, onMessage: (message: unknown) => void) => {
+    if (topic === 'vks.reaction') lk.onData = onMessage;
+    else lk.onSync = onMessage;
     return { send: vi.fn(), isSending: false, message: undefined };
   },
+  useConnectionState: () => 'connected',
   useChat: () => ({ chatMessages: lk.messages, send: lk.send, isSending: false }),
   useLocalParticipant: () => ({
     localParticipant: {
+      identity: 'p_org',
       setMicrophoneEnabled: lk.setMic,
       setCameraEnabled: lk.setCamera,
       publishData: lk.publishData,
@@ -546,8 +550,12 @@ describe('реакции в комнате', () => {
     expect(within(group).getAllByRole('button')).toHaveLength(6);
 
     await user.click(within(group).getByRole('button', { name: 'Реакция: аплодисменты' }));
-    expect(lk.publishData).toHaveBeenCalledTimes(1);
-    const [data, options] = lk.publishData.mock.calls[0] as [Uint8Array, unknown];
+    // запрос истории чата при входе уходит отдельно (тема vks.chat.sync); реакция – одна
+    const reactionCalls = lk.publishData.mock.calls.filter(
+      ([, opts]) => (opts as { topic: string }).topic === REACTION_TOPIC,
+    );
+    expect(reactionCalls).toHaveLength(1);
+    const [data, options] = reactionCalls[0] as [Uint8Array, unknown];
     expect(new TextDecoder().decode(data)).toBe('{"v":1,"emoji":"👏"}');
     expect(options).toEqual({ reliable: false, topic: REACTION_TOPIC });
     expect(screen.getByTestId('reaction')).toHaveTextContent('👏');
@@ -586,5 +594,111 @@ describe('реакции в комнате', () => {
     const overlay = screen.getByTestId('reaction').closest('[aria-hidden]');
     expect(overlay).toHaveAttribute('aria-hidden', 'true');
     expect(overlay).toHaveClass('pointer-events-none');
+  });
+});
+
+describe('история чата и состояние вкладки', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    document.title = 'ReactiVKS';
+  });
+  afterEach(() => {
+    sessionStorage.clear();
+    document.title = 'ReactiVKS';
+  });
+
+  it('полученная при входе история видна в чате, но не считается непрочитанной и не вызывает уведомлений', async () => {
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    const now = Date.now();
+    const past = [1, 2, 3].map((n) => ({
+      id: `h${n}`,
+      from: 'p_g1',
+      name: 'Анна Гостева',
+      text: `раньше ${n}`,
+      at: now - 60_000 + n * 1000,
+    }));
+    const payload = new TextEncoder().encode(
+      JSON.stringify({ v: 1, type: 'history', part: 1, parts: 1, messages: past }),
+    );
+    act(() =>
+      lk.onSync?.({ topic: 'vks.chat.sync', payload, from: person('p_g1', 'Анна Гостева') }),
+    );
+    // бейджа и уведомления нет
+    expect(screen.getByRole('button', { name: 'Чат' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(document.title).toBe('ReactiVKS');
+
+    await user.click(screen.getByRole('button', { name: 'Чат' }));
+    const list = screen.getByRole('list');
+    expect(list).toHaveTextContent('раньше 1');
+    expect(list).toHaveTextContent('раньше 3');
+  });
+
+  it('при входе в комнату уходит запрос истории; своя история из вкладки видна сразу', async () => {
+    sessionStorage.setItem(
+      'vks.room.chat.m-1',
+      JSON.stringify([
+        {
+          id: 's1',
+          from: 'p_org',
+          name: 'Иван',
+          text: 'я писал до обновления',
+          at: Date.now() - 5000,
+        },
+      ]),
+    );
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    const requests = lk.publishData.mock.calls.filter(
+      ([, opts]) => (opts as { topic: string }).topic === 'vks.chat.sync',
+    );
+    expect(requests).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Чат' }));
+    expect(screen.getByRole('list')).toHaveTextContent('Вы · ');
+    expect(screen.getByRole('list')).toHaveTextContent('я писал до обновления');
+  });
+
+  it('микрофон и камера: каждое переключение запоминается во вкладке', async () => {
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(screen.getByRole('button', { name: 'Микрофон' }));
+    expect(JSON.parse(sessionStorage.getItem('vks.room.devices.m-1')!)).toEqual({
+      mic: false,
+      camera: true,
+    });
+    // (в подмене useLocalParticipant состояние устройств не меняется само, поэтому микрофон здесь снова «включен»)
+    await user.click(screen.getByRole('button', { name: 'Камера' }));
+    expect(JSON.parse(sessionStorage.getItem('vks.room.devices.m-1')!)).toEqual({
+      mic: true,
+      camera: false,
+    });
+  });
+
+  it('явный выход («Выйти») очищает сохраненное состояние и отключает от комнаты', async () => {
+    sessionStorage.setItem('vks.room.devices.m-1', '{"mic":false,"camera":true}');
+    sessionStorage.setItem('vks.room.chat.m-1', '[]');
+    sessionStorage.setItem('vks.room.startedAt.m-1', '123');
+    await userEvent
+      .setup()
+      .click((renderShell(guestEntry), screen.getByRole('button', { name: 'Выйти' })));
+    expect(lk.disconnect).toHaveBeenCalled();
+    expect(sessionStorage.getItem('vks.room.devices.m-1')).toBeNull();
+    expect(sessionStorage.getItem('vks.room.chat.m-1')).toBeNull();
+    expect(sessionStorage.getItem('vks.room.startedAt.m-1')).toBeNull();
+  });
+
+  it('завершение встречи организатором очищает сохраненное состояние', async () => {
+    sessionStorage.setItem('vks.room.devices.m-1', '{"mic":false,"camera":true}');
+    sessionStorage.setItem('vks.room.chat.m-1', '[]');
+    vi.spyOn(meetingsApi, 'endMeeting').mockResolvedValue({} as never);
+    const user = userEvent.setup();
+    renderShell(organizerEntry);
+    await user.click(screen.getByRole('button', { name: 'Завершить встречу' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Завершить встречу' }),
+    );
+    await waitFor(() => expect(sessionStorage.getItem('vks.room.devices.m-1')).toBeNull());
+    expect(sessionStorage.getItem('vks.room.chat.m-1')).toBeNull();
   });
 });

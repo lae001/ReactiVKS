@@ -32,6 +32,7 @@ meeting-service.
 | Тема | Назначение | Формат | Доставка |
 |---|---|---|---|
 | `lk.chat` | Чат ([ADR-008](../adr/ADR-008-chat-via-livekit-data.md)) | текстовый поток LiveKit | с гарантией |
+| `vks.chat.sync` | Синхронизация истории чата при входе участника ([ADR-008](../adr/ADR-008-chat-via-livekit-data.md)) | JSON `{"v": 1, "type": "history_request"}` и `{"v": 1, "type": "history", "part", "parts", "messages": [{id, from, name, text, at}]}`; до 50 сообщений, часть ≤ ~12 КБ | с гарантией |
 | `vks.reaction` | Реакция-эмодзи участника | JSON `{"v": 1, "emoji": "👍"}`, эмодзи только из списка 👍 ❤️ 😂 😮 👏 🎉 | без гарантии (`reliable: false`) |
 
 Получатель реакции доверяет только участнику LiveKit, приславшему данные (имя берется из него, а не из тела),

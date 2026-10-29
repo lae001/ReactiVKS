@@ -1,14 +1,15 @@
 import {
   RoomAudioRenderer,
   useChat,
+  useConnectionState,
   useDataChannel,
   useLocalParticipant,
   useParticipants,
   useRoomContext,
 } from '@livekit/components-react';
-import { MediaDeviceFailure } from 'livekit-client';
+import { ConnectionState, MediaDeviceFailure } from 'livekit-client';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { meetingErrorMessage } from '@/features/meetings/errors';
@@ -28,8 +29,10 @@ import { ControlBar } from '../ControlBar';
 import { ParticipantsPanel } from '../ParticipantsPanel';
 import type { SidePanelTab } from '../types';
 
+import { CHAT_SYNC_TOPIC } from './chat-history';
 import { useChatNotifications, useUnreadTitle } from './chat-notifications';
 import { ChatToasts } from './ChatToasts';
+import { useMeetingElapsed } from './meeting-timer';
 import { ConnectionBanner } from './ConnectionBanner';
 import { useConsentToggle } from './consent';
 import { DevicesPanel } from './DevicesMenu';
@@ -38,7 +41,9 @@ import { confirmText, type PendingAction, useModeration } from './moderation';
 import { deviceFailureText } from './notice';
 import { isAgent, roomParticipants } from './participants';
 import { ReactionsOverlay } from './ReactionsOverlay';
-import { REACTION_TOPIC, useReactions } from './reactions';
+import { type PublishData, REACTION_TOPIC, useReactions } from './reactions';
+import { clearRoomState, saveDevices } from './room-state';
+import { useRoomChat } from './use-room-chat';
 import { RoomGallery } from './RoomGallery';
 import type { LiveKitMeeting } from './LiveKitRoomView';
 
@@ -47,15 +52,6 @@ const TAB_TITLE: Record<SidePanelTab, string> = {
   emotions: 'Эмоции',
   chat: 'Чат',
 };
-
-function useElapsed(): number {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return seconds;
-}
 
 const clock = (timestamp: number) =>
   new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -76,21 +72,35 @@ export function RoomShell({
 }) {
   const room = useRoomContext();
   const navigate = useNavigate();
-  const elapsed = useElapsed();
+  const connectionState = useConnectionState();
   const live = useParticipants();
+  const humans = live.filter((p) => !isAgent(p));
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   // Чат на LiveKit (тема lk.chat): история живет, пока открыта вкладка, и нигде не сохраняется
   const chat = useChat();
   // Реакции (эмодзи) идут по каналу данных, без гарантии доставки; в чат они не попадают
-  const reactions = useReactions(
-    useCallback(
-      (data, options) => localParticipant.publishData(data as Uint8Array<ArrayBuffer>, options),
-      [localParticipant],
-    ),
+  const publish = useCallback<PublishData>(
+    (data, options) => localParticipant.publishData(data as Uint8Array<ArrayBuffer>, options),
+    [localParticipant],
   );
+  const reactions = useReactions(publish);
   useDataChannel(REACTION_TOPIC, reactions.receive);
+  // История чата: своя во вкладке плюс синхронизация с теми, кто уже в комнате (vks.chat.sync)
+  const selfIdentity = localParticipant.identity ?? '';
+  const roomChat = useRoomChat({
+    meetingId: meeting.id,
+    live: chat.chatMessages,
+    selfIdentity,
+    humans: humans.map((p) => p.identity),
+    connected: connectionState === ConnectionState.Connected,
+    publish,
+  });
+  useDataChannel(CHAT_SYNC_TOPIC, roomChat.receive);
   const moderation = useModeration(meeting.id, {
-    onEnded: () => navigate(paths.meeting(meeting.id)),
+    onEnded: () => {
+      clearRoomState(meeting.id);
+      navigate(paths.meeting(meeting.id));
+    },
   });
   const [panel, setPanelState] = useState<SidePanelTab | null>(null);
   const notifications = useChatNotifications(chat.chatMessages, panel === 'chat');
@@ -107,6 +117,12 @@ export function RoomShell({
   const [chatError, setChatError] = useState(false);
   const isOrganizer = entry.role === 'organizer';
 
+  // Время встречи – от ее начала (а не от открытия страницы): переживает обновление
+  const elapsed = useMeetingElapsed(
+    meeting.id,
+    meeting.started_at,
+    humans.map((p) => p.joinedAt),
+  );
   const people = roomParticipants(live);
   // Индикатор виден всем, пока в комнате есть ML-агент (vks.kind = agent)
   const analysisRunning = live.some(isAgent);
@@ -123,6 +139,11 @@ export function RoomShell({
     try {
       if (kind === 'mic') await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
       else await localParticipant.setCameraEnabled(!isCameraEnabled);
+      // запоминаем состояние во вкладке: после обновления страницы выключенное остается выключенным
+      saveDevices(meeting.id, {
+        mic: kind === 'mic' ? !isMicrophoneEnabled : isMicrophoneEnabled,
+        camera: kind === 'camera' ? !isCameraEnabled : isCameraEnabled,
+      });
     } catch (e) {
       const name = e instanceof Error ? e.name : '';
       const failure =
@@ -311,11 +332,11 @@ export function RoomShell({
               )}
               {panel === 'chat' && (
                 <ChatPanel
-                  messages={chat.chatMessages.map((m) => ({
+                  messages={roomChat.messages.map((m) => ({
                     id: m.id,
-                    author: m.from?.isLocal ? 'Вы' : (m.from?.name ?? 'Участник'),
-                    text: m.message,
-                    at: clock(m.timestamp),
+                    author: m.from === selfIdentity ? 'Вы' : m.name,
+                    text: m.text,
+                    at: clock(m.at),
                   }))}
                   onSend={(text) => {
                     setChatError(false);
@@ -371,7 +392,11 @@ export function RoomShell({
         onToggleConsent={() => void consent.toggle()}
         unreadChat={notifications.unread}
         onTogglePanel={(tab) => setPanel((current) => (current === tab ? null : tab))}
-        onLeave={() => void room.disconnect()}
+        onLeave={() => {
+          // явный выход: история чата и состояние устройств этой вкладки больше не нужны
+          clearRoomState(meeting.id);
+          void room.disconnect();
+        }}
         onEnd={isOrganizer ? () => ask({ kind: 'end' }) : undefined}
       />
     </>

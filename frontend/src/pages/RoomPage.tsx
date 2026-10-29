@@ -65,7 +65,7 @@ function useElapsed(): number {
 
 /** Что комнате нужно знать о встрече: организатору приходит полная карточка, гостю – JoinResult.meeting. */
 type RoomMeeting = Pick<Meeting, 'id' | 'title' | 'status' | 'analysis_enabled'> &
-  Partial<Pick<Meeting, 'invite_url' | 'invite_code'>>;
+  Partial<Pick<Meeting, 'invite_url' | 'invite_code' | 'started_at'>>;
 
 /**
  * UC-4. Комната встречи (docs/frontend/site-structure.md, 4.3): галерея, боковая панель
