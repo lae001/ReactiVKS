@@ -13,6 +13,7 @@ const user = {
 const WIDTHS = [
   { width: 360, height: 740 },
   { width: 768, height: 900 },
+  { width: 960, height: 720 },
   { width: 1024, height: 700 },
   { width: 1280, height: 720 },
   { width: 1920, height: 1080 },
@@ -48,7 +49,45 @@ async function measure(page: Page) {
   });
 }
 
+/** Элементы с горизонтальной прокруткой и прокрутка корня и его предков: ничего не должно быть сдвинуто. */
+async function scrolledElements(page: Page) {
+  return page.evaluate(() => {
+    const shifted = [...document.querySelectorAll('*')]
+      .filter((el) => el.scrollLeft !== 0)
+      .map(
+        (el) => `${el.tagName}.${String(el.className).slice(0, 40)} scrollLeft=${el.scrollLeft}`,
+      );
+    const root = document.querySelector('#root > *') as HTMLElement;
+    const chain: HTMLElement[] = [];
+    for (let el: HTMLElement | null = root; el; el = el.parentElement) chain.push(el);
+    return {
+      shifted,
+      chain: chain.map((el) => [el.scrollLeft, el.scrollTop]),
+    };
+  });
+}
+
+/** Главные кнопки панели управления видны целиком: не обрезаны, не спрятаны в прокрутке. */
+async function expectMainButtonsVisible(page: Page, label: string) {
+  const footer = page.getByRole('contentinfo', { name: 'Управление встречей' });
+  const window = page.viewportSize()!;
+  for (const name of ['Микрофон', 'Камера', 'Чат', 'Завершить встречу']) {
+    const button = footer.getByRole('button', { name: new RegExp(`^${name}`) });
+    await expect(button, `${label}: «${name}»`).toBeVisible();
+    const box = (await button.boundingBox())!;
+    expect(box.x, `${label}: «${name}» слева`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${label}: «${name}» справа`).toBeLessThanOrEqual(window.width);
+    expect(box.y + box.height, `${label}: «${name}» снизу`).toBeLessThanOrEqual(window.height);
+  }
+}
+
 async function expectFitsWindow(page: Page, label: string) {
+  const scrolled = await scrolledElements(page);
+  expect(scrolled.shifted, `${label}: сдвинутые элементы`).toEqual([]);
+  expect(
+    scrolled.chain.flat().every((v) => v === 0),
+    `${label}: корень и предки не прокручены`,
+  ).toBe(true);
   const m = await measure(page);
   const info = `${label}: ${JSON.stringify(m)}`;
   expect(m.scrollWidth, `горизонтальная прокрутка – ${info}`).toBeLessThanOrEqual(m.innerWidth);
@@ -69,6 +108,7 @@ for (const { width, height } of WIDTHS) {
       page.getByRole('heading', { level: 1, name: 'Еженедельная планерка команды' }),
     ).toBeVisible();
     await expectFitsWindow(page, 'без панелей');
+    await expectMainButtonsVisible(page, 'без панелей');
 
     // страницу пытаются прокрутить колесом и клавишами: она не двигается
     await page.mouse.wheel(300, 300);
@@ -80,6 +120,18 @@ for (const { width, height } of WIDTHS) {
       await page.getByRole('button', { name: tab }).click();
       await expect(page.getByRole('complementary')).toBeVisible();
       await expectFitsWindow(page, `панель «${tab}»`);
+      await expectMainButtonsVisible(page, `панель «${tab}»`);
+    }
+
+    // Tab по всей панели управления: фокус ничего не сдвигает
+    await page
+      .getByRole('contentinfo', { name: 'Управление встречей' })
+      .locator('button')
+      .first()
+      .focus();
+    for (let i = 0; i < 12; i += 1) {
+      await page.keyboard.press('Tab');
+      await expectFitsWindow(page, `Tab ${i + 1}`);
     }
   });
 }
@@ -88,7 +140,7 @@ test('после выхода из комнаты прокрутка стран�
   await signIn(page);
   await page.goto('/room/m-active');
   await page.getByRole('heading', { level: 1, name: 'Еженедельная планерка команды' }).waitFor();
-  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden');
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('clip');
 
   await page.goto('/meetings');
   await expect(page.getByRole('heading', { level: 1, name: 'Встречи' })).toBeVisible();

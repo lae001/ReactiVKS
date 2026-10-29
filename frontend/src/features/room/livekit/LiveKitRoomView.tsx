@@ -149,7 +149,8 @@ export function LiveKitRoomView({
       onMediaDeviceFailure={(failure, kind) => setDeviceNotice(deviceFailureText(failure, kind))}
       // Размер – инлайном: стили LiveKit (`.lk-room-container`, без слоя) перебивают классы Tailwind.
       // Корень закреплен на всё окно (fixed + inset 0, а не 100dvh): что бы ни лежало внутри, страница
-      // не прокручивается; ширина и высота `auto` отменяют `100%` из стилей LiveKit.
+      // не прокручивается и не сдвигается программно (`clip`, а не `hidden`: у `hidden` scrollLeft можно изменить
+      // фокусом); ширина и высота `auto` отменяют `100%` из стилей LiveKit.
       style={{
         position: 'fixed',
         inset: 0,
@@ -157,7 +158,7 @@ export function LiveKitRoomView({
         height: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden',
+        overflow: 'clip',
       }}
       className="bg-room text-room-foreground"
       data-lk-theme="default"

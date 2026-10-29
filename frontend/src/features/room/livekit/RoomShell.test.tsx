@@ -42,7 +42,7 @@ vi.mock('@livekit/components-react', () => ({
 vi.mock('./RoomGallery', () => ({
   RoomGallery: () => <section aria-label="Галерея участников" />,
 }));
-vi.mock('./DevicesMenu', () => ({ DevicesMenu: () => null }));
+vi.mock('./DevicesMenu', () => ({ DevicesPanel: () => <p>Панель устройств</p> }));
 vi.mock('./ConnectionBanner', () => ({ ConnectionBanner: () => null }));
 
 const person = (
@@ -538,7 +538,7 @@ describe('реакции в комнате', () => {
   const REACTION_TOPIC = 'vks.reaction';
   const sent = (emoji: string) => new TextEncoder().encode(JSON.stringify({ v: 1, emoji }));
 
-  it('кнопка «Реакции» → шесть реакций с подписями; выбор публикует данные и показывает эмодзи у отправителя', async () => {
+  it('кнопка «Реакции» → шесть реакций с подписями; выбор публикует данные, показывает эмодзи у отправителя и закрывает панель', async () => {
     const user = userEvent.setup();
     renderShell(guestEntry);
     await user.click(screen.getByRole('button', { name: 'Реакции' }));
@@ -552,12 +552,11 @@ describe('реакции в комнате', () => {
     expect(options).toEqual({ reliable: false, topic: REACTION_TOPIC });
     expect(screen.getByTestId('reaction')).toHaveTextContent('👏');
     expect(screen.getByTestId('reaction')).toHaveTextContent('Вы');
-    // сразу после выбора лимит (1 в секунду): кнопки неактивны, подпись «Подождите»
-    expect(screen.getByRole('button', { name: 'Реакция: нравится' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    expect(group).toHaveTextContent(/Слишком часто\. Подождите ещё \d+ с/);
+    // панель закрылась, а на кнопке «Реакции» – ожидание лимита 1 в секунду без слова «часто»
+    expect(screen.queryByRole('group', { name: 'Выбор реакции' })).not.toBeInTheDocument();
+    const button = screen.getByRole('button', { name: /^Реакции\. Подождите \d+ с$/ });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button.getAttribute('aria-label')).not.toMatch(/часто/);
   });
 
   it('чужая реакция: эмодзи с ником; в чат и в непрочитанные она не попадает', async () => {

@@ -1,11 +1,6 @@
 import { useMediaDeviceSelect } from '@livekit/components-react';
-import { Settings } from 'lucide-react';
-import { useState } from 'react';
-
 import { DeviceSelect } from '@/features/lobby/DeviceSelect';
 import { saveDevicePrefs } from '@/shared/lib/device-prefs';
-
-import { ControlButton } from '../ControlBar';
 
 type Kind = 'videoinput' | 'audioinput' | 'audiooutput';
 
@@ -19,6 +14,7 @@ function KindSelect({ kind, label, emptyText }: { kind: Kind; label: string; emp
     .map((d, i) => ({ id: d.deviceId, label: d.label || `${label} ${i + 1}` }));
   return (
     <DeviceSelect
+      tone="room"
       label={label}
       options={options}
       value={activeDeviceId}
@@ -36,38 +32,20 @@ function speakerSupported(): boolean {
   return typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
 }
 
-/** Кнопка «Устройства» на панели управления: микрофон, камера и динамик. */
-export function DevicesMenu() {
-  const [open, setOpen] = useState(false);
+/** Содержимое всплывающей панели «Устройства»: микрофон, камера и динамик (кнопка и положение – в `ControlBar`). */
+export function DevicesPanel() {
   return (
-    <span className="relative">
-      <ControlButton
-        icon={Settings}
-        label="Устройства"
-        onClick={() => setOpen((v) => !v)}
-        pressed={open}
-        tone={open ? 'active' : 'default'}
-      />
-      {open && (
-        // fixed: панель управления прокручивается по горизонтали, и absolute-панель обрезалась бы ее краем
-        // (на узком окне уходила за левый край); по центру окна она целиком видна на любой ширине
-        <div
-          role="group"
-          aria-label="Выбор устройств"
-          className="fixed bottom-20 left-1/2 z-30 flex w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col gap-3 rounded-xl border border-room-border bg-room-surface p-4 text-room-foreground"
-        >
-          <KindSelect kind="audioinput" label="Микрофон" emptyText="Микрофон не найден" />
-          <KindSelect kind="videoinput" label="Камера" emptyText="Камера не найдена" />
-          {speakerSupported() ? (
-            <KindSelect kind="audiooutput" label="Динамик" emptyText="Динамик по умолчанию" />
-          ) : (
-            <p className="text-xs text-room-muted">
-              Выбрать динамик можно только в Chrome и Edge. В вашем браузере звук идет в динамик,
-              выбранный в настройках системы.
-            </p>
-          )}
-        </div>
+    <>
+      <KindSelect kind="audioinput" label="Микрофон" emptyText="Микрофон не найден" />
+      <KindSelect kind="videoinput" label="Камера" emptyText="Камера не найдена" />
+      {speakerSupported() ? (
+        <KindSelect kind="audiooutput" label="Динамик" emptyText="Динамик по умолчанию" />
+      ) : (
+        <p className="text-xs text-room-muted">
+          Выбрать динамик можно только в Chrome и Edge. В вашем браузере звук идет в динамик,
+          выбранный в настройках системы.
+        </p>
       )}
-    </span>
+    </>
   );
 }

@@ -51,7 +51,7 @@ export function ReactionsOverlay({
   onExpire: (id: number) => void;
 }) {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-10 overflow-clip">
       <div className="absolute bottom-3 left-6 w-24">
         {items.map((item) => (
           <Floating key={`${item.id}-${item.count}`} item={item} onExpire={onExpire} />

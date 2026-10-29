@@ -272,7 +272,7 @@ function Room({
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-room text-room-foreground">
+    <div className="fixed inset-0 flex flex-col overflow-clip bg-room text-room-foreground">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-room-border px-4">
         <div className="flex min-w-0 flex-1 items-baseline gap-3">
           <h1 className="truncate text-sm font-medium">{meeting.title}</h1>

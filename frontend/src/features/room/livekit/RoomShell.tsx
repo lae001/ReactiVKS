@@ -32,12 +32,11 @@ import { useChatNotifications, useUnreadTitle } from './chat-notifications';
 import { ChatToasts } from './ChatToasts';
 import { ConnectionBanner } from './ConnectionBanner';
 import { useConsentToggle } from './consent';
-import { DevicesMenu } from './DevicesMenu';
+import { DevicesPanel } from './DevicesMenu';
 import { EMOTIONS_MOCK_NOTICE, mockEmotionSnapshot } from './emotions-mock';
 import { confirmText, type PendingAction, useModeration } from './moderation';
 import { deviceFailureText } from './notice';
 import { isAgent, roomParticipants } from './participants';
-import { ReactionsMenu } from './ReactionsMenu';
 import { ReactionsOverlay } from './ReactionsOverlay';
 import { REACTION_TOPIC, useReactions } from './reactions';
 import { RoomGallery } from './RoomGallery';
@@ -361,13 +360,12 @@ export function RoomShell({
         cameraOn={isCameraEnabled}
         consent={consent.consent}
         panel={panel}
-        devices={<DevicesMenu />}
-        reactions={
-          <ReactionsMenu
-            blockedUntil={reactions.blockedUntil}
-            onPick={(emoji) => void reactions.send(emoji)}
-          />
-        }
+        devicesPanel={<DevicesPanel />}
+        reactions={{
+          onPick: (emoji) => void reactions.send(emoji),
+          blockedUntil: reactions.blockedUntil,
+          tooFrequent: reactions.tooFrequent,
+        }}
         onToggleMic={() => void toggle('mic')}
         onToggleCamera={() => void toggle('camera')}
         onToggleConsent={() => void consent.toggle()}

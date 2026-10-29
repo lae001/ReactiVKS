@@ -11,8 +11,8 @@ describe('блокировка прокрутки страницы в комна
   it('пока включена – html и body без прокрутки, при размонтировании возвращается прежнее значение', () => {
     document.body.style.overflow = 'scroll';
     const view = renderHook(() => usePageScrollLock());
-    expect(document.documentElement.style.overflow).toBe('hidden');
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('clip');
+    expect(document.body.style.overflow).toBe('clip');
 
     view.unmount();
     expect(document.documentElement.style.overflow).toBe('');
@@ -23,7 +23,7 @@ describe('блокировка прокрутки страницы в комна
     const view = renderHook(({ on }) => usePageScrollLock(on), { initialProps: { on: false } });
     expect(document.body.style.overflow).toBe('');
     view.rerender({ on: true });
-    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.body.style.overflow).toBe('clip');
     view.rerender({ on: false });
     expect(document.body.style.overflow).toBe('');
   });

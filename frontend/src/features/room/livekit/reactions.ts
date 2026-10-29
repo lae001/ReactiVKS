@@ -48,6 +48,13 @@ export function createReactionLimiter() {
 
   return {
     waitMs,
+    /** Исчерпан ли лимит «пять за 10 секунд» (а не просто интервал в секунду). */
+    burstReached(key: string, now: number): boolean {
+      return (
+        (accepted.get(key) ?? []).filter((t) => now - t < REACTION_WINDOW_MS).length >=
+        REACTION_BURST
+      );
+    },
     /** Принимает реакцию, если лимит позволяет, и запоминает ее. */
     take(key: string, now: number): boolean {
       if (waitMs(key, now) > 0) return false;
@@ -110,7 +117,7 @@ export type PublishData = (
 export function useReactions(publish: PublishData) {
   const [floating, setFloating] = useState<FloatingReaction[]>([]);
   // Когда снова можно отправить реакцию (мс, Date.now()); 0 – можно сейчас
-  const [blockedUntil, setBlockedUntil] = useState(0);
+  const [block, setBlock] = useState({ until: 0, tooFrequent: false });
   const limiter = useRef(createReactionLimiter());
   const sequence = useRef(0);
 
@@ -140,7 +147,11 @@ export function useReactions(publish: PublishData) {
       if (!limiter.current.take('self', now)) return false;
       // Следующая реакция возможна не раньше, чем освободится лимит (интервал или окно из пяти)
       const wait = limiter.current.waitMs('self', now);
-      setBlockedUntil(wait > 0 ? now + wait : 0);
+      setBlock(
+        wait > 0
+          ? { until: now + wait, tooFrequent: limiter.current.burstReached('self', now) }
+          : { until: 0, tooFrequent: false },
+      );
       show('self', 'Вы', emoji, now);
       try {
         await publish(encodeReaction(emoji), { reliable: false, topic: REACTION_TOPIC });
@@ -170,5 +181,14 @@ export function useReactions(publish: PublishData) {
     [],
   );
 
-  return { floating, blockedUntil, send, receive, expire };
+  return {
+    floating,
+    /** Когда снова можно отправить реакцию (`Date.now()`); 0 – можно сейчас */
+    blockedUntil: block.until,
+    /** Исчерпан лимит «пять за 10 секунд»: подпись «Слишком часто» вместо обычного ожидания */
+    tooFrequent: block.tooFrequent,
+    send,
+    receive,
+    expire,
+  };
 }

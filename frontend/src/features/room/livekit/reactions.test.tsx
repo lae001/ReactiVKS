@@ -1,5 +1,4 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 import {
   createReactionLimiter,
@@ -15,7 +14,6 @@ import {
   REACTIONS,
   useReactions,
 } from './reactions';
-import { ReactionsMenu } from './ReactionsMenu';
 import { FLOAT_LIFETIME_MS, REDUCED_LIFETIME_MS, ReactionsOverlay } from './ReactionsOverlay';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
@@ -289,74 +287,5 @@ describe('оверлей реакций', () => {
     act(() => void vi.advanceTimersByTime(REDUCED_LIFETIME_MS));
     expect(onExpire).toHaveBeenCalledWith(1);
     expect(REDUCED_LIFETIME_MS).toBeLessThan(FLOAT_LIFETIME_MS);
-  });
-});
-
-describe('меню «Реакции»', () => {
-  afterEach(() => vi.useRealTimers());
-
-  it('клавиатура: Enter и пробел выбирают, Esc закрывает и возвращает фокус; у кнопок русские подписи', async () => {
-    const user = userEvent.setup();
-    const onPick = vi.fn();
-    render(<ReactionsMenu onPick={onPick} />);
-    const trigger = screen.getByRole('button', { name: 'Реакции' });
-    expect(trigger).toHaveAttribute('aria-haspopup', 'true');
-
-    await user.keyboard('{Tab}{Enter}');
-    expect(trigger).toHaveAttribute('aria-pressed', 'true');
-    const options = screen.getAllByRole('button', { name: /^Реакция: / });
-    expect(options.map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Реакция: нравится',
-      'Реакция: сердце',
-      'Реакция: смешно',
-      'Реакция: удивление',
-      'Реакция: аплодисменты',
-      'Реакция: праздник',
-    ]);
-    expect(options[0]).toHaveFocus();
-
-    await user.keyboard('{Enter}');
-    expect(onPick).toHaveBeenLastCalledWith('👍');
-    await user.keyboard('{Tab}{ }');
-    expect(onPick).toHaveBeenLastCalledWith('❤️');
-
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('group', { name: 'Выбор реакции' })).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
-    expect(onPick).toHaveBeenCalledTimes(2);
-  });
-
-  it('при превышении лимита: aria-disabled, «Слишком часто. Подождите ещё N с» с таймером, клики не проходят', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(new Date('2026-10-29T10:00:00Z'));
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onPick = vi.fn();
-    render(<ReactionsMenu onPick={onPick} blockedUntil={Date.now() + 3000} />);
-    await user.click(screen.getByRole('button', { name: 'Реакции' }));
-
-    const group = screen.getByRole('group', { name: 'Выбор реакции' });
-    const first = screen.getByRole('button', { name: 'Реакция: нравится' });
-    expect(first).toHaveAttribute('aria-disabled', 'true');
-    expect(first).not.toBeDisabled(); // остается в порядке обхода: скринридер ее читает
-    expect(group).toHaveTextContent('Слишком часто. Подождите ещё 3 с');
-    expect(group.querySelector('[aria-live="polite"]')).not.toBeNull();
-
-    await user.click(first);
-    expect(onPick).not.toHaveBeenCalled();
-
-    act(() => void vi.advanceTimersByTime(1100));
-    expect(group).toHaveTextContent('Подождите ещё 2 с');
-    act(() => void vi.advanceTimersByTime(2000));
-    expect(group).not.toHaveTextContent('Слишком часто');
-    expect(first).not.toHaveAttribute('aria-disabled');
-    await user.click(first);
-    expect(onPick).toHaveBeenCalledWith('👍');
-  });
-
-  it('ожидание в подписи не больше 10 с', async () => {
-    const user = userEvent.setup();
-    render(<ReactionsMenu onPick={vi.fn()} blockedUntil={Date.now() + 60_000} />);
-    await user.click(screen.getByRole('button', { name: 'Реакции' }));
-    expect(screen.getByRole('group', { name: 'Выбор реакции' })).toHaveTextContent('ещё 10 с');
   });
 });
