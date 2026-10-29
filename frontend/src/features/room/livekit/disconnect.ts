@@ -5,7 +5,7 @@ export type RoomEnd =
   | { kind: 'removed' }
   | { kind: 'meeting_ended' }
   | { kind: 'duplicate' }
-  | { kind: 'lost' };
+  | { kind: 'lost'; /** Техническая причина для экрана и журнала дефектов */ detail?: string };
 
 /**
  * Почему мы больше не в комнате. `lost` – обрыв, после которого LiveKit не смог переподключиться:
@@ -23,7 +23,7 @@ export function describeDisconnect(reason: DisconnectReason | undefined): RoomEn
     case DisconnectReason.DUPLICATE_IDENTITY:
       return { kind: 'duplicate' };
     default:
-      return { kind: 'lost' };
+      return { kind: 'lost', detail: reason === undefined ? undefined : DisconnectReason[reason] };
   }
 }
 
@@ -59,7 +59,10 @@ export function isAbortedBeforeConnect(
 }
 
 /** Заголовок и пояснение экрана по причине выхода (кнопки – у вызывающего). */
-export function roomEndText(end: RoomEnd, meetingTitle: string): { title: string; text: string } {
+export function roomEndText(
+  end: RoomEnd,
+  meetingTitle: string,
+): { title: string; text: string; detail?: string } {
   switch (end.kind) {
     case 'left':
       return {
@@ -85,6 +88,7 @@ export function roomEndText(end: RoomEnd, meetingTitle: string): { title: string
       return {
         title: 'Соединение потеряно',
         text: 'Связь с видеосервером оборвалась, и восстановить ее автоматически не получилось. Проверьте интернет и подключитесь снова.',
+        detail: end.detail,
       };
   }
 }

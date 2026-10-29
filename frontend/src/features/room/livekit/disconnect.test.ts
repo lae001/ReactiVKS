@@ -27,6 +27,14 @@ describe('причины выхода из комнаты', () => {
     expect(describeDisconnect(reason).kind).toBe(kind);
   });
 
+  it('для обрыва в экран попадает техническая причина', () => {
+    const lost = describeDisconnect(DisconnectReason.SERVER_SHUTDOWN);
+    expect(lost).toEqual({ kind: 'lost', detail: 'SERVER_SHUTDOWN' });
+    expect(roomEndText(lost, 'x').detail).toBe('SERVER_SHUTDOWN');
+    expect(describeDisconnect(undefined)).toEqual({ kind: 'lost', detail: undefined });
+    expect(roomEndText({ kind: 'left' }, 'x').detail).toBeUndefined();
+  });
+
   it('тексты экранов по-русски; удаленный видит «Вас удалили из встречи»', () => {
     expect(roomEndText({ kind: 'removed' }, 'Планерка').title).toBe('Вас удалили из встречи');
     expect(roomEndText({ kind: 'meeting_ended' }, 'Планерка').text).toContain('Планерка');

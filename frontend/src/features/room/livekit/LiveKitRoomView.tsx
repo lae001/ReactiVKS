@@ -63,7 +63,7 @@ export function LiveKitRoomView({
   useEffect(() => {
     connected.current = false;
     const timer = window.setTimeout(() => {
-      if (!connected.current) setEnd({ kind: 'lost' });
+      if (!connected.current) setEnd({ kind: 'lost', detail: 'CONNECT_TIMEOUT' });
     }, CONNECT_WATCHDOG_MS);
     return () => window.clearTimeout(timer);
   }, [connection.token]);
@@ -81,12 +81,13 @@ export function LiveKitRoomView({
   }, []);
 
   if (end) {
-    const { title, text } = roomEndText(end, meeting.title);
+    const { title, text, detail } = roomEndText(end, meeting.title);
     const back = paths.join(entry.inviteCode ?? meeting.invite_code ?? '');
     return (
       <RoomMessage
         title={title}
         text={text}
+        detail={detail}
         action={
           end.kind === 'lost' || end.kind === 'left' ? (
             <Button
@@ -134,7 +135,7 @@ export function LiveKitRoomView({
       }}
       onError={(error) => {
         // отказ камеры или микрофона – не обрыв: встреча идет, причину показывает onMediaDeviceFailure
-        if (isConnectionLost(error)) setEnd({ kind: 'lost' });
+        if (isConnectionLost(error)) setEnd({ kind: 'lost', detail: error.message });
       }}
       onMediaDeviceFailure={(failure, kind) => setDeviceNotice(deviceFailureText(failure, kind))}
       // Размер – инлайном: стили LiveKit (`.lk-room-container`, без слоя) перебивают классы Tailwind
