@@ -9,6 +9,8 @@ export interface ChatMessage {
   text: string;
   /** Время от начала встречи, «мм:сс» */
   at: string;
+  /** Системная строка о реакции участника («Анна: 👍»): показывается иначе, чем сообщение */
+  kind?: 'reaction';
 }
 
 /**
@@ -35,14 +37,20 @@ export function ChatPanel({
   return (
     <div className="flex h-full flex-col gap-3">
       <ol className="flex flex-1 flex-col gap-3" aria-live="polite">
-        {messages.map((m) => (
-          <li key={m.id} className="flex flex-col gap-0.5 text-sm">
-            <span className="text-xs text-room-muted">
-              {m.author} · {m.at}
-            </span>
-            <span className="break-words">{m.text}</span>
-          </li>
-        ))}
+        {messages.map((m) =>
+          m.kind === 'reaction' ? (
+            <li key={m.id} className="text-xs text-room-muted italic">
+              {m.author}: <span aria-label="реакция">{m.text}</span>
+            </li>
+          ) : (
+            <li key={m.id} className="flex flex-col gap-0.5 text-sm">
+              <span className="text-xs text-room-muted">
+                {m.author} · {m.at}
+              </span>
+              <span className="break-words">{m.text}</span>
+            </li>
+          ),
+        )}
       </ol>
       <p className="text-xs text-room-muted">Сообщения не сохраняются после встречи.</p>
       <form onSubmit={submit} className="flex gap-2">

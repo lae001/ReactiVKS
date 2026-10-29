@@ -27,6 +27,7 @@ export function ControlButton({
   pressed,
   tone = 'default',
   badge,
+  popup,
 }: {
   icon: LucideIcon;
   /** Постоянное доступное имя; состояние передает aria-pressed */
@@ -38,12 +39,15 @@ export function ControlButton({
   tone?: 'default' | 'off' | 'active';
   /** Счетчик на кнопке (непрочитанные сообщения), например «3» или «9+» */
   badge?: string;
+  /** Кнопка открывает всплывающую панель: aria-haspopup */
+  popup?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={pressed}
+      aria-haspopup={popup ? 'true' : undefined}
       aria-label={label}
       title={label}
       className={cn(
@@ -82,6 +86,7 @@ export function ControlBar({
   onTogglePanel,
   onLeave,
   devices,
+  reactions,
   onEnd,
   showChat = true,
   unreadChat = 0,
@@ -99,6 +104,8 @@ export function ControlBar({
   onLeave: () => void;
   /** Меню устройств (комната на LiveKit): камера, микрофон, динамик */
   devices?: ReactNode;
+  /** Меню реакций (комната на LiveKit) */
+  reactions?: ReactNode;
   /** Если задано, «Выйти» и «Завершить встречу» – две разные кнопки (организатор в комнате на LiveKit) */
   onEnd?: () => void;
   showChat?: boolean;
@@ -135,6 +142,7 @@ export function ControlBar({
           tone={cameraOn ? 'default' : 'off'}
         />
         {devices}
+        {reactions}
         {analysisEnabled && (
           <ControlButton
             icon={ScanFace}

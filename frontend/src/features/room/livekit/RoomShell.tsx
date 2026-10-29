@@ -1,13 +1,14 @@
 import {
   RoomAudioRenderer,
   useChat,
+  useDataChannel,
   useLocalParticipant,
   useParticipants,
   useRoomContext,
 } from '@livekit/components-react';
 import { MediaDeviceFailure } from 'livekit-client';
 import { X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { meetingErrorMessage } from '@/features/meetings/errors';
@@ -36,6 +37,9 @@ import { EMOTIONS_MOCK_NOTICE, mockEmotionSnapshot } from './emotions-mock';
 import { confirmText, type PendingAction, useModeration } from './moderation';
 import { deviceFailureText } from './notice';
 import { isAgent, roomParticipants } from './participants';
+import { ReactionsMenu } from './ReactionsMenu';
+import { ReactionsOverlay } from './ReactionsOverlay';
+import { REACTION_TOPIC, useReactions } from './reactions';
 import { RoomGallery } from './RoomGallery';
 import type { LiveKitMeeting } from './LiveKitRoomView';
 
@@ -78,6 +82,14 @@ export function RoomShell({
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   // Чат на LiveKit (тема lk.chat): история живет, пока открыта вкладка, и нигде не сохраняется
   const chat = useChat();
+  // Реакции (эмодзи) идут по каналу данных, без гарантии доставки; в чат они попадают отдельной строкой
+  const reactions = useReactions(
+    useCallback(
+      (data, options) => localParticipant.publishData(data as Uint8Array<ArrayBuffer>, options),
+      [localParticipant],
+    ),
+  );
+  useDataChannel(REACTION_TOPIC, reactions.receive);
   const moderation = useModeration(meeting.id, {
     onEnded: () => navigate(paths.meeting(meeting.id)),
   });
@@ -212,6 +224,7 @@ export function RoomShell({
 
       <div className="relative flex min-h-0 flex-1">
         <RoomGallery />
+        <ReactionsOverlay items={reactions.floating} onExpire={reactions.expire} />
         <ChatToasts
           toasts={notifications.toasts}
           onOpen={() => setPanel('chat')}
@@ -299,12 +312,25 @@ export function RoomShell({
               )}
               {panel === 'chat' && (
                 <ChatPanel
-                  messages={chat.chatMessages.map((m) => ({
-                    id: m.id,
-                    author: m.from?.isLocal ? 'Вы' : (m.from?.name ?? 'Участник'),
-                    text: m.message,
-                    at: clock(m.timestamp),
-                  }))}
+                  messages={[
+                    ...chat.chatMessages.map((m) => ({
+                      id: m.id,
+                      ts: m.timestamp,
+                      author: m.from?.isLocal ? 'Вы' : (m.from?.name ?? 'Участник'),
+                      text: m.message,
+                      at: clock(m.timestamp),
+                    })),
+                    ...reactions.log.map((r) => ({
+                      id: `reaction-${r.id}`,
+                      ts: r.at,
+                      author: r.name,
+                      text: r.emoji,
+                      at: clock(r.at),
+                      kind: 'reaction' as const,
+                    })),
+                  ]
+                    .sort((x, y) => x.ts - y.ts)
+                    .map(({ ts: _ts, ...message }) => message)}
                   onSend={(text) => {
                     setChatError(false);
                     chat.send(text).catch(() => setChatError(true));
@@ -349,6 +375,7 @@ export function RoomShell({
         consent={consent.consent}
         panel={panel}
         devices={<DevicesMenu />}
+        reactions={<ReactionsMenu onPick={(emoji) => void reactions.send(emoji)} />}
         onToggleMic={() => void toggle('mic')}
         onToggleCamera={() => void toggle('camera')}
         onToggleConsent={() => void consent.toggle()}

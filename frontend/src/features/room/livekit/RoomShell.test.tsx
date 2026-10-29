@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 
@@ -16,13 +16,23 @@ const lk = vi.hoisted(() => ({
   disconnect: vi.fn(),
   setMic: vi.fn(),
   setCamera: vi.fn(),
+  publishData: vi.fn().mockResolvedValue(undefined),
+  onData: undefined as ((message: unknown) => void) | undefined,
 }));
 
 vi.mock('@livekit/components-react', () => ({
   useParticipants: () => lk.participants,
+  useDataChannel: (_topic: string, onMessage: (message: unknown) => void) => {
+    lk.onData = onMessage;
+    return { send: vi.fn(), isSending: false, message: undefined };
+  },
   useChat: () => ({ chatMessages: lk.messages, send: lk.send, isSending: false }),
   useLocalParticipant: () => ({
-    localParticipant: { setMicrophoneEnabled: lk.setMic, setCameraEnabled: lk.setCamera },
+    localParticipant: {
+      setMicrophoneEnabled: lk.setMic,
+      setCameraEnabled: lk.setCamera,
+      publishData: lk.publishData,
+    },
     isMicrophoneEnabled: true,
     isCameraEnabled: true,
   }),
@@ -104,6 +114,7 @@ beforeEach(() => {
   lk.messages = [];
   lk.send.mockReset().mockResolvedValue(undefined);
   lk.disconnect.mockReset();
+  lk.publishData.mockClear();
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -520,5 +531,57 @@ describe('уведомления о новых сообщениях чата', (
     await user.type(screen.getByLabelText('Сообщение'), 'а');
     expect(screen.getByRole('button', { name: 'Чат' })).toBeInTheDocument();
     expect(document.title).toBe('ReactiVKS');
+  });
+});
+
+describe('реакции в комнате', () => {
+  const REACTION_TOPIC = 'vks.reaction';
+  const sent = (emoji: string) => new TextEncoder().encode(JSON.stringify({ v: 1, emoji }));
+
+  it('кнопка «Реакции» → шесть реакций с подписями; выбор публикует данные и показывает эмодзи у отправителя', async () => {
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(screen.getByRole('button', { name: 'Реакции' }));
+    const group = screen.getByRole('group', { name: 'Выбор реакции' });
+    expect(within(group).getAllByRole('button')).toHaveLength(6);
+
+    await user.click(within(group).getByRole('button', { name: 'Реакция: аплодисменты' }));
+    expect(lk.publishData).toHaveBeenCalledTimes(1);
+    const [data, options] = lk.publishData.mock.calls[0] as [Uint8Array, unknown];
+    expect(new TextDecoder().decode(data)).toBe('{"v":1,"emoji":"👏"}');
+    expect(options).toEqual({ reliable: false, topic: REACTION_TOPIC });
+    expect(screen.getByTestId('reaction')).toHaveTextContent('👏');
+    expect(screen.getByTestId('reaction')).toHaveTextContent('Вы');
+    // панель закрылась, фокус вернулся на кнопку
+    expect(screen.queryByRole('group', { name: 'Выбор реакции' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Реакции' })).toHaveFocus();
+  });
+
+  it('чужая реакция: эмодзи с именем из участника LiveKit; в чате строка «Анна Гостева: 👍», не в непрочитанных', async () => {
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    act(() =>
+      lk.onData?.({
+        topic: REACTION_TOPIC,
+        payload: sent('👍'),
+        from: person('p_g1', 'Анна Гостева'),
+      }),
+    );
+    expect(screen.getByTestId('reaction')).toHaveTextContent('Анна Гостева');
+    expect(screen.getByRole('button', { name: 'Чат' })).toBeInTheDocument(); // без счетчика
+    expect(document.title).not.toMatch(/^\(/);
+
+    await user.click(screen.getByRole('button', { name: 'Чат' }));
+    expect(screen.getByRole('list')).toHaveTextContent('Анна Гостева: 👍');
+  });
+
+  it('оверлей не принимает клики и скрыт от скринридеров', () => {
+    renderShell(guestEntry);
+    act(() =>
+      lk.onData?.({ topic: REACTION_TOPIC, payload: sent('🎉'), from: person('p_g1', 'Анна') }),
+    );
+    const overlay = screen.getByTestId('reaction').parentElement;
+    expect(overlay).toHaveAttribute('aria-hidden', 'true');
+    expect(overlay).toHaveClass('pointer-events-none');
   });
 });
