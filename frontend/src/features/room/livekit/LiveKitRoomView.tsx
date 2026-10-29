@@ -2,7 +2,7 @@ import '@livekit/components-styles';
 
 import { LiveKitRoom } from '@livekit/components-react';
 import { type DisconnectReason, type RoomOptions } from 'livekit-client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
 import { paths } from '@/shared/config/routes';
@@ -12,9 +12,18 @@ import { Button } from '@/shared/ui/button';
 
 import { RoomMessage } from '../RoomMessage';
 
-import { describeDisconnect, type RoomEnd, roomEndText } from './disconnect';
+import {
+  describeDisconnect,
+  isAbortedBeforeConnect,
+  isCancelledConnect,
+  type RoomEnd,
+  roomEndText,
+} from './disconnect';
 import { deviceFailureText } from './notice';
 import { RoomShell } from './RoomShell';
+
+/** Сколько ждать подключения, прежде чем считать, что оно не состоялось (страховка от «вечного» ожидания) */
+const CONNECT_WATCHDOG_MS = 20_000;
 
 export interface RoomConnection {
   url: string;
@@ -48,6 +57,16 @@ export function LiveKitRoomView({
 }) {
   const [end, setEnd] = useState<RoomEnd | null>(null);
   const [deviceNotice, setDeviceNotice] = useState<string | null>(null);
+
+  // Подключалась ли комната: отмену попытки (StrictMode, смена токена) нельзя путать с обрывом связи
+  const connected = useRef(false);
+  useEffect(() => {
+    connected.current = false;
+    const timer = window.setTimeout(() => {
+      if (!connected.current) setEnd({ kind: 'lost' });
+    }, CONNECT_WATCHDOG_MS);
+    return () => window.clearTimeout(timer);
+  }, [connection.token]);
 
   // Выбор из лобби: те же устройства, что гость проверял перед входом
   const options = useMemo<RoomOptions>(() => {
@@ -104,8 +123,19 @@ export function LiveKitRoomView({
       video={entry.cameraOn}
       audio={entry.micOn}
       options={options}
-      onDisconnected={(reason?: DisconnectReason) => setEnd(describeDisconnect(reason))}
-      onError={() => setEnd({ kind: 'lost' })}
+      onConnected={() => {
+        connected.current = true;
+      }}
+      onDisconnected={(reason?: DisconnectReason) => {
+        const wasConnected = connected.current;
+        connected.current = false;
+        if (isAbortedBeforeConnect(reason, wasConnected)) return;
+        setEnd(describeDisconnect(reason));
+      }}
+      onError={(error) => {
+        if (isCancelledConnect(error)) return;
+        setEnd({ kind: 'lost' });
+      }}
       onMediaDeviceFailure={(failure, kind) => setDeviceNotice(deviceFailureText(failure, kind))}
       // Размер – инлайном: стили LiveKit (`.lk-room-container`, без слоя) перебивают классы Tailwind
       style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}

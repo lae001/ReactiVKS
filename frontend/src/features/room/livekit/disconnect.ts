@@ -1,4 +1,4 @@
-import { DisconnectReason } from 'livekit-client';
+import { ConnectionError, ConnectionErrorReason, DisconnectReason } from 'livekit-client';
 
 export type RoomEnd =
   | { kind: 'left' }
@@ -25,6 +25,27 @@ export function describeDisconnect(reason: DisconnectReason | undefined): RoomEn
     default:
       return { kind: 'lost' };
   }
+}
+
+/**
+ * Ошибка подключения, вызванная отменой самой попытки («Client initiated disconnect»): LiveKit отменяет
+ * подключение, когда компонент размонтируется до его завершения. В dev-режиме так делает `StrictMode`
+ * (монтирование – размонтирование – монтирование). Это не обрыв связи, показывать экран «Соединение
+ * потеряно» не нужно: следующая попытка подключения идет своим чередом.
+ */
+export function isCancelledConnect(error: unknown): boolean {
+  return error instanceof ConnectionError && error.reason === ConnectionErrorReason.Cancelled;
+}
+
+/**
+ * Отключение, которое пришло раньше, чем комната подключилась, по инициативе клиента: это отмена
+ * попытки (см. `isCancelledConnect`), а не выход пользователя.
+ */
+export function isAbortedBeforeConnect(
+  reason: DisconnectReason | undefined,
+  wasConnected: boolean,
+): boolean {
+  return !wasConnected && reason === DisconnectReason.CLIENT_INITIATED;
 }
 
 /** Заголовок и пояснение экрана по причине выхода (кнопки – у вызывающего). */

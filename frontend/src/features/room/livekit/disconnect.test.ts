@@ -1,6 +1,16 @@
-import { ConnectionState, DisconnectReason, MediaDeviceFailure } from 'livekit-client';
+import {
+  ConnectionError,
+  ConnectionState,
+  DisconnectReason,
+  MediaDeviceFailure,
+} from 'livekit-client';
 
-import { describeDisconnect, roomEndText } from './disconnect';
+import {
+  describeDisconnect,
+  isAbortedBeforeConnect,
+  isCancelledConnect,
+  roomEndText,
+} from './disconnect';
 import { connectionNotice, deviceFailureText } from './notice';
 
 describe('причины выхода из комнаты', () => {
@@ -22,6 +32,22 @@ describe('причины выхода из комнаты', () => {
     expect(roomEndText({ kind: 'lost' }, 'x').title).toBe('Соединение потеряно');
     expect(roomEndText({ kind: 'left' }, 'x').title).toBe('Вы вышли из встречи');
     expect(roomEndText({ kind: 'duplicate' }, 'x').title).toMatch(/другого устройства/);
+  });
+});
+
+describe('отмена попытки подключения (StrictMode в dev) не считается обрывом', () => {
+  it('«Client initiated disconnect» – отмена, остальные ошибки подключения – нет', () => {
+    expect(isCancelledConnect(ConnectionError.cancelled('Client initiated disconnect'))).toBe(true);
+    expect(isCancelledConnect(ConnectionError.serverUnreachable('нет сервера'))).toBe(false);
+    expect(isCancelledConnect(ConnectionError.timeout('таймаут'))).toBe(false);
+    expect(isCancelledConnect(new Error('прочее'))).toBe(false);
+  });
+
+  it('выход по инициативе клиента до подключения – отмена, после подключения – выход пользователя', () => {
+    expect(isAbortedBeforeConnect(DisconnectReason.CLIENT_INITIATED, false)).toBe(true);
+    expect(isAbortedBeforeConnect(DisconnectReason.CLIENT_INITIATED, true)).toBe(false);
+    expect(isAbortedBeforeConnect(DisconnectReason.SERVER_SHUTDOWN, false)).toBe(false);
+    expect(isAbortedBeforeConnect(undefined, false)).toBe(false);
   });
 });
 
