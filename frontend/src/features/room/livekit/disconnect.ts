@@ -38,6 +38,16 @@ export function isCancelledConnect(error: unknown): boolean {
 }
 
 /**
+ * Ошибка из `onError` комнаты, после которой связи нет. LiveKit передает туда не только ошибки подключения,
+ * но и отказ устройств (`NotAllowedError: Permission denied`, камера занята и т. п.): с ними встреча
+ * продолжается без камеры или микрофона, а причину показывает `onMediaDeviceFailure`. Поэтому обрывом
+ * считается только настоящая ошибка подключения, кроме отмены самой попытки.
+ */
+export function isConnectionLost(error: unknown): boolean {
+  return error instanceof ConnectionError && !isCancelledConnect(error);
+}
+
+/**
  * Отключение, которое пришло раньше, чем комната подключилась, по инициативе клиента: это отмена
  * попытки (см. `isCancelledConnect`), а не выход пользователя.
  */

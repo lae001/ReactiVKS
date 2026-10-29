@@ -15,7 +15,7 @@ import { RoomMessage } from '../RoomMessage';
 import {
   describeDisconnect,
   isAbortedBeforeConnect,
-  isCancelledConnect,
+  isConnectionLost,
   type RoomEnd,
   roomEndText,
 } from './disconnect';
@@ -133,8 +133,8 @@ export function LiveKitRoomView({
         setEnd(describeDisconnect(reason));
       }}
       onError={(error) => {
-        if (isCancelledConnect(error)) return;
-        setEnd({ kind: 'lost' });
+        // отказ камеры или микрофона – не обрыв: встреча идет, причину показывает onMediaDeviceFailure
+        if (isConnectionLost(error)) setEnd({ kind: 'lost' });
       }}
       onMediaDeviceFailure={(failure, kind) => setDeviceNotice(deviceFailureText(failure, kind))}
       // Размер – инлайном: стили LiveKit (`.lk-room-container`, без слоя) перебивают классы Tailwind

@@ -9,6 +9,7 @@ import {
   describeDisconnect,
   isAbortedBeforeConnect,
   isCancelledConnect,
+  isConnectionLost,
   roomEndText,
 } from './disconnect';
 import { connectionNotice, deviceFailureText } from './notice';
@@ -41,6 +42,16 @@ describe('отмена попытки подключения (StrictMode в dev)
     expect(isCancelledConnect(ConnectionError.serverUnreachable('нет сервера'))).toBe(false);
     expect(isCancelledConnect(ConnectionError.timeout('таймаут'))).toBe(false);
     expect(isCancelledConnect(new Error('прочее'))).toBe(false);
+  });
+
+  it('обрывом считается только настоящая ошибка подключения, отказ устройств – нет', () => {
+    expect(isConnectionLost(ConnectionError.serverUnreachable('нет сервера'))).toBe(true);
+    expect(isConnectionLost(ConnectionError.timeout('таймаут'))).toBe(true);
+    expect(isConnectionLost(ConnectionError.cancelled('Client initiated disconnect'))).toBe(false);
+    const denied = new Error('Permission denied');
+    denied.name = 'NotAllowedError';
+    expect(isConnectionLost(denied)).toBe(false);
+    expect(isConnectionLost(new Error('прочее'))).toBe(false);
   });
 
   it('выход по инициативе клиента до подключения – отмена, после подключения – выход пользователя', () => {
