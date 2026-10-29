@@ -199,7 +199,7 @@ export function createMockMeetingsApi(now: () => Date = () => new Date()): MockM
       const filtered = meetings
         .filter((m) => !params.status?.length || params.status.includes(m.status))
         .filter((m) => !q || m.title.toLowerCase().includes(q))
-        .filter((m) => !params.from || sortKey(m) >= params.from)
+        .filter((m) => !params.from || sortKey(m).slice(0, 10) >= params.from.slice(0, 10))
         .filter((m) => !params.to || sortKey(m).slice(0, 10) <= params.to.slice(0, 10))
         .sort((a, b) => (sortKey(a) < sortKey(b) ? 1 : sortKey(a) > sortKey(b) ? -1 : 0));
       const items = filtered.slice(offset, offset + limit).map((m) => ({ ...m }));

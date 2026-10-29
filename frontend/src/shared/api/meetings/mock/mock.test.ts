@@ -349,3 +349,15 @@ describe('mock: жизненный цикл встречи', () => {
     await expect(api.getMeeting('m-active')).resolves.toBeDefined();
   });
 });
+
+describe('mock: фильтр по датам', () => {
+  it('from и to – даты включительно, datetime сводится к дате', async () => {
+    const api = setup();
+    const all = await api.listMeetings({ limit: 100 });
+    const day = all.items.find((m) => m.id === 'm-active')!.started_at!.slice(0, 10);
+    const same = await api.listMeetings({ from: day, to: day, limit: 100 });
+    expect(same.items.map((m) => m.id)).toContain('m-active');
+    const withTime = await api.listMeetings({ from: `${day}T23:59:59Z`, to: day, limit: 100 });
+    expect(withTime.items.map((m) => m.id)).toContain('m-active');
+  });
+});

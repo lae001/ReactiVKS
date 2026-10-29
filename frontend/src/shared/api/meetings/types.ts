@@ -93,8 +93,11 @@ export interface ListMeetingsParams {
   status?: MeetingStatus[];
   /** подстрока названия, до 100 символов */
   q?: string;
+  /** Дата `YYYY-MM-DD` (включительно); если передан datetime, берется его дата */
   from?: string;
+  /** Дата `YYYY-MM-DD` (включительно) */
   to?: string;
+  /** 1–100, по умолчанию 20 (http-слой подрезает значение до этого диапазона) */
   limit?: number;
   cursor?: string;
 }
