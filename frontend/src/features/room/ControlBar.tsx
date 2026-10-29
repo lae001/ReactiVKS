@@ -16,6 +16,7 @@ import {
 import type { ConsentState } from '@/shared/api/types';
 import { cn } from '@/shared/lib/utils';
 
+import { unreadBadge } from './livekit/chat-notifications';
 import type { SidePanelTab } from './types';
 
 export function ControlButton({
@@ -25,6 +26,7 @@ export function ControlButton({
   onClick,
   pressed,
   tone = 'default',
+  badge,
 }: {
   icon: LucideIcon;
   /** Постоянное доступное имя; состояние передает aria-pressed */
@@ -34,6 +36,8 @@ export function ControlButton({
   onClick: () => void;
   pressed?: boolean;
   tone?: 'default' | 'off' | 'active';
+  /** Счетчик на кнопке (непрочитанные сообщения), например «3» или «9+» */
+  badge?: string;
 }) {
   return (
     <button
@@ -43,12 +47,20 @@ export function ControlButton({
       aria-label={label}
       title={label}
       className={cn(
-        'flex h-12 min-w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-room-foreground transition-colors hover:bg-room-border sm:min-w-16',
+        'relative flex h-12 min-w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-room-foreground transition-colors hover:bg-room-border sm:min-w-16',
         tone === 'off' && 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
         tone === 'active' && 'bg-room-border',
       )}
     >
       <Icon className="size-5" aria-hidden />
+      {badge && (
+        <span
+          aria-hidden
+          className="absolute -top-1 -right-1 grid min-w-5 place-items-center rounded-full bg-primary px-1 text-[11px] leading-5 font-semibold text-primary-foreground"
+        >
+          {badge}
+        </span>
+      )}
       <span className="hidden text-[11px] leading-none sm:block" aria-hidden>
         {caption}
       </span>
@@ -72,6 +84,7 @@ export function ControlBar({
   devices,
   onEnd,
   showChat = true,
+  unreadChat = 0,
 }: {
   isOrganizer: boolean;
   analysisEnabled: boolean;
@@ -89,6 +102,8 @@ export function ControlBar({
   /** Если задано, «Выйти» и «Завершить встречу» – две разные кнопки (организатор в комнате на LiveKit) */
   onEnd?: () => void;
   showChat?: boolean;
+  /** Непрочитанные сообщения чата: бейдж на кнопке «Чат» */
+  unreadChat?: number;
 }) {
   const analyzed = consent === 'granted';
 
@@ -152,7 +167,9 @@ export function ControlBar({
         {showChat && (
           <ControlButton
             icon={MessageSquare}
-            label="Чат"
+            label={unreadChat > 0 ? `Чат, непрочитанных: ${unreadChat}` : 'Чат'}
+            caption="Чат"
+            badge={unreadChat > 0 ? unreadBadge(unreadChat) : undefined}
             onClick={() => onTogglePanel('chat')}
             pressed={panel === 'chat'}
             tone={panel === 'chat' ? 'active' : 'default'}

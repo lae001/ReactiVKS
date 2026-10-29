@@ -27,6 +27,8 @@ import { ControlBar } from '../ControlBar';
 import { ParticipantsPanel } from '../ParticipantsPanel';
 import type { SidePanelTab } from '../types';
 
+import { useChatNotifications, useUnreadTitle } from './chat-notifications';
+import { ChatToasts } from './ChatToasts';
 import { ConnectionBanner } from './ConnectionBanner';
 import { useConsentToggle } from './consent';
 import { DevicesMenu } from './DevicesMenu';
@@ -79,7 +81,17 @@ export function RoomShell({
   const moderation = useModeration(meeting.id, {
     onEnded: () => navigate(paths.meeting(meeting.id)),
   });
-  const [panel, setPanel] = useState<SidePanelTab | null>(null);
+  const [panel, setPanelState] = useState<SidePanelTab | null>(null);
+  const notifications = useChatNotifications(chat.chatMessages, panel === 'chat');
+  useUnreadTitle(notifications.unread);
+  // Открытие чата обнуляет счетчик и убирает уведомления
+  function setPanel(
+    next: SidePanelTab | null | ((current: SidePanelTab | null) => SidePanelTab | null),
+  ) {
+    const value = typeof next === 'function' ? next(panel) : next;
+    if (value === 'chat') notifications.markRead();
+    setPanelState(value);
+  }
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [chatError, setChatError] = useState(false);
   const isOrganizer = entry.role === 'organizer';
@@ -200,6 +212,11 @@ export function RoomShell({
 
       <div className="relative flex min-h-0 flex-1">
         <RoomGallery />
+        <ChatToasts
+          toasts={notifications.toasts}
+          onOpen={() => setPanel('chat')}
+          onExpire={notifications.dismissToast}
+        />
         {panel && (
           <aside
             aria-label={TAB_TITLE[panel]}
@@ -335,6 +352,7 @@ export function RoomShell({
         onToggleMic={() => void toggle('mic')}
         onToggleCamera={() => void toggle('camera')}
         onToggleConsent={() => void consent.toggle()}
+        unreadChat={notifications.unread}
         onTogglePanel={(tab) => setPanel((current) => (current === tab ? null : tab))}
         onLeave={() => void room.disconnect()}
         onEnd={isOrganizer ? () => ask({ kind: 'end' }) : undefined}

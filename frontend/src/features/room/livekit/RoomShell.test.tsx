@@ -466,3 +466,59 @@ describe('панель эмоций (на моке)', () => {
     expect(screen.queryByRole('button', { name: 'Эмоции' })).not.toBeInTheDocument();
   });
 });
+
+describe('уведомления о новых сообщениях чата', () => {
+  const incoming = (id: string, message: string) => ({
+    id,
+    timestamp: Date.now(),
+    message,
+    from: person('p_g1', 'Анна Гостева'),
+  });
+
+  beforeEach(() => {
+    document.title = 'ReactiVKS';
+  });
+  afterEach(() => {
+    document.title = 'ReactiVKS';
+  });
+
+  it('бейдж на «Чат», уведомление и заголовок; открытие чата обнуляет всё', async () => {
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    // открыта другая вкладка – чат не виден
+    await user.click(screen.getByRole('button', { name: 'Участники' }));
+    lk.messages = [incoming('1', 'Привет'), incoming('2', 'Вы тут?')];
+    await user.click(screen.getByRole('button', { name: 'Участники' }));
+    await user.click(screen.getByRole('button', { name: 'Участники' }));
+
+    const chatButton = screen.getByRole('button', { name: 'Чат, непрочитанных: 2' });
+    expect(chatButton).toHaveTextContent('2');
+    expect(screen.getByRole('status')).toHaveTextContent('Анна Гостева: Вы тут?');
+    expect(document.title).toBe('(2) ReactiVKS');
+
+    await user.click(chatButton);
+    expect(screen.getByRole('button', { name: 'Чат' })).not.toHaveTextContent('2');
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(document.title).toBe('ReactiVKS');
+  });
+
+  it('клик по уведомлению открывает чат', async () => {
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    lk.messages = [incoming('1', 'Привет')];
+    await user.click(screen.getByRole('button', { name: 'Участники' }));
+    await user.click(screen.getByRole('button', { name: 'Анна Гостева: Привет' }));
+    expect(screen.getByRole('tab', { name: 'Чат', selected: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Чат' })).toBeInTheDocument();
+  });
+
+  it('сообщения при открытом чате не накапливаются', async () => {
+    const user = userEvent.setup();
+    renderShell(guestEntry);
+    await user.click(screen.getByRole('button', { name: 'Чат' }));
+    lk.messages = [incoming('1', 'Привет')];
+    await user.type(screen.getByLabelText('Сообщение'), 'а');
+    expect(screen.getByRole('button', { name: 'Чат' })).toBeInTheDocument();
+    expect(document.title).toBe('ReactiVKS');
+  });
+});
