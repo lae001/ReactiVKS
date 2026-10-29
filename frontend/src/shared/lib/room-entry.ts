@@ -3,7 +3,7 @@ import type { ConsentState, JoinedMeeting, ParticipantRole } from '@/shared/api/
 /**
  * С чем пользователь входит в комнату: передается из лобби через state навигации.
  * Сведения о встрече и id участника берутся из ответа POST /join/{invite_code}; токен LiveKit
- * комната получит в ветке с LiveKitRoom.
+ * в state не передается: комната всегда запрашивает свежий (rejoin / вход организатора).
  */
 export interface RoomEntry {
   role: ParticipantRole;

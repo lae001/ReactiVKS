@@ -1,4 +1,4 @@
-import { Mic, MicOff, UserX } from 'lucide-react';
+import { Mic, MicOff, UserX, VideoOff } from 'lucide-react';
 
 import type { ConsentState } from '@/shared/api/types';
 import { initials } from '@/shared/lib/format';
@@ -22,11 +22,14 @@ export function ParticipantsPanel({
   participants,
   canModerate,
   onMute,
+  onMuteCamera,
   onRemove,
 }: {
   participants: RoomParticipant[];
   canModerate: boolean;
   onMute: (id: string) => void;
+  /** Кнопка «Выключить камеру» – только в комнате на LiveKit */
+  onMuteCamera?: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
   return (
@@ -69,6 +72,18 @@ export function ParticipantsPanel({
                 >
                   <MicOff />
                 </Button>
+                {onMuteCamera && (
+                  <Button
+                    variant="room"
+                    size="icon"
+                    className={cn('size-8', !p.cameraOn && 'invisible')}
+                    onClick={() => onMuteCamera(p.id)}
+                    aria-label={`Выключить камеру: ${p.name}`}
+                    title="Выключить камеру"
+                  >
+                    <VideoOff />
+                  </Button>
+                )}
                 <Button
                   variant="room"
                   size="icon"

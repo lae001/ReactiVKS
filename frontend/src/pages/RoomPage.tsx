@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { meetingErrorMessage } from '@/features/meetings/errors';
@@ -9,12 +9,14 @@ import { EmotionIndicator } from '@/features/emotions/EmotionIndicator';
 import { EmotionPanel } from '@/features/emotions/EmotionPanel';
 import { type ChatMessage, ChatPanel } from '@/features/room/ChatPanel';
 import { ConfirmDialog } from '@/features/room/ConfirmDialog';
+import { RoomMessage } from '@/features/room/RoomMessage';
 import { ControlBar } from '@/features/room/ControlBar';
 import { ParticipantsPanel } from '@/features/room/ParticipantsPanel';
 import type { RoomParticipant, SidePanelTab } from '@/features/room/types';
 import { VideoTile } from '@/features/room/VideoTile';
+import { LiveKitRoomPage } from '@/features/room/livekit/LiveKitRoomPage';
 import { useMeeting, useParticipants } from '@/features/meetings/queries';
-import type { Meeting, Participant } from '@/shared/api/meetings';
+import { API_MODE, type Meeting, type Participant } from '@/shared/api/meetings';
 import { useSessionStore } from '@/shared/api/session';
 import type { ConsentState, SnapshotParticipant } from '@/shared/api/types';
 import { paths } from '@/shared/config/routes';
@@ -58,16 +60,6 @@ function useElapsed(): number {
   return seconds;
 }
 
-function RoomMessage({ title, text, action }: { title: string; text: string; action: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh flex-col items-start justify-center gap-4 bg-room px-6 text-room-foreground md:px-16">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      <p className="max-w-md text-room-muted">{text}</p>
-      {action}
-    </div>
-  );
-}
-
 /** Что комнате нужно знать о встрече: организатору приходит полная карточка, гостю – JoinResult.meeting. */
 type RoomMeeting = Pick<Meeting, 'id' | 'title' | 'status' | 'analysis_enabled'> &
   Partial<Pick<Meeting, 'invite_url' | 'invite_code'>>;
@@ -88,7 +80,8 @@ export default function RoomPage() {
   // Гость получил сведения о встрече при входе (GET /meetings/{id} только для владельца);
   // организатор запрашивает карточку сам.
   const meetingQuery = useMeeting(meetingId, { enabled: !fromLobby?.meeting });
-  const participantsQuery = useParticipants(meetingId);
+  // REST-список участников нужен только mock-комнате: в режиме http состав берется из LiveKit
+  const participantsQuery = useParticipants(meetingId, API_MODE === 'mock');
 
   const meeting: RoomMeeting | undefined = fromLobby?.meeting ?? meetingQuery.data;
   if (!meeting) {
@@ -113,7 +106,7 @@ export default function RoomPage() {
     }
     return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
   }
-  if (participantsQuery.isPending) {
+  if (API_MODE === 'mock' && participantsQuery.isPending) {
     return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
   }
 
@@ -161,6 +154,7 @@ export default function RoomPage() {
     );
   }
 
+  if (API_MODE === 'http') return <LiveKitRoomPage meeting={meeting} entry={entry} />;
   return <Room meeting={meeting} entry={entry} others={others} onLeave={() => setLeft(true)} />;
 }
 
