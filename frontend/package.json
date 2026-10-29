@@ -20,6 +20,7 @@
     "gen:api": "openapi-typescript ${VITE_DEV_API_TARGET:-http://127.0.0.1:8001}/openapi.json -o src/shared/api/schema.d.ts",
     "test:e2e": "playwright test",
     "test:e2e:livekit": "playwright test -c playwright.livekit.config.ts",
+    "test:e2e:lobby": "playwright test -c playwright.lobby.config.ts",
     "mockups": "playwright test -c playwright.mockups.config.ts"
   },
   "dependencies": {

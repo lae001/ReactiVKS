@@ -1,22 +1,12 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { meetingsApi } from '@/shared/api/meetings';
+import { MEETING_ERROR_CODES, meetingsApi } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
 import { getParticipantToken } from '@/shared/lib/participant-session';
 import { mockNoSession } from '@/test/api-mocks';
+import { installFakeMediaDevices } from '@/test/fake-media';
 import { renderApp } from '@/test/render';
-
-/** Браузер с WebRTC и камерой: без этого лобби не дает войти. */
-function stubMediaBrowser() {
-  const stream = { getTracks: () => [], getVideoTracks: () => [], getAudioTracks: () => [] };
-  vi.stubGlobal('RTCPeerConnection', class {});
-  Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
-  Object.defineProperty(navigator, 'mediaDevices', {
-    value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
-    configurable: true,
-  });
-}
 
 function renderLobby(code: string) {
   mockNoSession();
@@ -24,7 +14,7 @@ function renderLobby(code: string) {
 }
 
 describe('лобби участника', () => {
-  beforeEach(stubMediaBrowser);
+  beforeEach(() => void installFakeMediaDevices());
   afterEach(() => vi.unstubAllGlobals());
 
   it('без явного выбора согласия войти нельзя', async () => {
@@ -99,8 +89,9 @@ describe('лобби участника', () => {
     await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
     const status = await screen.findByText('Встреча еще не началась');
     expect(status.closest('[role="status"]')).toHaveTextContent(
-      'Обновите страницу, когда встреча начнётся.',
+      'Проверяем каждые 5 секунд и войдем сами',
     );
+    expect(screen.queryByText(/Обновите страницу/)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -207,6 +198,260 @@ describe('лобби участника', () => {
       expect(
         await screen.findByRole('heading', { level: 1, name: 'Не удалось открыть приглашение' }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('ожидание начала встречи', () => {
+    const notStarted = () =>
+      new ApiError({ status: 409, code: 'meeting_not_started', message: 'not started' });
+
+    async function submitAndWait(code = 'demoactive') {
+      const user = userEvent.setup({ delay: null });
+      const router = renderLobby(code);
+      await user.type(await screen.findByLabelText('Как вас представить'), 'Мария');
+      await user.click(screen.getByRole('radio', { name: /Участвую без анализа/ }));
+      // таймеры подменяем после загрузки страницы: react-query сам использует setTimeout
+      // RTL после каждого user.click ждет setTimeout(0), под подменой таймеров он не сработает
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      fireEvent.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      return { user, router };
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it('повторяет вход раз в 5 секунд и входит сам, когда встреча началась', async () => {
+      const spy = vi
+        .spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockRejectedValueOnce(notStarted());
+      const { router } = await submitAndWait();
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      await act(() => vi.advanceTimersByTimeAsync(4_999));
+      expect(spy).toHaveBeenCalledTimes(1);
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+
+      // третий вызов уходит в настоящий mock: встреча активна
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(spy).toHaveBeenCalledTimes(3);
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(router.state.location.pathname).toBe('/room/m-active');
+      expect(getParticipantToken()).toMatch(/^pt_/);
+    });
+
+    it('«Отменить ожидание» останавливает опрос', async () => {
+      const spy = vi.spyOn(meetingsApi, 'joinMeeting').mockRejectedValue(notStarted());
+      await submitAndWait();
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Отменить ожидание' }));
+      expect(screen.getByRole('button', { name: 'Войти во встречу' })).toBeEnabled();
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('ответ запроса, отправленного до отмены, игнорируется', async () => {
+      let finish: (() => void) | undefined;
+      const real = meetingsApi.joinMeeting.bind(meetingsApi);
+      const spy = vi
+        .spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockImplementationOnce(
+          (...args) =>
+            new Promise((resolve, reject) => {
+              finish = () => real(...args).then(resolve, reject);
+            }),
+        );
+      const { router } = await submitAndWait();
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Отменить ожидание' }));
+      await act(async () => finish?.());
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+      expect(router.state.location.pathname).toBe('/j/demoactive');
+      expect(getParticipantToken()).toBeNull();
+    });
+
+    it('через 10 минут ожидание прекращается и пользователю сообщают об этом', async () => {
+      const spy = vi.spyOn(meetingsApi, 'joinMeeting').mockRejectedValue(notStarted());
+      await submitAndWait();
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(10 * 60_000 + 5_000));
+      expect(screen.getByRole('alert')).toHaveTextContent(/не началась за 10 минут/);
+      expect(screen.queryByText('Встреча еще не началась')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Войти во встречу' })).toBeEnabled();
+      const calls = spy.mock.calls.length;
+      expect(calls).toBeGreaterThanOrEqual(120);
+      expect(calls).toBeLessThanOrEqual(122);
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(spy).toHaveBeenCalledTimes(calls);
+    });
+
+    it('временный сбой при ожидании не прерывает опрос', async () => {
+      const spy = vi
+        .spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockRejectedValueOnce(new ApiError({ status: 0, code: 'network_error', message: 'x' }));
+      const { router } = await submitAndWait();
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(router.state.location.pathname).toBe('/room/m-active');
+    });
+
+    it('429 при опросе: ждем не меньше Retry-After', async () => {
+      const spy = vi
+        .spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockRejectedValueOnce(
+          new ApiError({ status: 429, code: 'too_many_requests', message: 'slow', retryAfter: 30 }),
+        );
+      const { router } = await submitAndWait();
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      await act(() => vi.advanceTimersByTimeAsync(29_999));
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(spy).toHaveBeenCalledTimes(3);
+      expect(router.state.location.pathname).toBe('/room/m-active');
+    });
+
+    it('429 без Retry-After: обычный интервал 5 секунд', async () => {
+      const spy = vi
+        .spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockRejectedValueOnce(
+          new ApiError({ status: 429, code: 'too_many_requests', message: 'slow' }),
+        );
+      await submitAndWait();
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(spy).toHaveBeenCalledTimes(2);
+      await act(() => vi.advanceTimersByTimeAsync(4_999));
+      expect(spy).toHaveBeenCalledTimes(2);
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(spy).toHaveBeenCalledTimes(3);
+    });
+
+    it('Retry-After короче 5 секунд не ускоряет опрос', async () => {
+      const spy = vi
+        .spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockRejectedValueOnce(
+          new ApiError({ status: 429, code: 'too_many_requests', message: 's', retryAfter: 1 }),
+        );
+      await submitAndWait();
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      await act(() => vi.advanceTimersByTimeAsync(4_999));
+      expect(spy).toHaveBeenCalledTimes(2);
+    });
+
+    it('при ожидании встреча отменена – экран «Встреча отменена»', async () => {
+      vi.spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockRejectedValueOnce(
+          new ApiError({ status: 409, code: 'meeting_cancelled', message: 'c' }),
+        );
+      await submitAndWait();
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Встреча отменена' }),
+      ).toBeInTheDocument();
+    });
+
+    it('при ожидании комната заполнена – опрос прекращается, сообщение под формой', async () => {
+      const spy = vi
+        .spyOn(meetingsApi, 'joinMeeting')
+        .mockRejectedValueOnce(notStarted())
+        .mockRejectedValueOnce(new ApiError({ status: 409, code: 'meeting_full', message: 'f' }));
+      await submitAndWait();
+      expect(screen.getByText('Встреча еще не началась')).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(screen.getByRole('alert')).toHaveTextContent(/уже 10 участников/);
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(spy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('каждый код реестра на любом шаге', () => {
+    const SCREENS: Record<string, string> = {
+      meeting_ended: 'Встреча завершена',
+      meeting_cancelled: 'Встреча отменена',
+      participant_removed: 'Вас удалили из встречи',
+      not_found: 'Приглашение не найдено',
+      forbidden: 'Нет доступа',
+      user_blocked: 'Доступ закрыт',
+    };
+
+    it.each(Object.entries(MEETING_ERROR_CODES))(
+      '%s (HTTP %i) – экран или сообщение, страница не ломается',
+      async (code, status) => {
+        if (code === 'meeting_not_started') return; // отдельная ветка: ожидание
+        vi.spyOn(meetingsApi, 'joinMeeting').mockRejectedValueOnce(
+          new ApiError({ status, code, message: code }),
+        );
+        const user = userEvent.setup();
+        renderLobby('demoactive');
+        await user.type(await screen.findByLabelText('Как вас представить'), 'Анна');
+        await user.click(screen.getByRole('radio', { name: /Разрешаю анализ/ }));
+        await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+
+        const heading = SCREENS[code];
+        if (heading) {
+          expect(
+            await screen.findByRole('heading', { level: 1, name: heading }),
+          ).toBeInTheDocument();
+        } else {
+          const alert = await screen.findByRole('alert');
+          expect(alert.textContent?.length).toBeGreaterThan(10);
+          expect(screen.getByRole('button', { name: 'Войти во встречу' })).toBeEnabled();
+        }
+        vi.restoreAllMocks();
+      },
+    );
+
+    it('401 на POST /join (токена еще нет) – общая ошибка входа, а не «вас удалили»', async () => {
+      vi.spyOn(meetingsApi, 'joinMeeting').mockRejectedValueOnce(
+        new ApiError({ status: 401, code: 'unauthorized', message: 'u' }),
+      );
+      const user = userEvent.setup();
+      renderLobby('demoactive');
+      await user.type(await screen.findByLabelText('Как вас представить'), 'Анна');
+      await user.click(screen.getByRole('radio', { name: /Разрешаю анализ/ }));
+      await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Не удалось войти, попробуйте ещё раз.');
+      expect(alert).not.toHaveTextContent('удалили');
+      vi.restoreAllMocks();
+    });
+
+    it('экран «Вас удалили» называет встречу и организатора', async () => {
+      vi.spyOn(meetingsApi, 'joinMeeting').mockRejectedValueOnce(
+        new ApiError({ status: 403, code: 'participant_removed', message: 'p' }),
+      );
+      const user = userEvent.setup();
+      renderLobby('demoactive');
+      await user.type(await screen.findByLabelText('Как вас представить'), 'Анна');
+      await user.click(screen.getByRole('radio', { name: /Разрешаю анализ/ }));
+      await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+      expect(await screen.findByText(/Еженедельная планерка команды/)).toBeInTheDocument();
+      expect(screen.getByText(/свяжитесь с организатором/)).toBeInTheDocument();
+      vi.restoreAllMocks();
     });
   });
 });

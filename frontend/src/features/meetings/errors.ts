@@ -52,3 +52,23 @@ export function meetingErrorMessage(error: unknown, action = 'выполнить
       return `Не удалось ${action}. Повторите попытку позже.${error.requestId ? ` Код обращения: ${error.requestId}.` : ''}`;
   }
 }
+
+/**
+ * Сообщение для запросов с `Participant`-токеном (согласие, повторный вход): 401 здесь значит,
+ * что организатор удалил гостя или токен перестал действовать. Для `POST /join` (токена еще нет)
+ * не использовать – там 401 это просто неудачный вход, см. `joinErrorMessage`.
+ */
+export function guestErrorMessage(error: unknown, action = 'выполнить действие'): string {
+  if (error instanceof ApiError && error.code === 'unauthorized') {
+    return 'Вас удалили из встречи или сессия недействительна.';
+  }
+  return meetingErrorMessage(error, action);
+}
+
+/** Сообщение для `POST /join/{code}`: токена нет, поэтому 401 – общая ошибка входа. */
+export function joinErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code === 'unauthorized') {
+    return 'Не удалось войти, попробуйте ещё раз.';
+  }
+  return meetingErrorMessage(error, 'войти во встречу');
+}
