@@ -9,6 +9,7 @@ import { EmotionIndicator } from '@/features/emotions/EmotionIndicator';
 import { EmotionPanel } from '@/features/emotions/EmotionPanel';
 import { type ChatMessage, ChatPanel } from '@/features/room/ChatPanel';
 import { ConfirmDialog } from '@/features/room/ConfirmDialog';
+import { exitLink } from '@/features/room/livekit/exit-link';
 import { RoomMessage } from '@/features/room/RoomMessage';
 import { ControlBar } from '@/features/room/ControlBar';
 import { ParticipantsPanel } from '@/features/room/ParticipantsPanel';
@@ -130,9 +131,16 @@ export default function RoomPage() {
         title="Встреча завершена"
         text={`Встреча «${meeting.title}» уже закончилась.`}
         action={
-          <Button asChild variant="room">
-            <Link to={paths.meeting(meeting.id)}>К карточке встречи</Link>
-          </Button>
+          entry.role === 'organizer' ? (
+            <Button asChild variant="room">
+              <Link to={paths.meeting(meeting.id)}>К карточке встречи</Link>
+            </Button>
+          ) : (
+            // карточка встречи только для владельца: гостю – обратно к приглашению
+            <Button asChild variant="room">
+              <Link to={exitLink(entry, meeting).to}>{exitLink(entry, meeting).label}</Link>
+            </Button>
+          )
         }
       />
     );
@@ -149,6 +157,13 @@ export default function RoomPage() {
               Вернуться во встречу
             </Link>
           </Button>
+        }
+        secondary={
+          entry.role === 'organizer' ? (
+            <Button asChild variant="room">
+              <Link to={paths.meetings}>К встречам</Link>
+            </Button>
+          ) : undefined
         }
       />
     );

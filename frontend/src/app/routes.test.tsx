@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { admin, mockAuthConfig, mockNoSession, organizer } from '@/test/api-mocks';
 import { renderApp } from '@/test/render';
@@ -44,5 +45,21 @@ describe('маршруты-заглушки', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' }),
     ).toBeInTheDocument();
+  });
+  it('404: «К списку встреч» всегда, «Назад» только если есть куда вернуться', async () => {
+    mockNoSession();
+    mockAuthConfig();
+    const router = renderApp('/nope');
+    await screen.findByRole('heading', { level: 1, name: 'Такой страницы нет' });
+    expect(screen.getByRole('link', { name: 'К списку встреч' })).toHaveAttribute(
+      'href',
+      '/meetings',
+    );
+    expect(screen.queryByRole('button', { name: 'Назад' })).not.toBeInTheDocument();
+
+    await act(() => router.navigate('/nope-2'));
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Назад' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/nope'));
+    expect(screen.queryByRole('button', { name: 'Назад' })).not.toBeInTheDocument();
   });
 });

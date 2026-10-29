@@ -138,4 +138,16 @@ describe('ошибки получения токена', () => {
       expect(screen.queryByRole('button', { name: 'Повторить' })).not.toBeInTheDocument();
     },
   );
+  it('ошибка с «Повторить»: рядом выход – гостю «К приглашению», организатору «К встречам»', async () => {
+    vi.spyOn(meetingsApi, 'rejoin').mockRejectedValue(fail(503, 'livekit_unavailable'));
+    vi.spyOn(meetingsApi, 'joinAsOrganizer').mockRejectedValue(fail(503, 'livekit_unavailable'));
+    const { unmount } = renderPage(guest);
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'К приглашению' })).toHaveAttribute('href', '/j/abc');
+    unmount();
+
+    renderPage(organizer);
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+  });
 });

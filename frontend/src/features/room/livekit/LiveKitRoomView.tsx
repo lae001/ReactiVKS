@@ -19,6 +19,7 @@ import {
   type RoomEnd,
   roomEndText,
 } from './disconnect';
+import { exitLink } from './exit-link';
 import { deviceFailureText } from './notice';
 import { RoomShell } from './RoomShell';
 
@@ -82,7 +83,15 @@ export function LiveKitRoomView({
 
   if (end) {
     const { title, text, detail } = roomEndText(end, meeting.title);
-    const back = paths.join(entry.inviteCode ?? meeting.invite_code ?? '');
+    const exit = exitLink(entry, meeting);
+    // главная кнопка уже ведет наружу (удален, завершена, вошли с другого устройства) – вторую не дублируем
+    const primaryLeaves =
+      end.kind === 'removed' || end.kind === 'duplicate' || end.kind === 'meeting_ended';
+    const exitButton = (
+      <Button asChild variant="room">
+        <Link to={exit.to}>{exit.label}</Link>
+      </Button>
+    );
     return (
       <RoomMessage
         title={title}
@@ -104,13 +113,10 @@ export function LiveKitRoomView({
               <Link to={paths.meeting(meeting.id)}>К карточке встречи</Link>
             </Button>
           ) : (
-            <Button asChild variant="room">
-              <Link to={entry.role === 'organizer' ? paths.meetings : back}>
-                {entry.role === 'organizer' ? 'К встречам' : 'К приглашению'}
-              </Link>
-            </Button>
+            exitButton
           )
         }
+        secondary={primaryLeaves ? undefined : exitButton}
       />
     );
   }

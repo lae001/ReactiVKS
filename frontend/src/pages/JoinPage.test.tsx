@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MEETING_ERROR_CODES, meetingsApi } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
 import { getParticipantToken } from '@/shared/lib/participant-session';
-import { mockNoSession } from '@/test/api-mocks';
+import { mockNoSession, organizer } from '@/test/api-mocks';
 import { installFakeMediaDevices } from '@/test/fake-media';
 import { renderApp } from '@/test/render';
 
@@ -453,5 +453,51 @@ describe('лобби участника', () => {
       expect(screen.getByText(/свяжитесь с организатором/)).toBeInTheDocument();
       vi.restoreAllMocks();
     });
+  });
+});
+
+describe('лобби: выход без тупика', () => {
+  beforeEach(() => void installFakeMediaDevices());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('вошедший организатор: «К встречам» на форме и на экранах-заглушках', async () => {
+    const user = userEvent.setup();
+    const router = renderApp('/j/demoactive', { user: organizer });
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+
+    // завершенная встреча (экран-заглушка), отмененная и несуществующее приглашение
+    for (const [code, title] of [
+      ['demoended2', 'Встреча завершена'],
+      ['democancel', 'Встреча отменена'],
+      ['zzzzzzzzzz', 'Приглашение не найдено'],
+    ] as const) {
+      await act(() => router.navigate(`/j/${code}`));
+      await screen.findByRole('heading', { level: 1, name: title });
+      expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+    }
+    await user.click(screen.getByRole('link', { name: 'К встречам' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/meetings'));
+  });
+
+  it('гость, пришедший по прямой ссылке: кнопки «Назад» нет', async () => {
+    renderLobby('demoactive');
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    expect(screen.queryByRole('button', { name: /Назад/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'К встречам' })).not.toBeInTheDocument();
+  });
+
+  it('гость с историей приложения: «Назад» возвращает на предыдущую страницу, в том числе с заглушки', async () => {
+    const user = userEvent.setup();
+    const router = renderLobby('demoactive');
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    await act(() => router.navigate('/j/demoended2'));
+    await screen.findByRole('heading', { level: 1, name: 'Встреча завершена' });
+
+    await user.click(screen.getByRole('button', { name: /Назад/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/j/demoactive'));
+    // вернулись на первую запись истории – дальше возвращаться некуда
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    expect(screen.queryByRole('button', { name: /Назад/ })).not.toBeInTheDocument();
   });
 });

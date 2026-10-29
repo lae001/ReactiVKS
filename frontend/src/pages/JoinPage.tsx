@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { ConsentFieldset } from '@/features/lobby/ConsentFieldset';
 import { DevicePreview } from '@/features/lobby/DevicePreview';
+import { LobbyBackLink } from '@/features/lobby/LobbyBackLink';
 import { POLL_INTERVAL_MS, useJoinFlow } from '@/features/lobby/use-join-flow';
 import {
   type ConsentChoice,
@@ -29,6 +30,7 @@ function LobbyShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col gap-8 px-4 py-6 md:px-10 md:py-8">
       <Wordmark />
+      <LobbyBackLink />
       {children}
     </div>
   );

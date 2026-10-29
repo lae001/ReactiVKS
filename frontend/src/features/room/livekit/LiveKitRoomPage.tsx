@@ -5,12 +5,12 @@ import { Link } from 'react-router';
 import { guestErrorMessage, meetingErrorMessage } from '@/features/meetings/errors';
 import { meetingsApi } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
-import { paths } from '@/shared/config/routes';
 import type { RoomEntry } from '@/shared/lib/room-entry';
 import { Button } from '@/shared/ui/button';
 
 import { RoomMessage } from '../RoomMessage';
 
+import { exitLink } from './exit-link';
 import { type LiveKitMeeting, LiveKitRoomView, type RoomConnection } from './LiveKitRoomView';
 
 /**
@@ -54,6 +54,12 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
     // встреча чужая или удалена: `not_found` (контракт не различает эти случаи) – повтор не поможет
     const noAccess = entry.role === 'organizer' && (code === 'not_found' || code === 'forbidden');
     const retryable = !removed && !ended && !noAccess && code !== 'unauthorized';
+    const exit = exitLink(entry, meeting);
+    const exitButton = (
+      <Button asChild variant="room">
+        <Link to={exit.to}>{exit.label}</Link>
+      </Button>
+    );
     return (
       <RoomMessage
         title={
@@ -78,15 +84,10 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
               Повторить
             </Button>
           ) : (
-            <Button asChild variant="room">
-              <Link
-                to={entry.role === 'guest' ? paths.join(entry.inviteCode ?? '') : paths.meetings}
-              >
-                {entry.role === 'guest' ? 'К приглашению' : 'К встречам'}
-              </Link>
-            </Button>
+            exitButton
           )
         }
+        secondary={retryable ? exitButton : undefined}
       />
     );
   }
