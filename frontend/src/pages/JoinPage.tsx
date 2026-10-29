@@ -59,7 +59,7 @@ function terminalScreen(code: string, info: JoinInfo): { title: string; text: st
     case 'participant_removed':
       return {
         title: 'Вас удалили из встречи',
-        text: `Организатор удалил вас из встречи «${info.title}», вернуться по этой ссылке нельзя. ${contact}`,
+        text: `Организатор удалил вас из встречи «${info.title}». Вернуться с этого устройства нельзя. Если это ошибка, свяжитесь с организатором.`,
       };
     case 'not_found':
       return {

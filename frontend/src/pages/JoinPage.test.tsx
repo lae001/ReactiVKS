@@ -555,6 +555,13 @@ describe('лобби: повторный вход в той же вкладке 
     await user.click(screen.getByRole('radio', { name: /Разрешаю анализ/ }));
     await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
     expect(await screen.findByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
+    // текст не обещает больше, чем гарантирует контракт: блокируется токен этого устройства, а не ссылка
+    expect(
+      screen.getByText(
+        /Вернуться с этого устройства нельзя\. Если это ошибка, свяжитесь с организатором\./,
+      ),
+    ).toBeVisible();
+    expect(document.body).not.toHaveTextContent('по этой ссылке');
     expect(join).toHaveBeenCalledTimes(1);
   });
 

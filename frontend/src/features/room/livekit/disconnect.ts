@@ -72,7 +72,7 @@ export function roomEndText(
     case 'removed':
       return {
         title: 'Вас удалили из встречи',
-        text: `Организатор удалил вас из встречи «${meetingTitle}». Вернуться по этой ссылке нельзя.`,
+        text: `Организатор удалил вас из встречи «${meetingTitle}». Вернуться с этого устройства нельзя. Если это ошибка, свяжитесь с организатором.`,
       };
     case 'meeting_ended':
       return {

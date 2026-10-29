@@ -43,7 +43,7 @@ export function meetingErrorMessage(error: unknown, action = 'выполнить
     case 'analysis_disabled':
       return 'В этой встрече анализ эмоций выключен, согласие менять не нужно.';
     case 'participant_removed':
-      return 'Организатор удалил вас из встречи, вернуться по этой ссылке нельзя.';
+      return 'Организатор удалил вас из встречи. Вернуться с этого устройства нельзя. Если это ошибка, свяжитесь с организатором.';
     case 'idempotency_key_reused':
       return 'Этот запрос уже отправлялся с другими данными. Обновите страницу и повторите.';
     case 'livekit_unavailable':
