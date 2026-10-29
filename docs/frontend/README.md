@@ -7,7 +7,8 @@
 
 Запуск и команды – [frontend/README.md](../../frontend/README.md). Дополнительно:
 [структура сайта: роли, экраны, UC](site-structure.md) · [заметки по WebRTC и LiveKit](webrtc-livekit-notes.md) ·
-[UI-кит и визуальный стиль](ui-kit.md).
+[UI-кит и визуальный стиль](ui-kit.md) · [визуализация эмоций](emotion-visualization.md) ·
+[макеты экранов](mockups.md) · [план тестирования](../testing/test-plan.md).
 
 ## Технологии ([ADR-006](../adr/ADR-006-frontend-stack.md))
 
