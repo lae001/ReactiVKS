@@ -130,6 +130,12 @@ flowchart TB
 
 Открытые вопросы к бэкенду – [testing/backend-questions.md](../testing/backend-questions.md).
 
+**Проверено вживую против настоящих auth-service, meeting-service и LiveKit** (29.10.2026, `pnpm test:e2e:real`,
+3 теста): вход через форму, создание встречи, «Начать сейчас», лобби и вход гостя, комната с двумя участниками
+(видео, звук, чат), модерация, удаление, завершение, смена пароля; предел 10 – по REST и присутствию. **Не проверено
+вживую:** админка (администратор не создавался), Kafka, `429`, `503`, галерея из 10 через интерфейс. Подробности –
+[testing/sprint4-frontend-status.md](../testing/sprint4-frontend-status.md).
+
 ## Комната встречи
 
 Режим `http` (`VITE_API_MODE=http`, meeting-service или облегченный `dev-api`); подробности и экраны –
