@@ -58,7 +58,7 @@ export function MeetingPage() {
         </h1>
         <p className="text-muted-foreground">
           {notFound
-            ? 'Возможно, ее удалили или ссылка введена с ошибкой. Вернитесь к списку встреч.'
+            ? 'Встреча не найдена или у вас нет к ней доступа. Вернитесь к списку встреч.'
             : meetingErrorMessage(query.error, 'загрузить встречу')}
         </p>
         <div className="flex gap-2">

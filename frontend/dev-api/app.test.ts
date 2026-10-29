@@ -43,7 +43,16 @@ let base = '';
 let live: ReturnType<typeof fakeGateway>;
 let app: ReturnType<typeof createApp>;
 
-const ORG = { Authorization: 'Bearer test.jwt' };
+/** JWT организатора без подписи: dev-api берет из него `sub` (владелец) и `name`. */
+const bearer = (sub: string, name?: string) => ({
+  Authorization: `Bearer ${['{"alg":"none"}', JSON.stringify({ sub, name })]
+    .map((part) => Buffer.from(part).toString('base64url'))
+    .concat('x')
+    .join('.')}`,
+});
+
+const ORG = bearer('user-owner');
+const OTHER = bearer('user-other', 'Другой Организатор');
 
 /** Поля ответов, которые читают тесты (остальное проверяется через toMatchObject). */
 interface Body {
@@ -304,10 +313,9 @@ describe('dev-api: вход организатора и завершение', (
   });
 
   it('имя организатора берется из JWT без проверки подписи', async () => {
-    const payload = Buffer.from(JSON.stringify({ name: 'Иван Петров' })).toString('base64url');
     const m = await create();
     await call('POST', `/api/v1/meetings/${m.id}/join`, {
-      headers: { Authorization: `Bearer h.${payload}.s` },
+      headers: bearer('user-owner', 'Иван Петров'),
       body: { consent: 'granted' },
     });
     expect(live.gateway.createToken).toHaveBeenCalledWith(
@@ -649,5 +657,119 @@ describe('dev-api: настройки', () => {
       body: { analysis_enabled_default: true, analysis_fps_default: 1 },
     });
     expect(bad.status).toBe(422);
+  });
+});
+
+describe('dev-api: у встречи есть владелец (claim sub)', () => {
+  it('второй пользователь не видит чужую встречу в списке, владелец видит', async () => {
+    await create({ title: 'Моя' });
+    const mine = await call('GET', '/api/v1/meetings', { headers: ORG });
+    expect(mine.body?.items.map((m) => m.title)).toEqual(['Моя']);
+    const theirs = await call('GET', '/api/v1/meetings', { headers: OTHER });
+    expect(theirs.status).toBe(200);
+    expect(theirs.body?.items).toEqual([]);
+  });
+
+  it('чужая встреча: 404 not_found на GET, PATCH, DELETE, join, end, участников, mute и remove', async () => {
+    const m = await activeMeeting();
+    const guest = (await guestJoin(m.invite_code)).body!;
+    const id = `/api/v1/meetings/${m.id}`;
+    const attempts: [string, string, unknown?][] = [
+      ['GET', id],
+      ['PATCH', id, { title: 'Взлом' }],
+      ['DELETE', id],
+      ['POST', `${id}/join`, { consent: 'granted' }],
+      ['POST', `${id}/end`],
+      ['GET', `${id}/participants`],
+      ['POST', `${id}/participants/${guest.participant_id}/mute`, { kind: 'audio' }],
+      ['POST', `${id}/participants/${guest.participant_id}/remove`],
+      ['PUT', `/api/v1/participants/me/consent?meeting_id=${m.id}`, { decision: 'revoked' }],
+    ];
+    for (const [method, path, body] of attempts) {
+      const r = await call(method, path, { headers: OTHER, body });
+      expect([method, path, r.status, (r.body as { code?: string } | null)?.code]).toEqual([
+        method,
+        path,
+        404,
+        'not_found',
+      ]);
+    }
+    // ничего не изменилось: встреча идет, название прежнее, чужого участника в комнате нет
+    const card = await call('GET', id, { headers: ORG });
+    expect(card.body).toMatchObject({ title: 'Планерка', status: 'active' });
+    const people = (await call('GET', `${id}/participants`, { headers: ORG })).body!.items;
+    expect(people.every((p) => p.display_name !== 'Другой Организатор')).toBe(true);
+    expect(live.gateway.mute).not.toHaveBeenCalled();
+    expect(live.gateway.removeParticipant).not.toHaveBeenCalled();
+  });
+
+  it('владелец продолжает работать со своей встречей: изменение, участники, завершение', async () => {
+    const m = await activeMeeting();
+    const id = `/api/v1/meetings/${m.id}`;
+    expect(
+      (await call('PATCH', id, { headers: ORG, body: { title: 'Новое' } })).body,
+    ).toMatchObject({
+      title: 'Новое',
+    });
+    expect((await call('GET', `${id}/participants`, { headers: ORG })).status).toBe(200);
+    expect((await call('POST', `${id}/end`, { headers: ORG })).body).toMatchObject({
+      status: 'ended',
+    });
+  });
+
+  it('организатор в комнате получает identity по своей встрече: два аккаунта не выбивают друг друга', async () => {
+    const mine = await activeMeeting();
+    const other = (
+      await call('POST', '/api/v1/meetings', {
+        headers: OTHER,
+        body: { title: 'Чужая' },
+      })
+    ).body!;
+    await call('POST', `/api/v1/meetings/${other.id}/join`, {
+      headers: OTHER,
+      body: { consent: 'granted' },
+    });
+    const identities = live.gateway.createToken.mock.calls.map(([a]) => a.identity);
+    expect(new Set(identities).size).toBe(2);
+    expect(identities).toContain(`p_org-${mine.id}`);
+    expect(identities).toContain(`p_org-${other.id}`);
+  });
+
+  it('настройки и ключ идемпотентности у каждого пользователя свои', async () => {
+    await call('PUT', '/api/v1/settings', {
+      headers: ORG,
+      body: { analysis_enabled_default: false, analysis_fps_default: 5 },
+    });
+    expect((await call('GET', '/api/v1/settings', { headers: OTHER })).body).toEqual({
+      analysis_enabled_default: true,
+      analysis_fps_default: 3,
+    });
+    const a = await call('POST', '/api/v1/meetings', {
+      headers: { ...ORG, 'Idempotency-Key': 'k1' },
+      body: { title: 'Один' },
+    });
+    const b = await call('POST', '/api/v1/meetings', {
+      headers: { ...OTHER, 'Idempotency-Key': 'k1' },
+      body: { title: 'Другой' },
+    });
+    expect(b.status).toBe(201);
+    expect(b.body?.id).not.toBe(a.body?.id);
+  });
+
+  it('токен без sub (не JWT) – 401, пользователь не определен', async () => {
+    const r = await call('GET', '/api/v1/meetings', {
+      headers: { Authorization: 'Bearer test.jwt' },
+    });
+    expect(r.status).toBe(401);
+  });
+
+  it('гостевые маршруты владельца не требуют', async () => {
+    const m = await activeMeeting();
+    expect((await call('GET', `/api/v1/join/${m.invite_code}`)).status).toBe(200);
+    const guest = (await guestJoin(m.invite_code)).body!;
+    const auth = { Authorization: `Participant ${guest.participant_token}` };
+    expect((await call('POST', '/api/v1/participants/me/rejoin', { headers: auth })).status).toBe(
+      200,
+    );
   });
 });

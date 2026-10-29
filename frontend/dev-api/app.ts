@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 /**
  * ВРЕМЕННЫЙ dev-сервер вместо meeting-service: подмножество контракта docs/api/rest-api.md (раздел 3),
  * которое использует слой API фронтенда. Данные в памяти, JWT организатора не проверяется
- * (достаточно заголовка `Authorization: Bearer …`), все организаторы – один владелец.
+ * (достаточно заголовка `Authorization: Bearer <JWT>` с claim `sub`), у каждой встречи свой владелец.
  * Удаляется, когда появится настоящий meeting-service (dev-api/README.md).
  */
 
@@ -130,7 +130,10 @@ const invalid: (field: string, msg: string) => never = (field, msg) => {
 
 // ---------- Запрос и ответ ----------
 
-type Auth = { kind: 'organizer'; name: string } | { kind: 'participant'; token: string } | null;
+type Auth =
+  | { kind: 'organizer'; userId: string; name: string }
+  | { kind: 'participant'; token: string }
+  | null;
 
 interface Ctx {
   params: string[];
@@ -157,16 +160,24 @@ function inviteCode(): string {
   return Array.from(randomBytes(10), (b) => BASE32[b % 32]).join('');
 }
 
-/** Имя из JWT организатора без проверки подписи – только чтобы подписать участника в галерее. */
-function nameFromJwt(token: string): string {
+/**
+ * Claims `sub` (id пользователя) и `name` из JWT организатора без проверки подписи: токен выпускает
+ * auth-service (docs/architecture/05-security-privacy.md), здесь он нужен, чтобы знать владельца встречи
+ * и подписать участника в галерее. Токен без `sub` пользователя не определяет.
+ */
+function claimsFromJwt(token: string): { userId: string; name: string } | null {
   try {
     const part = token.split('.')[1] ?? '';
-    const payload = JSON.parse(Buffer.from(part, 'base64url').toString()) as { name?: unknown };
-    if (typeof payload.name === 'string' && payload.name.trim()) return payload.name.trim();
+    const payload = JSON.parse(Buffer.from(part, 'base64url').toString()) as {
+      sub?: unknown;
+      name?: unknown;
+    };
+    if (typeof payload.sub !== 'string' || !payload.sub) return null;
+    const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : '';
+    return { userId: payload.sub, name: name || 'Организатор' };
   } catch {
-    // токен не JWT или повреждён – имя по умолчанию
+    return null; // токен не JWT или повреждён
   }
-  return 'Организатор';
 }
 
 function parseAuth(header: string | undefined): Auth {
@@ -174,7 +185,10 @@ function parseAuth(header: string | undefined): Auth {
   const [scheme, ...rest] = header.split(' ');
   const value = rest.join(' ').trim();
   if (!value) return null;
-  if (scheme === 'Bearer') return { kind: 'organizer', name: nameFromJwt(value) };
+  if (scheme === 'Bearer') {
+    const claims = claimsFromJwt(value);
+    return claims && { kind: 'organizer', ...claims };
+  }
   if (scheme === 'Participant') return { kind: 'participant', token: value };
   return null;
 }
@@ -219,15 +233,25 @@ export function createApp({
   let people = new Map<string, Stored[]>(); // по id встречи
   let tokens = new Map<string, { meetingId: string; participantId: string }>();
   let idempotency = new Map<string, { fingerprint: string; meeting: Meeting }>();
-  let settings = { analysis_enabled_default: true, analysis_fps_default: 3 };
+  // владелец встречи (claim sub); в ответы API не попадает, как и в контракте
+  let owners = new Map<string, string>();
+  // настройки анализа по умолчанию – у каждого организатора свои
+  let settingsOf = new Map<
+    string,
+    { analysis_enabled_default: boolean; analysis_fps_default: number }
+  >();
 
   function reset() {
     meetings = [];
     people = new Map();
     tokens = new Map();
     idempotency = new Map();
-    settings = { analysis_enabled_default: true, analysis_fps_default: 3 };
+    owners = new Map();
+    settingsOf = new Map();
   }
+
+  const settingsFor = (userId: string) =>
+    settingsOf.get(userId) ?? { analysis_enabled_default: true, analysis_fps_default: 3 };
 
   const iso = () => now().toISOString();
   const listOf = (id: string) => people.get(id) ?? people.set(id, []).get(id)!;
@@ -245,6 +269,15 @@ export function createApp({
   const find = (id: string): Meeting => meetings.find((m) => m.id === id) ?? fail('not_found');
   const byInvite = (code: string): Meeting =>
     meetings.find((m) => m.invite_code === code) ?? fail('not_found');
+
+  /**
+   * Встреча организатора. Чужая встреча – `404 not_found`, как в контракте (docs/api/rest-api.md: «Встречи нет
+   * или она чужая»): ответ не раскрывает, существует ли встреча.
+   */
+  function owned(org: { userId: string }, id: string): Meeting {
+    const m = find(id);
+    return owners.get(m.id) === org.userId ? m : fail('not_found');
+  }
 
   function requireOrganizer(ctx: Ctx): Extract<Auth, { kind: 'organizer' }> {
     if (ctx.auth?.kind !== 'organizer') return fail('unauthorized');
@@ -347,10 +380,13 @@ export function createApp({
     });
 
   route('POST', '/api/v1/meetings', (ctx) => {
-    requireOrganizer(ctx);
-    const key = ctx.headers['idempotency-key'];
+    const org = requireOrganizer(ctx);
+    const settings = settingsFor(org.userId);
+    const header = ctx.headers['idempotency-key'];
+    // ключ идемпотентности действует в пределах пользователя
+    const key = typeof header === 'string' ? `${org.userId}:${header}` : undefined;
     const fingerprint = JSON.stringify(ctx.body);
-    const seen = typeof key === 'string' ? idempotency.get(key) : undefined;
+    const seen = key ? idempotency.get(key) : undefined;
     if (seen) {
       if (seen.fingerprint !== fingerprint) return fail('idempotency_key_reused');
       return ok(seen.meeting, 201);
@@ -378,12 +414,13 @@ export function createApp({
       created_at: iso(),
     };
     meetings.unshift(meeting);
-    if (typeof key === 'string') idempotency.set(key, { fingerprint, meeting });
+    owners.set(meeting.id, org.userId);
+    if (key) idempotency.set(key, { fingerprint, meeting });
     return ok(meeting, 201);
   });
 
   route('GET', '/api/v1/meetings', (ctx) => {
-    requireOrganizer(ctx);
+    const org = requireOrganizer(ctx);
     const statuses = ctx.query.get('status')?.split(',').filter(Boolean);
     const q = ctx.query.get('q')?.trim().toLowerCase();
     if (q && q.length > 100) invalid('q', 'Не длиннее 100 символов');
@@ -396,6 +433,7 @@ export function createApp({
     const key = (m: Meeting) => m.started_at ?? m.scheduled_at ?? m.created_at;
 
     const filtered = meetings
+      .filter((m) => owners.get(m.id) === org.userId)
       .filter((m) => !statuses?.length || statuses.includes(m.status))
       .filter((m) => !q || m.title.toLowerCase().includes(q))
       .filter((m) => !from || key(m) >= from)
@@ -409,13 +447,13 @@ export function createApp({
   });
 
   route('GET', '/api/v1/meetings/:id', (ctx) => {
-    requireOrganizer(ctx);
-    return ok(find(ctx.params[0]!));
+    const org = requireOrganizer(ctx);
+    return ok(owned(org, ctx.params[0]!));
   });
 
   route('PATCH', '/api/v1/meetings/:id', (ctx) => {
-    requireOrganizer(ctx);
-    const m = find(ctx.params[0]!);
+    const org = requireOrganizer(ctx);
+    const m = owned(org, ctx.params[0]!);
     const { title, ...rest } = ctx.body;
     const newTitle = title === undefined ? undefined : text(title, 'title', 1, 200);
     if (ctx.body.analysis_fps !== undefined) fps(ctx.body.analysis_fps);
@@ -431,8 +469,8 @@ export function createApp({
   });
 
   route('DELETE', '/api/v1/meetings/:id', async (ctx) => {
-    requireOrganizer(ctx);
-    const m = find(ctx.params[0]!);
+    const org = requireOrganizer(ctx);
+    const m = owned(org, ctx.params[0]!);
     if (m.status === 'active') await gateway.deleteRoom(m.id);
     meetings = meetings.filter((x) => x.id !== m.id);
     people.delete(m.id);
@@ -441,7 +479,7 @@ export function createApp({
 
   route('POST', '/api/v1/meetings/:id/join', async (ctx) => {
     const org = requireOrganizer(ctx);
-    const m = find(ctx.params[0]!);
+    const m = owned(org, ctx.params[0]!);
     requireOpen(m);
     const decision = ctx.body.consent;
     if (decision !== undefined && decision !== 'granted' && decision !== 'denied') {
@@ -474,8 +512,8 @@ export function createApp({
   });
 
   route('POST', '/api/v1/meetings/:id/end', async (ctx) => {
-    requireOrganizer(ctx);
-    const m = find(ctx.params[0]!);
+    const org = requireOrganizer(ctx);
+    const m = owned(org, ctx.params[0]!);
     if (m.status === 'cancelled') fail('meeting_cancelled');
     if (m.status !== 'ended') {
       m.status = 'ended';
@@ -491,14 +529,14 @@ export function createApp({
   });
 
   route('GET', '/api/v1/meetings/:id/participants', async (ctx) => {
-    requireOrganizer(ctx);
-    const m = find(ctx.params[0]!);
+    const org = requireOrganizer(ctx);
+    const m = owned(org, ctx.params[0]!);
     return ok({ items: (await refreshOnline(m)).map(pub) });
   });
 
   route('POST', '/api/v1/meetings/:id/participants/:pid/mute', async (ctx) => {
-    requireOrganizer(ctx);
-    const m = find(ctx.params[0]!);
+    const org = requireOrganizer(ctx);
+    const m = owned(org, ctx.params[0]!);
     const kind = ctx.body.kind;
     if (kind !== 'audio' && kind !== 'video') invalid('kind', 'Ожидается audio или video');
     if (m.status === 'ended') fail('meeting_ended');
@@ -508,8 +546,8 @@ export function createApp({
   });
 
   route('POST', '/api/v1/meetings/:id/participants/:pid/remove', async (ctx) => {
-    requireOrganizer(ctx);
-    const m = find(ctx.params[0]!);
+    const org = requireOrganizer(ctx);
+    const m = owned(org, ctx.params[0]!);
     const p = listOf(m.id).find((x) => x.id === ctx.params[1]) ?? fail('not_found');
     await gateway.removeParticipant(m.id, `p_${p.id}`);
     p.is_removed = true;
@@ -558,7 +596,8 @@ export function createApp({
     let m: Meeting;
     let person: Stored;
     if (ctx.auth?.kind === 'organizer') {
-      m = find(
+      m = owned(
+        ctx.auth,
         ctx.query.get('meeting_id') ?? fail('validation_error', 'Нужен параметр meeting_id'),
       );
       person = listOf(m.id).find((p) => p.id === organizerId(m)) ?? fail('not_found');
@@ -585,19 +624,19 @@ export function createApp({
   });
 
   route('GET', '/api/v1/settings', (ctx) => {
-    requireOrganizer(ctx);
-    return ok(settings);
+    return ok(settingsFor(requireOrganizer(ctx).userId));
   });
 
   route('PUT', '/api/v1/settings', (ctx) => {
-    requireOrganizer(ctx);
+    const org = requireOrganizer(ctx);
     if (typeof ctx.body.analysis_enabled_default !== 'boolean') {
       invalid('analysis_enabled_default', 'Ожидается true или false');
     }
-    settings = {
+    const settings = {
       analysis_enabled_default: ctx.body.analysis_enabled_default,
       analysis_fps_default: fps(ctx.body.analysis_fps_default),
     };
+    settingsOf.set(org.userId, settings);
     return ok(settings);
   });
 

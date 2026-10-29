@@ -51,7 +51,9 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
     const code = error instanceof ApiError ? error.code : '';
     const removed = code === 'participant_removed';
     const ended = code === 'meeting_ended' || code === 'meeting_cancelled';
-    const retryable = !removed && !ended && code !== 'unauthorized';
+    // встреча чужая или удалена: `not_found` (контракт не различает эти случаи) – повтор не поможет
+    const noAccess = entry.role === 'organizer' && (code === 'not_found' || code === 'forbidden');
+    const retryable = !removed && !ended && !noAccess && code !== 'unauthorized';
     return (
       <RoomMessage
         title={
@@ -59,12 +61,16 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
             ? 'Вас удалили из встречи'
             : ended
               ? 'Встреча завершена'
-              : 'Не удалось подключиться к встрече'
+              : noAccess
+                ? 'Встреча не найдена'
+                : 'Не удалось подключиться к встрече'
         }
         text={
-          entry.role === 'guest'
-            ? guestErrorMessage(error, 'подключиться к встрече')
-            : meetingErrorMessage(error, 'подключиться к встрече')
+          noAccess
+            ? 'Встреча не найдена или у вас нет к ней доступа.'
+            : entry.role === 'guest'
+              ? guestErrorMessage(error, 'подключиться к встрече')
+              : meetingErrorMessage(error, 'подключиться к встрече')
         }
         action={
           retryable ? (

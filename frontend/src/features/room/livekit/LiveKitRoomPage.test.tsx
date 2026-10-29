@@ -125,4 +125,17 @@ describe('ошибки получения токена', () => {
     await user.click(screen.getByRole('button', { name: 'Повторить' }));
     expect(await screen.findByTestId('conn')).toHaveTextContent('tok-ok');
   });
+  it.each(['not_found', 'forbidden'])(
+    'организатор, чужая или удаленная встреча (%s): понятное сообщение и «К встречам» без «Повторить»',
+    async (code) => {
+      vi.spyOn(meetingsApi, 'joinAsOrganizer').mockRejectedValue(
+        fail(code === 'forbidden' ? 403 : 404, code),
+      );
+      renderPage(organizer);
+      expect(await screen.findByRole('heading', { name: 'Встреча не найдена' })).toBeVisible();
+      expect(screen.getByText('Встреча не найдена или у вас нет к ней доступа.')).toBeVisible();
+      expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+      expect(screen.queryByRole('button', { name: 'Повторить' })).not.toBeInTheDocument();
+    },
+  );
 });

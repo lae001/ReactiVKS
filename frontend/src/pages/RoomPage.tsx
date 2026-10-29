@@ -93,7 +93,7 @@ export default function RoomPage() {
           title={notFound ? 'Встреча не найдена' : 'Не удалось открыть комнату'}
           text={
             notFound
-              ? 'Возможно, ее удалили или ссылка введена с ошибкой.'
+              ? 'Встреча не найдена или у вас нет к ней доступа.'
               : meetingErrorMessage(meetingQuery.error, 'открыть комнату')
           }
           action={
