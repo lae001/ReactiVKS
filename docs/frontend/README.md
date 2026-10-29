@@ -64,6 +64,23 @@ flowchart TB
     ROOM --> EMO
 ```
 
+## Слой API meeting-service
+
+Код: `src/shared/api/meetings/`. Страницы и хуки TanStack Query (`features/meetings/queries.ts`) работают только
+с интерфейсом `MeetingsApi` (создание, список с курсором, карточка, правка, удаление, вход и завершение,
+участники и модерация, лобби, согласие, rejoin, настройки по умолчанию – [контракт](../api/rest-api.md), раздел 3).
+Реализаций две, выбор – переменная `VITE_API_MODE`:
+
+| Значение | Реализация |
+|---|---|
+| `mock` (по умолчанию) | данные в памяти вкладки, те же проверки и коды ошибок (`meeting_not_started`, `meeting_ended`, `meeting_cancelled`, `meeting_full`, `consent_required`, `notice_outdated`, `analysis_disabled`, `participant_removed`, `meeting_not_editable`, `idempotency_key_reused`) |
+| `http` | `fetch`-клиент (`apiFetch`): Bearer организатора, `Authorization: Participant <токен>` для гостя, `Idempotency-Key` при создании встречи |
+
+Типы написаны вручную и заменяются на `gen:api`, когда появится OpenAPI meeting-service. **Остаются на тестовых данных**
+(`src/shared/mocks/`): отчет (analytics-service, спринт 5), панель эмоций и чат комнаты (realtime-сервис, чат на
+LiveKit). Комната пока не подключается к LiveKit, поэтому в режиме `http` она показывает только данные, доступные
+владельцу встречи.
+
 ## Работа с аутентификацией
 
 Код: `src/features/auth/` (провайдер, формы, охранники маршрутов), `src/shared/api/` (клиент и сессия).

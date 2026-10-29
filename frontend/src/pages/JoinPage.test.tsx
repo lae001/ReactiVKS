@@ -1,6 +1,8 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { meetingsApi } from '@/shared/api/meetings';
+import { ApiError } from '@/shared/api/problem';
 import { getParticipantToken } from '@/shared/lib/participant-session';
 import { mockNoSession } from '@/test/api-mocks';
 import { renderApp } from '@/test/render';
@@ -95,8 +97,8 @@ describe('лобби участника', () => {
     await user.type(await screen.findByLabelText('Как вас представить'), 'Мария');
     await user.click(screen.getByRole('radio', { name: /Участвую без анализа/ }));
     await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
-    expect(screen.getByRole('status')).toHaveTextContent('Встреча еще не началась');
-    expect(screen.getByRole('status')).toHaveTextContent(
+    const status = await screen.findByText('Встреча еще не началась');
+    expect(status.closest('[role="status"]')).toHaveTextContent(
       'Обновите страницу, когда встреча начнётся.',
     );
   });
@@ -107,5 +109,104 @@ describe('лобби участника', () => {
   ])('%s – «%s»', async (code, heading) => {
     renderLobby(code);
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+  });
+
+  describe('ошибки POST /join/{invite_code}', () => {
+    async function submitAsAnna(code = 'demoactive') {
+      const user = userEvent.setup();
+      const router = renderLobby(code);
+      await user.type(await screen.findByLabelText('Как вас представить'), 'Анна');
+      await user.click(screen.getByRole('radio', { name: /Разрешаю анализ/ }));
+      await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+      return { user, router };
+    }
+
+    function rejectJoinWith(code: string, status = 409, extra: Partial<ApiError> = {}) {
+      vi.spyOn(meetingsApi, 'joinMeeting').mockRejectedValueOnce(
+        new ApiError({ status, code, message: code, ...extra }),
+      );
+    }
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('в отправку уходит версия уведомления и решение о согласии', async () => {
+      const spy = vi.spyOn(meetingsApi, 'joinMeeting');
+      await submitAsAnna();
+      await waitFor(() => expect(spy).toHaveBeenCalled());
+      expect(spy).toHaveBeenCalledWith('demoactive', {
+        display_name: 'Анна',
+        consent: 'granted',
+        notice_version: 'v1-draft',
+      });
+    });
+
+    it.each([
+      ['meeting_ended', 'Встреча завершена'],
+      ['meeting_cancelled', 'Встреча отменена'],
+    ])('%s – экран «%s», токен не сохраняется', async (code, heading) => {
+      rejectJoinWith(code);
+      await submitAsAnna();
+      expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+      expect(getParticipantToken()).toBeNull();
+    });
+
+    it.each([
+      ['meeting_full', 409, /уже 10 участников/],
+      ['consent_required', 409, /Выберите вариант согласия/],
+      ['livekit_unavailable', 503, /Видеосервер сейчас недоступен/],
+      ['too_many_requests', 429, /Слишком много запросов/],
+      ['network_error', 0, /Не удалось связаться с сервером/],
+    ])('%s – сообщение под формой, вход остается доступным', async (code, status, text) => {
+      rejectJoinWith(code, status);
+      const { router } = await submitAsAnna();
+      expect(await screen.findByRole('alert')).toHaveTextContent(text);
+      expect(screen.getByRole('button', { name: 'Войти во встречу' })).toBeEnabled();
+      expect(router.state.location.pathname).toBe('/j/demoactive');
+    });
+
+    it('notice_outdated – выбор согласия сбрасывается, нужно выбрать заново', async () => {
+      rejectJoinWith('notice_outdated');
+      await submitAsAnna();
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Уведомление .* обновилось/);
+      expect(screen.getByRole('radio', { name: /Разрешаю анализ/ })).not.toBeChecked();
+    });
+
+    it('422 по полю display_name – ошибка у поля имени', async () => {
+      vi.spyOn(meetingsApi, 'joinMeeting').mockRejectedValueOnce(
+        new ApiError({
+          status: 422,
+          code: 'validation_error',
+          message: 'v',
+          errors: [{ loc: ['body', 'display_name'], msg: 'Имя слишком длинное', type: 'x' }],
+        }),
+      );
+      await submitAsAnna();
+      expect(await screen.findByText('Имя слишком длинное')).toBeInTheDocument();
+    });
+
+    it('meeting_full на настоящем mock: комната заполнена', async () => {
+      const user = userEvent.setup();
+      renderLobby('demofull22');
+      await user.type(await screen.findByLabelText('Как вас представить'), 'Анна');
+      await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/уже 10 участников/);
+    });
+
+    it('отмененная встреча по ссылке – экран «Встреча отменена»', async () => {
+      renderLobby('democancel');
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Встреча отменена' }),
+      ).toBeInTheDocument();
+    });
+
+    it('сбой загрузки приглашения – сообщение, не «не найдено»', async () => {
+      vi.spyOn(meetingsApi, 'getJoinInfo').mockRejectedValueOnce(
+        new ApiError({ status: 0, code: 'network_error', message: 'x' }),
+      );
+      renderLobby('demoactive');
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Не удалось открыть приглашение' }),
+      ).toBeInTheDocument();
+    });
   });
 });

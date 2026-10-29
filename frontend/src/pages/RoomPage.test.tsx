@@ -115,4 +115,27 @@ describe('комната участника', () => {
       '/j/demoactive',
     );
   });
+
+  it('неизвестная встреча – сообщение и возврат к списку', async () => {
+    renderRoom('нет-такой');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Встреча не найдена' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+  });
+
+  it('завершенная встреча – экран «Встреча завершена»', async () => {
+    renderRoom('m-ended');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Встреча завершена' }),
+    ).toBeInTheDocument();
+  });
+
+  it('в галерее – участники из API и один раз сам организатор (имя из сессии)', async () => {
+    renderRoom('m-active');
+    const gallery = await screen.findByRole('region', { name: 'Галерея участников' });
+    expect(within(gallery).getByText('Анна Смирнова')).toBeInTheDocument();
+    expect(within(gallery).getAllByText(/Иван Петров/)).toHaveLength(1);
+    expect(within(gallery).getByText(/\(вы\)/)).toBeInTheDocument();
+  });
 });

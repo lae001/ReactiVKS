@@ -40,9 +40,9 @@ describe('маршруты-заглушки', () => {
   });
 
   it('комната загружается лениво', async () => {
-    renderApp('/room/m1', { user: organizer });
+    renderApp('/room/m-active', { user: organizer });
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Быстрая встреча' }),
+      await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' }),
     ).toBeInTheDocument();
   });
 });

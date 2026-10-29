@@ -1,8 +1,9 @@
-import type { ConsentState, ParticipantRole } from '@/shared/api/types';
+import type { ConsentState, JoinedMeeting, ParticipantRole } from '@/shared/api/meetings';
 
 /**
  * С чем пользователь входит в комнату: передается из лобби через state навигации.
- * На тестовых данных заменяет JoinResult и participant_token (EMO-74, EMO-89).
+ * Сведения о встрече и id участника берутся из ответа POST /join/{invite_code}; токен LiveKit
+ * комната получит в ветке с LiveKitRoom.
  */
 export interface RoomEntry {
   role: ParticipantRole;
@@ -11,6 +12,10 @@ export interface RoomEntry {
   cameraOn: boolean;
   micOn: boolean;
   inviteCode?: string;
+  /** id участника из JoinResult: по нему комната отличает себя в списке участников */
+  participantId?: string;
+  /** Встреча из JoinResult: гость не может запросить GET /meetings/{id} (он только для владельца) */
+  meeting?: JoinedMeeting;
 }
 
 export function readRoomEntry(state: unknown): RoomEntry | null {
@@ -26,5 +31,7 @@ export function readRoomEntry(state: unknown): RoomEntry | null {
     cameraOn: s.cameraOn ?? true,
     micOn: s.micOn ?? true,
     inviteCode: s.inviteCode,
+    participantId: s.participantId,
+    meeting: s.meeting,
   };
 }

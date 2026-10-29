@@ -1,11 +1,17 @@
-import { ArrowLeft, CalendarClock, ScanFace, Users } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { ArrowLeft, CalendarClock, LoaderCircle, ScanFace, Users } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 
+import { ConfirmInline } from '@/features/meetings/ConfirmInline';
+import { meetingErrorMessage } from '@/features/meetings/errors';
+import { MeetingEditForm } from '@/features/meetings/MeetingEditForm';
+import { useDeleteMeeting, useEndMeeting, useMeeting } from '@/features/meetings/queries';
+import { StartMeetingButton } from '@/features/meetings/StartMeetingButton';
 import { MeetingReport } from '@/features/reports/MeetingReport';
-import type { Meeting } from '@/shared/api/types';
+import type { Meeting } from '@/shared/api/meetings';
+import { ApiError } from '@/shared/api/problem';
 import { paths } from '@/shared/config/routes';
 import { formatDateTime, formatDuration, formatMeetingWhen } from '@/shared/lib/format';
-import { findMeetingById } from '@/shared/mocks/data';
 import { getMockReport } from '@/shared/mocks/report';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
@@ -28,24 +34,57 @@ function Param({ icon: Icon, children }: { icon: typeof Users; children: React.R
   );
 }
 
-/** Карточка встречи (UC-2, UC-5): параметры и ссылка; у завершенной встречи с анализом – отчет. */
+type Confirm = 'delete' | 'end' | null;
+
+/** Карточка встречи (UC-2, UC-5): ссылка, правка, удаление, начало и завершение; у завершенной – отчет. */
 export function MeetingPage() {
   const { id = '' } = useParams();
-  const meeting = findMeetingById(id);
+  const query = useMeeting(id);
 
-  if (!meeting) {
+  if (query.isPending) {
+    return (
+      <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+        <LoaderCircle className="size-4 animate-spin" aria-hidden /> Загружаем встречу…
+      </p>
+    );
+  }
+
+  if (query.isError) {
+    const notFound = query.error instanceof ApiError && query.error.code === 'not_found';
     return (
       <section className="flex max-w-lg flex-col gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Встреча не найдена</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {notFound ? 'Встреча не найдена' : 'Не удалось загрузить встречу'}
+        </h1>
         <p className="text-muted-foreground">
-          Возможно, ее удалили или ссылка введена с ошибкой. Вернитесь к списку встреч.
+          {notFound
+            ? 'Возможно, ее удалили или ссылка введена с ошибкой. Вернитесь к списку встреч.'
+            : meetingErrorMessage(query.error, 'загрузить встречу')}
         </p>
-        <Button asChild className="self-start">
-          <Link to={paths.meetings}>К встречам</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild>
+            <Link to={paths.meetings}>К встречам</Link>
+          </Button>
+          {!notFound && (
+            <Button variant="outline" onClick={() => void query.refetch()}>
+              Повторить
+            </Button>
+          )}
+        </div>
       </section>
     );
   }
+
+  return <MeetingDetails meeting={query.data} />;
+}
+
+function MeetingDetails({ meeting }: { meeting: Meeting }) {
+  const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
+  const [confirm, setConfirm] = useState<Confirm>(null);
+  const end = useEndMeeting(meeting.id);
+  const remove = useDeleteMeeting(meeting.id);
+  const open = meeting.status === 'active' || meeting.status === 'scheduled';
 
   const data = meeting.status === 'ended' ? getMockReport(meeting.id) : undefined;
   const duration =
@@ -82,7 +121,7 @@ export function MeetingPage() {
         </ul>
       </header>
 
-      {meeting.status !== 'ended' && meeting.status !== 'cancelled' && (
+      {open && (
         <Card className="max-w-2xl">
           <CardHeader>
             <CardTitle>Ссылка-приглашение</CardTitle>
@@ -93,11 +132,13 @@ export function MeetingPage() {
             </p>
             <div className="flex flex-wrap gap-2">
               <CopyLinkButton url={meeting.invite_url} />
-              <Button size="sm" asChild>
-                <Link to={paths.room(meeting.id)}>
-                  {meeting.status === 'active' ? 'Войти во встречу' : 'Начать встречу'}
-                </Link>
-              </Button>
+              {meeting.status === 'active' ? (
+                <Button size="sm" asChild>
+                  <Link to={paths.room(meeting.id)}>Войти во встречу</Link>
+                </Button>
+              ) : (
+                <StartMeetingButton meeting={meeting} />
+              )}
             </div>
             {meeting.scheduled_at && meeting.status === 'scheduled' && (
               <p className="text-sm text-muted-foreground">
@@ -108,6 +149,67 @@ export function MeetingPage() {
           </CardContent>
         </Card>
       )}
+
+      <section aria-label="Управление встречей" className="flex max-w-2xl flex-col gap-3">
+        {editing ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Изменить встречу</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MeetingEditForm meeting={meeting} onDone={() => setEditing(false)} />
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {meeting.status !== 'cancelled' && (
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                Изменить
+              </Button>
+            )}
+            {meeting.status === 'active' && (
+              <Button variant="outline" size="sm" onClick={() => setConfirm('end')}>
+                Завершить встречу
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => setConfirm('delete')}>
+              Удалить
+            </Button>
+          </div>
+        )}
+        {confirm === 'end' && (
+          <ConfirmInline
+            text="Встреча закончится для всех участников. Это действие нельзя отменить."
+            confirmLabel="Завершить встречу"
+            pending={end.isPending}
+            onCancel={() => setConfirm(null)}
+            onConfirm={() => end.mutate(undefined, { onSettled: () => setConfirm(null) })}
+          />
+        )}
+        {confirm === 'delete' && (
+          <ConfirmInline
+            text={`Удалить встречу «${meeting.title}»? ${
+              meeting.status === 'ended'
+                ? 'Вместе с ней удалится отчет.'
+                : 'Ссылка-приглашение перестанет работать.'
+            } Это действие нельзя отменить.`}
+            confirmLabel="Удалить"
+            pending={remove.isPending}
+            onCancel={() => setConfirm(null)}
+            onConfirm={() =>
+              remove.mutate(undefined, {
+                onSuccess: () => navigate(paths.meetings),
+                onError: () => setConfirm(null),
+              })
+            }
+          />
+        )}
+        {(end.isError || remove.isError) && (
+          <p role="alert" className="text-sm text-destructive">
+            {meetingErrorMessage(end.error ?? remove.error, 'выполнить действие')}
+          </p>
+        )}
+      </section>
 
       {meeting.status === 'ended' &&
         (data ? (
