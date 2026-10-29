@@ -5,24 +5,25 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 
 ## Требования
 
-- Node.js 22 LTS
+- Node.js 22.18 или новее (22 LTS; для `pnpm dev:api` нужна именно 22.18+)
 - pnpm 9 (`corepack enable` или `npm i -g pnpm@9`)
 
 ## Команды
 
-| Команда                             | Что делает                                                                                   |
-| ----------------------------------- | -------------------------------------------------------------------------------------------- |
-| `pnpm install`                      | Установка зависимостей                                                                       |
-| `pnpm dev`                          | Dev-сервер на http://localhost:5173 (прокси `/api` → auth-service, `/ws` → `localhost:8080`) |
-| `pnpm gen:api`                      | Типы API из OpenAPI запущенного сервиса → `src/shared/api/schema.d.ts`                       |
-| `pnpm build`                        | Проверка типов + production-сборка в `dist/`                                                 |
-| `pnpm lint`                         | ESLint                                                                                       |
-| `pnpm format` / `pnpm format:check` | Prettier (с сортировкой классов Tailwind)                                                    |
-| `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                                    |
-| `pnpm test`                         | Vitest + Testing Library                                                                     |
-| `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))     |
-| `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                            |
-| `pnpm test:e2e:lobby`               | Лобби в Chromium с фейковыми устройствами, режим mock, бэкенд не нужен (Playwright)          |
+| Команда                             | Что делает                                                                                         |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `pnpm install`                      | Установка зависимостей                                                                             |
+| `pnpm dev`                          | Dev-сервер на http://localhost:5173 (прокси `/api` → auth-service, `/ws` → `localhost:8080`)       |
+| `pnpm gen:api`                      | Типы API из OpenAPI запущенного сервиса → `src/shared/api/schema.d.ts`                             |
+| `pnpm build`                        | Проверка типов + production-сборка в `dist/`                                                       |
+| `pnpm lint`                         | ESLint                                                                                             |
+| `pnpm format` / `pnpm format:check` | Prettier (с сортировкой классов Tailwind)                                                          |
+| `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                                          |
+| `pnpm test`                         | Vitest + Testing Library                                                                           |
+| `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))           |
+| `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                                  |
+| `pnpm test:e2e:lobby`               | Лобби в Chromium с фейковыми устройствами, режим mock, бэкенд не нужен (Playwright)                |
+| `pnpm dev:api`                      | Временный сервер вместо meeting-service на 127.0.0.1:8002 ([dev-api/README.md](dev-api/README.md)) |
 
 ## LiveKit для разработки и e2e
 
@@ -75,13 +76,17 @@ src/
 Страницы ходят в meeting-service только через `src/shared/api/meetings` (`meetingsApi`). У интерфейса две
 реализации, выбор – переменная `VITE_API_MODE`:
 
-| Значение              | Что это                                                                                      |
-| --------------------- | -------------------------------------------------------------------------------------------- |
-| `mock` (по умолчанию) | данные в памяти вкладки, те же проверки и коды ошибок, что в контракте; сеть не нужна        |
-| `http`                | настоящий meeting-service через `/api/v1` (появится позже; сейчас готов только auth-service) |
+| Значение              | Что это                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `mock` (по умолчанию) | данные в памяти вкладки, те же проверки и коды ошибок, что в контракте; сеть не нужна      |
+| `http`                | meeting-service через `/api/v1`: настоящего пока нет, вместо него временный `pnpm dev:api` |
 
 Типы meeting-service написаны вручную (`meetings/types.ts`) и будут заменены на `pnpm gen:api`, когда появится
 OpenAPI. Отчет и панель эмоций остаются на тестовых данных (`src/shared/mocks/`) до analytics- и realtime-сервиса.
+
+Пока meeting-service не написан, для режима `http` есть временный [dev-api](dev-api/README.md)
+(`pnpm dev:api`, 127.0.0.1:8002, без проверки JWT). Прокси Vite направляет на него пути `meetings`, `join`,
+`participants`, `settings` (адрес – `VITE_DEV_MEETING_API_TARGET`), остальной `/api` – на auth-service.
 
 ### Подключение к бэкенду в dev
 

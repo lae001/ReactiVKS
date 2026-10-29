@@ -74,7 +74,7 @@ flowchart TB
 | Значение | Реализация |
 |---|---|
 | `mock` (по умолчанию) | данные в памяти вкладки, те же проверки и коды ошибок (`meeting_not_started`, `meeting_ended`, `meeting_cancelled`, `meeting_full`, `consent_required`, `notice_outdated`, `analysis_disabled`, `participant_removed`, `meeting_not_editable`, `idempotency_key_reused`) |
-| `http` | `fetch`-клиент (`apiFetch`): Bearer организатора, `Authorization: Participant <токен>` для гостя, `Idempotency-Key` при создании встречи |
+| `http` | `fetch`-клиент (`apiFetch`): Bearer организатора, `Authorization: Participant <токен>` для гостя, `Idempotency-Key` при создании встречи. Пока нет meeting-service, отвечает временный `frontend/dev-api` (`pnpm dev:api`, 127.0.0.1:8002, без проверки JWT, выдает настоящие токены LiveKit; [README](../../frontend/dev-api/README.md)) |
 
 Типы написаны вручную и заменяются на `gen:api`, когда появится OpenAPI meeting-service. **Остаются на тестовых данных**
 (`src/shared/mocks/`): отчет (analytics-service, спринт 5), панель эмоций и чат комнаты (realtime-сервис, чат на

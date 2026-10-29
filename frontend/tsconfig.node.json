@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "moduleDetection": "force",
     "noEmit": true,
     "strict": true,
@@ -21,6 +22,8 @@
     "playwright.config.ts",
     "playwright.mockups.config.ts",
     "playwright.livekit.config.ts",
+    "playwright.lobby.config.ts",
+    "dev-api",
     "e2e"
   ]
 }
