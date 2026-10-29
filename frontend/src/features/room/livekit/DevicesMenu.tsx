@@ -49,10 +49,12 @@ export function DevicesMenu() {
         tone={open ? 'active' : 'default'}
       />
       {open && (
+        // fixed: панель управления прокручивается по горизонтали, и absolute-панель обрезалась бы ее краем
+        // (на узком окне уходила за левый край); по центру окна она целиком видна на любой ширине
         <div
           role="group"
           aria-label="Выбор устройств"
-          className="absolute bottom-14 left-1/2 z-30 flex w-72 -translate-x-1/2 flex-col gap-3 rounded-xl border border-room-border bg-room-surface p-4 text-room-foreground"
+          className="fixed bottom-20 left-1/2 z-30 flex w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col gap-3 rounded-xl border border-room-border bg-room-surface p-4 text-room-foreground"
         >
           <KindSelect kind="audioinput" label="Микрофон" emptyText="Микрофон не найден" />
           <KindSelect kind="videoinput" label="Камера" emptyText="Камера не найдена" />
