@@ -10,22 +10,23 @@ SPA на React 19 + TypeScript + Vite ([ADR-006](../docs/adr/ADR-006-frontend-st
 
 ## Команды
 
-| Команда                             | Что делает                                                                                                             |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install`                      | Установка зависимостей                                                                                                 |
-| `pnpm dev`                          | Dev-сервер на http://localhost:5173 (прокси `/api` → auth-service, `/ws` → `localhost:8080`)                           |
-| `pnpm gen:api`                      | Типы API из OpenAPI запущенного сервиса → `src/shared/api/schema.d.ts`                                                 |
-| `pnpm build`                        | Проверка типов + production-сборка в `dist/`                                                                           |
-| `pnpm lint`                         | ESLint                                                                                                                 |
-| `pnpm format` / `pnpm format:check` | Prettier (с сортировкой классов Tailwind)                                                                              |
-| `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                                                              |
-| `pnpm test`                         | Vitest + Testing Library                                                                                               |
-| `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))                               |
-| `pnpm mockups:live`                 | Живые снимки комнаты (`docs/frontend/mockups/room-live-*.png`): нужны `livekit-server --dev` и `pnpm dev:api`          |
-| `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                                                      |
-| `pnpm test:e2e:lobby`               | Лобби в Chromium с фейковыми устройствами, режим mock, бэкенд не нужен (Playwright)                                    |
-| `pnpm dev:api`                      | Временный сервер вместо meeting-service на 127.0.0.1:8002 ([dev-api/README.md](dev-api/README.md))                     |
-| `pnpm test:e2e:room`                | Организатор и гость в двух контекстах Chromium через dev-api и LiveKit (нужны `livekit-server --dev` и `pnpm dev:api`) |
+| Команда                             | Что делает                                                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`                      | Установка зависимостей                                                                                                            |
+| `pnpm dev`                          | Dev-сервер на http://localhost:5173 (прокси `/api` → auth-service, `/ws` → `localhost:8080`)                                      |
+| `pnpm gen:api`                      | Типы API из OpenAPI запущенного сервиса → `src/shared/api/schema.d.ts`                                                            |
+| `pnpm build`                        | Проверка типов + production-сборка в `dist/`                                                                                      |
+| `pnpm lint`                         | ESLint                                                                                                                            |
+| `pnpm format` / `pnpm format:check` | Prettier (с сортировкой классов Tailwind)                                                                                         |
+| `pnpm typecheck`                    | `tsc -b` в строгом режиме                                                                                                         |
+| `pnpm test`                         | Vitest + Testing Library                                                                                                          |
+| `pnpm mockups`                      | Скриншоты экранов в `docs/frontend/mockups/` ([mockups.md](../docs/frontend/mockups.md))                                          |
+| `pnpm mockups:live`                 | Живые снимки комнаты (`docs/frontend/mockups/room-live-*.png`): нужны `livekit-server --dev` и `pnpm dev:api`                     |
+| `pnpm test:e2e`                     | Живая проверка входа против запущенного auth-service (Playwright)                                                                 |
+| `pnpm test:e2e:lobby`               | Лобби в Chromium с фейковыми устройствами, режим mock, бэкенд не нужен (Playwright)                                               |
+| `pnpm dev:api`                      | Временный сервер вместо meeting-service на 127.0.0.1:8002 ([dev-api/README.md](dev-api/README.md))                                |
+| `pnpm test:e2e:room`                | Организатор и гость в двух контекстах Chromium через dev-api и LiveKit (нужны `livekit-server --dev` и `pnpm dev:api`)            |
+| `pnpm test:e2e:layout`              | Раскладка комнаты в режиме mock на 360–1920 px: нет прокрутки документа, корень на все окно (Playwright, свой Vite на порту 5290) |
 
 ## LiveKit для разработки и e2e
 

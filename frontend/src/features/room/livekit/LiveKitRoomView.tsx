@@ -5,6 +5,7 @@ import { type DisconnectReason, type RoomOptions } from 'livekit-client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
+import { usePageScrollLock } from '@/shared/hooks/use-page-scroll-lock';
 import { paths } from '@/shared/config/routes';
 import { loadDevicePrefs } from '@/shared/lib/device-prefs';
 import type { RoomEntry } from '@/shared/lib/room-entry';
@@ -57,6 +58,8 @@ export function LiveKitRoomView({
   onReconnect: () => void;
 }) {
   const [end, setEnd] = useState<RoomEnd | null>(null);
+  // Комната на весь экран: страница под ней не прокручивается (на экранах выхода прокрутка возвращается)
+  usePageScrollLock(end === null);
   const [deviceNotice, setDeviceNotice] = useState<string | null>(null);
 
   // Подключалась ли комната: отмену попытки (StrictMode, смена токена) нельзя путать с обрывом связи
@@ -144,8 +147,18 @@ export function LiveKitRoomView({
         if (isConnectionLost(error)) setEnd({ kind: 'lost', detail: error.message });
       }}
       onMediaDeviceFailure={(failure, kind) => setDeviceNotice(deviceFailureText(failure, kind))}
-      // Размер – инлайном: стили LiveKit (`.lk-room-container`, без слоя) перебивают классы Tailwind
-      style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}
+      // Размер – инлайном: стили LiveKit (`.lk-room-container`, без слоя) перебивают классы Tailwind.
+      // Корень закреплен на всё окно (fixed + inset 0, а не 100dvh): что бы ни лежало внутри, страница
+      // не прокручивается; ширина и высота `auto` отменяют `100%` из стилей LiveKit.
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: 'auto',
+        height: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
       className="bg-room text-room-foreground"
       data-lk-theme="default"
     >
