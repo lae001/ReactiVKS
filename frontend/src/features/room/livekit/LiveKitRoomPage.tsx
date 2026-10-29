@@ -8,6 +8,7 @@ import { ApiError } from '@/shared/api/problem';
 import type { RoomEntry } from '@/shared/lib/room-entry';
 import { Button } from '@/shared/ui/button';
 
+import { CancelLink } from '../CancelLink';
 import { RoomMessage } from '../RoomMessage';
 
 import { exitLink } from './exit-link';
@@ -54,7 +55,7 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
     // встреча чужая или удалена: `not_found` (контракт не различает эти случаи) – повтор не поможет
     const noAccess = entry.role === 'organizer' && (code === 'not_found' || code === 'forbidden');
     const retryable = !removed && !ended && !noAccess && code !== 'unauthorized';
-    const exit = exitLink(entry, meeting);
+    const exit = exitLink(entry);
     const exitButton = (
       <Button asChild variant="room">
         <Link to={exit.to}>{exit.label}</Link>
@@ -93,7 +94,11 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
   }
   if (!query.data) {
     return (
-      <RoomMessage title="Входим во встречу…" text="Подключаемся к видеосерверу." action={null} />
+      <RoomMessage
+        title="Входим во встречу…"
+        text="Подключаемся к видеосерверу."
+        action={<CancelLink role={entry.role} />}
+      />
     );
   }
   return (

@@ -95,63 +95,70 @@ export function ControlBar({
   return (
     <footer
       aria-label="Управление встречей"
-      className="flex shrink-0 items-center justify-center-safe gap-1 overflow-x-auto border-t border-room-border px-2 py-2 sm:gap-2"
+      className="flex shrink-0 items-center justify-center gap-1 border-t border-room-border px-2 py-2 sm:gap-2"
     >
-      <ControlButton
-        icon={micOn ? Mic : MicOff}
-        label="Микрофон"
-        caption={micOn ? 'Микрофон' : 'Микр. выкл.'}
-        onClick={onToggleMic}
-        pressed={micOn}
-        tone={micOn ? 'default' : 'off'}
-      />
-      <ControlButton
-        icon={cameraOn ? Video : VideoOff}
-        label="Камера"
-        caption={cameraOn ? 'Камера' : 'Камера выкл.'}
-        onClick={onToggleCamera}
-        pressed={cameraOn}
-        tone={cameraOn ? 'default' : 'off'}
-      />
-      {devices}
-      {analysisEnabled && (
+      {/* Устройства и панели прокручиваются по горизонтали на узком экране; «Выйти» и «Завершить встречу»
+          вынесены из прокрутки и остаются на виду на любой ширине (360 px и выше) */}
+      <div
+        data-testid="controls-scroll"
+        className="flex min-w-0 items-center justify-center-safe gap-1 overflow-x-auto sm:gap-2"
+      >
         <ControlButton
-          icon={ScanFace}
-          label="Анализ моих эмоций"
-          caption={analyzed ? 'Анализ вкл.' : 'Анализ выкл.'}
-          onClick={onToggleConsent}
-          pressed={analyzed}
-          tone={analyzed ? 'active' : 'default'}
+          icon={micOn ? Mic : MicOff}
+          label="Микрофон"
+          caption={micOn ? 'Микрофон' : 'Микр. выкл.'}
+          onClick={onToggleMic}
+          pressed={micOn}
+          tone={micOn ? 'default' : 'off'}
         />
-      )}
+        <ControlButton
+          icon={cameraOn ? Video : VideoOff}
+          label="Камера"
+          caption={cameraOn ? 'Камера' : 'Камера выкл.'}
+          onClick={onToggleCamera}
+          pressed={cameraOn}
+          tone={cameraOn ? 'default' : 'off'}
+        />
+        {devices}
+        {analysisEnabled && (
+          <ControlButton
+            icon={ScanFace}
+            label="Анализ моих эмоций"
+            caption={analyzed ? 'Анализ вкл.' : 'Анализ выкл.'}
+            onClick={onToggleConsent}
+            pressed={analyzed}
+            tone={analyzed ? 'active' : 'default'}
+          />
+        )}
 
-      <span className="mx-1 h-8 w-px bg-room-border sm:mx-2" aria-hidden />
+        <span className="mx-1 h-8 w-px bg-room-border sm:mx-2" aria-hidden />
 
-      <ControlButton
-        icon={Users}
-        label="Участники"
-        onClick={() => onTogglePanel('participants')}
-        pressed={panel === 'participants'}
-        tone={panel === 'participants' ? 'active' : 'default'}
-      />
-      {isOrganizer && analysisEnabled && (
         <ControlButton
-          icon={Activity}
-          label="Эмоции"
-          onClick={() => onTogglePanel('emotions')}
-          pressed={panel === 'emotions'}
-          tone={panel === 'emotions' ? 'active' : 'default'}
+          icon={Users}
+          label="Участники"
+          onClick={() => onTogglePanel('participants')}
+          pressed={panel === 'participants'}
+          tone={panel === 'participants' ? 'active' : 'default'}
         />
-      )}
-      {showChat && (
-        <ControlButton
-          icon={MessageSquare}
-          label="Чат"
-          onClick={() => onTogglePanel('chat')}
-          pressed={panel === 'chat'}
-          tone={panel === 'chat' ? 'active' : 'default'}
-        />
-      )}
+        {isOrganizer && analysisEnabled && (
+          <ControlButton
+            icon={Activity}
+            label="Эмоции"
+            onClick={() => onTogglePanel('emotions')}
+            pressed={panel === 'emotions'}
+            tone={panel === 'emotions' ? 'active' : 'default'}
+          />
+        )}
+        {showChat && (
+          <ControlButton
+            icon={MessageSquare}
+            label="Чат"
+            onClick={() => onTogglePanel('chat')}
+            pressed={panel === 'chat'}
+            tone={panel === 'chat' ? 'active' : 'default'}
+          />
+        )}
+      </div>
 
       <button
         type="button"

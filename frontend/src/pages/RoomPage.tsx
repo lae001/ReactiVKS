@@ -9,6 +9,7 @@ import { EmotionIndicator } from '@/features/emotions/EmotionIndicator';
 import { EmotionPanel } from '@/features/emotions/EmotionPanel';
 import { type ChatMessage, ChatPanel } from '@/features/room/ChatPanel';
 import { ConfirmDialog } from '@/features/room/ConfirmDialog';
+import { CancelLink } from '@/features/room/CancelLink';
 import { exitLink } from '@/features/room/livekit/exit-link';
 import { RoomMessage } from '@/features/room/RoomMessage';
 import { ControlBar } from '@/features/room/ControlBar';
@@ -105,10 +106,22 @@ export default function RoomPage() {
         />
       );
     }
-    return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
+    return (
+      <RoomMessage
+        title="Входим во встречу…"
+        text="Подготавливаем комнату."
+        action={<CancelLink role={fromLobby?.role ?? 'organizer'} />}
+      />
+    );
   }
   if (API_MODE === 'mock' && participantsQuery.isPending) {
-    return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
+    return (
+      <RoomMessage
+        title="Входим во встречу…"
+        text="Подготавливаем комнату."
+        action={<CancelLink role={fromLobby?.role ?? 'organizer'} />}
+      />
+    );
   }
 
   // Без state из лобби считаем, что вошел организатор (с главной или из карточки встречи).
@@ -136,9 +149,9 @@ export default function RoomPage() {
               <Link to={paths.meeting(meeting.id)}>К карточке встречи</Link>
             </Button>
           ) : (
-            // карточка встречи только для владельца: гостю – обратно к приглашению
+            // карточка встречи только для владельца: гостю – на главную
             <Button asChild variant="room">
-              <Link to={exitLink(entry, meeting).to}>{exitLink(entry, meeting).label}</Link>
+              <Link to={exitLink(entry).to}>{exitLink(entry).label}</Link>
             </Button>
           )
         }
@@ -159,11 +172,9 @@ export default function RoomPage() {
           </Button>
         }
         secondary={
-          entry.role === 'organizer' ? (
-            <Button asChild variant="room">
-              <Link to={paths.meetings}>К встречам</Link>
-            </Button>
-          ) : undefined
+          <Button asChild variant="room">
+            <Link to={exitLink(entry).to}>{exitLink(entry).label}</Link>
+          </Button>
         }
       />
     );

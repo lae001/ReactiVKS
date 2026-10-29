@@ -98,7 +98,7 @@ describe('ошибки получения токена', () => {
     renderPage(guest);
     expect(await screen.findByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Повторить' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'К приглашению' })).toHaveAttribute('href', '/j/abc');
+    expect(screen.getByRole('link', { name: 'На главную' })).toHaveAttribute('href', '/');
   });
 
   it('401 по Participant-токену – сообщение guestErrorMessage', async () => {
@@ -138,16 +138,29 @@ describe('ошибки получения токена', () => {
       expect(screen.queryByRole('button', { name: 'Повторить' })).not.toBeInTheDocument();
     },
   );
-  it('ошибка с «Повторить»: рядом выход – гостю «К приглашению», организатору «К встречам»', async () => {
+  it('ошибка с «Повторить»: рядом выход – гостю «На главную», организатору «К встречам»', async () => {
     vi.spyOn(meetingsApi, 'rejoin').mockRejectedValue(fail(503, 'livekit_unavailable'));
     vi.spyOn(meetingsApi, 'joinAsOrganizer').mockRejectedValue(fail(503, 'livekit_unavailable'));
     const { unmount } = renderPage(guest);
     expect(await screen.findByRole('button', { name: 'Повторить' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'К приглашению' })).toHaveAttribute('href', '/j/abc');
+    expect(screen.getByRole('link', { name: 'На главную' })).toHaveAttribute('href', '/');
     unmount();
 
     renderPage(organizer);
     expect(await screen.findByRole('button', { name: 'Повторить' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+  });
+  it('загрузочный экран «Входим во встречу…»: «Отмена» – организатору к встречам, гостю на главную', async () => {
+    const never = new Promise<never>(() => undefined);
+    vi.spyOn(meetingsApi, 'rejoin').mockReturnValue(never);
+    vi.spyOn(meetingsApi, 'joinAsOrganizer').mockReturnValue(never);
+    const { unmount } = renderPage(guest);
+    expect(await screen.findByRole('heading', { name: 'Входим во встречу…' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Отмена' })).toHaveAttribute('href', '/');
+    unmount();
+
+    renderPage(organizer);
+    expect(await screen.findByRole('heading', { name: 'Входим во встречу…' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Отмена' })).toHaveAttribute('href', '/meetings');
   });
 });

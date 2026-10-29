@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { admin, mockAuthConfig, mockNoSession, organizer } from '@/test/api-mocks';
@@ -61,5 +61,19 @@ describe('маршруты-заглушки', () => {
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Назад' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/nope'));
     expect(screen.queryByRole('button', { name: 'Назад' })).not.toBeInTheDocument();
+  });
+  it('логотип на страницах входа и регистрации – ссылка на «/»', async () => {
+    mockNoSession();
+    mockAuthConfig();
+    for (const path of ['/login', '/register']) {
+      const router = renderApp(path);
+      await screen.findByRole('heading', { level: 1 });
+      expect(screen.getByRole('link', { name: 'ReactiVKS – на главную' })).toHaveAttribute(
+        'href',
+        '/',
+      );
+      router.dispose();
+      cleanup();
+    }
   });
 });

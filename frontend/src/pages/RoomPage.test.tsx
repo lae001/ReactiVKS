@@ -114,6 +114,18 @@ describe('комната участника', () => {
       'href',
       '/j/demoactive',
     );
+    // вторая кнопка: гостю – на главную, а не по ссылке-приглашению
+    expect(screen.getByRole('link', { name: 'На главную' })).toHaveAttribute('href', '/');
+  });
+
+  it('завершенная встреча у гостя: одна кнопка «На главную» вместо карточки, которая гостю закрыта', async () => {
+    renderRoom('m-ended', guest);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Встреча завершена' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual(
+      [['На главную', '/']],
+    );
   });
 
   it('неизвестная встреча – сообщение и возврат к списку', async () => {

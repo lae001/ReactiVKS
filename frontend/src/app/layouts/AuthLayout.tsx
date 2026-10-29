@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router';
+import { Link, Outlet } from 'react-router';
 
 import { EmotionSpectrum, Wordmark } from '@/shared/ui/brand';
 
@@ -7,7 +7,9 @@ export function AuthLayout() {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
       <div className="flex flex-col px-6 py-8 md:px-12">
-        <Wordmark />
+        <Link to="/" aria-label="ReactiVKS – на главную" className="w-fit">
+          <Wordmark />
+        </Link>
         <main className="flex flex-1 items-center justify-center py-8">
           <div className="w-full max-w-sm">
             <Outlet />

@@ -83,7 +83,7 @@ export function LiveKitRoomView({
 
   if (end) {
     const { title, text, detail } = roomEndText(end, meeting.title);
-    const exit = exitLink(entry, meeting);
+    const exit = exitLink(entry);
     // главная кнопка уже ведет наружу (удален, завершена, вошли с другого устройства) – вторую не дублируем
     const primaryLeaves =
       end.kind === 'removed' || end.kind === 'duplicate' || end.kind === 'meeting_ended';

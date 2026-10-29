@@ -64,11 +64,11 @@ describe('выход из комнаты: у каждого экрана ест�
     expect(links()).toEqual([['К встречам', '/meetings']]);
   });
 
-  it('«Вы вышли»: гостю – «К приглашению» своей встречи', () => {
+  it('«Вы вышли»: гостю – «На главную»', () => {
     renderView(guest);
     disconnectWith(DisconnectReason.CLIENT_INITIATED);
     expect(screen.getByRole('button', { name: 'Вернуться во встречу' })).toBeVisible();
-    expect(links()).toEqual([['К приглашению', '/j/abc2345678']]);
+    expect(links()).toEqual([['На главную', '/']]);
   });
 
   it('«Соединение потеряно»: «Подключиться снова» и выход рядом', () => {
@@ -76,7 +76,7 @@ describe('выход из комнаты: у каждого экрана ест�
     act(() => handlers.onError?.(ConnectionError.serverUnreachable('нет сервера')));
     expect(screen.getByRole('heading', { name: 'Соединение потеряно' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Подключиться снова' })).toBeVisible();
-    expect(links()).toEqual([['К приглашению', '/j/abc2345678']]);
+    expect(links()).toEqual([['На главную', '/']]);
   });
 
   it.each([
@@ -89,7 +89,7 @@ describe('выход из комнаты: у каждого экрана ест�
     expect(links()).toEqual([['К встречам', '/meetings']]);
   });
 
-  it('«Встреча завершена»: организатору «К карточке встречи», гостю «К приглашению» – по одной кнопке', () => {
+  it('«Встреча завершена»: организатору «К карточке встречи», гостю «На главную» – по одной кнопке', () => {
     const { unmount } = renderView(organizer);
     disconnectWith(DisconnectReason.ROOM_DELETED);
     expect(links()).toEqual([['К карточке встречи', '/meetings/m-1']]);
@@ -98,12 +98,6 @@ describe('выход из комнаты: у каждого экрана ест�
     renderView(guest);
     disconnectWith(DisconnectReason.ROOM_DELETED);
     expect(screen.getByRole('heading', { name: 'Встреча завершена' })).toBeVisible();
-    expect(links()).toEqual([['К приглашению', '/j/abc2345678']]);
-  });
-
-  it('гость без кода приглашения: запасной выход «На главную» вместо битой ссылки', () => {
-    renderView({ ...guest, inviteCode: undefined });
-    disconnectWith(DisconnectReason.CLIENT_INITIATED);
     expect(links()).toEqual([['На главную', '/']]);
   });
 });
