@@ -82,7 +82,7 @@ export function RoomShell({
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   // Чат на LiveKit (тема lk.chat): история живет, пока открыта вкладка, и нигде не сохраняется
   const chat = useChat();
-  // Реакции (эмодзи) идут по каналу данных, без гарантии доставки; в чат они попадают отдельной строкой
+  // Реакции (эмодзи) идут по каналу данных, без гарантии доставки; в чат они не попадают
   const reactions = useReactions(
     useCallback(
       (data, options) => localParticipant.publishData(data as Uint8Array<ArrayBuffer>, options),
@@ -312,25 +312,12 @@ export function RoomShell({
               )}
               {panel === 'chat' && (
                 <ChatPanel
-                  messages={[
-                    ...chat.chatMessages.map((m) => ({
-                      id: m.id,
-                      ts: m.timestamp,
-                      author: m.from?.isLocal ? 'Вы' : (m.from?.name ?? 'Участник'),
-                      text: m.message,
-                      at: clock(m.timestamp),
-                    })),
-                    ...reactions.log.map((r) => ({
-                      id: `reaction-${r.id}`,
-                      ts: r.at,
-                      author: r.name,
-                      text: r.emoji,
-                      at: clock(r.at),
-                      kind: 'reaction' as const,
-                    })),
-                  ]
-                    .sort((x, y) => x.ts - y.ts)
-                    .map(({ ts: _ts, ...message }) => message)}
+                  messages={chat.chatMessages.map((m) => ({
+                    id: m.id,
+                    author: m.from?.isLocal ? 'Вы' : (m.from?.name ?? 'Участник'),
+                    text: m.message,
+                    at: clock(m.timestamp),
+                  }))}
                   onSend={(text) => {
                     setChatError(false);
                     chat.send(text).catch(() => setChatError(true));
@@ -375,7 +362,12 @@ export function RoomShell({
         consent={consent.consent}
         panel={panel}
         devices={<DevicesMenu />}
-        reactions={<ReactionsMenu onPick={(emoji) => void reactions.send(emoji)} />}
+        reactions={
+          <ReactionsMenu
+            blockedUntil={reactions.blockedUntil}
+            onPick={(emoji) => void reactions.send(emoji)}
+          />
+        }
         onToggleMic={() => void toggle('mic')}
         onToggleCamera={() => void toggle('camera')}
         onToggleConsent={() => void consent.toggle()}

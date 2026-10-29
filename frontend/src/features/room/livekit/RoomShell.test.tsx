@@ -552,12 +552,15 @@ describe('реакции в комнате', () => {
     expect(options).toEqual({ reliable: false, topic: REACTION_TOPIC });
     expect(screen.getByTestId('reaction')).toHaveTextContent('👏');
     expect(screen.getByTestId('reaction')).toHaveTextContent('Вы');
-    // панель закрылась, фокус вернулся на кнопку
-    expect(screen.queryByRole('group', { name: 'Выбор реакции' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Реакции' })).toHaveFocus();
+    // сразу после выбора лимит (1 в секунду): кнопки неактивны, подпись «Подождите»
+    expect(screen.getByRole('button', { name: 'Реакция: нравится' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(group).toHaveTextContent(/Слишком часто\. Подождите ещё \d+ с/);
   });
 
-  it('чужая реакция: эмодзи с именем из участника LiveKit; в чате строка «Анна Гостева: 👍», не в непрочитанных', async () => {
+  it('чужая реакция: эмодзи с ником; в чат и в непрочитанные она не попадает', async () => {
     const user = userEvent.setup();
     renderShell(guestEntry);
     act(() =>
@@ -572,7 +575,8 @@ describe('реакции в комнате', () => {
     expect(document.title).not.toMatch(/^\(/);
 
     await user.click(screen.getByRole('button', { name: 'Чат' }));
-    expect(screen.getByRole('list')).toHaveTextContent('Анна Гостева: 👍');
+    expect(screen.getByRole('list')).not.toHaveTextContent('👍');
+    expect(screen.getByRole('list')).not.toHaveTextContent('Анна Гостева');
   });
 
   it('оверлей не принимает клики и скрыт от скринридеров', () => {
@@ -580,7 +584,7 @@ describe('реакции в комнате', () => {
     act(() =>
       lk.onData?.({ topic: REACTION_TOPIC, payload: sent('🎉'), from: person('p_g1', 'Анна') }),
     );
-    const overlay = screen.getByTestId('reaction').parentElement;
+    const overlay = screen.getByTestId('reaction').closest('[aria-hidden]');
     expect(overlay).toHaveAttribute('aria-hidden', 'true');
     expect(overlay).toHaveClass('pointer-events-none');
   });

@@ -159,15 +159,16 @@
   }
 }
 
-/* Реакции в комнате: эмодзи всплывает снизу вверх и гаснет (только transform и opacity). */
+/* Реакции в комнате: эмодзи всплывает снизу вверх и гаснет (только transform и opacity); --vks-dx – случайный
+   сдвиг по горизонтали не больше 12 px. */
 @keyframes vks-reaction-float {
   from {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translate(var(--vks-dx, 0px), 0);
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -45vh);
+    transform: translate(var(--vks-dx, 0px), -45vh);
   }
 }
 
@@ -179,5 +180,6 @@
 @media (prefers-reduced-motion: reduce) {
   .vks-reaction {
     animation: none;
+    transform: translate(var(--vks-dx, 0px), 0);
   }
 }

@@ -15,12 +15,47 @@ export const REACTIONS = [
 
 const ALLOWED = new Set<string>(REACTIONS.map((r) => r.emoji));
 
-/** Не чаще одной реакции в 300 мс от одного участника: при отправке и при приеме. */
-export const REACTION_INTERVAL_MS = 300;
-/** Одновременно на экране не больше 15 эмодзи, лишние не показываются. */
-export const MAX_FLOATING = 15;
-/** Сколько записей реакций хранить для ленты в чате. */
-const LOG_LIMIT = 200;
+/** Лимиты на одного участника: не чаще одной реакции в секунду и не больше пяти за 10 секунд. */
+export const REACTION_INTERVAL_MS = 1000;
+export const REACTION_BURST = 5;
+export const REACTION_WINDOW_MS = 10_000;
+/** Одновременно на экране не больше 8 эмодзи, лишние не показываются. */
+export const MAX_FLOATING = 8;
+/** Одинаковые реакции одного отправителя в пределах 2 секунд склеиваются в один элемент «×N». */
+export const MERGE_WINDOW_MS = 2000;
+/** Случайный сдвиг по горизонтали, не больше 12 px в обе стороны. */
+export const MAX_SHIFT_PX = 12;
+
+/**
+ * Лимитер реакций по отправителям (скользящее окно). Работает и на отправке, и на приеме: принимающая сторона
+ * не доверяет чужому клиенту и сама отбрасывает лишнее.
+ */
+export function createReactionLimiter() {
+  const accepted = new Map<string, number[]>();
+
+  /** Через сколько миллисекунд отправителю можно показать следующую реакцию (0 – сейчас). */
+  function waitMs(key: string, now: number): number {
+    const recent = (accepted.get(key) ?? []).filter((t) => now - t < REACTION_WINDOW_MS);
+    accepted.set(key, recent);
+    const last = recent.at(-1);
+    const afterInterval = last === undefined ? 0 : last + REACTION_INTERVAL_MS - now;
+    const afterWindow =
+      recent.length >= REACTION_BURST
+        ? recent[recent.length - REACTION_BURST]! + REACTION_WINDOW_MS - now
+        : 0;
+    return Math.max(0, afterInterval, afterWindow);
+  }
+
+  return {
+    waitMs,
+    /** Принимает реакцию, если лимит позволяет, и запоминает ее. */
+    take(key: string, now: number): boolean {
+      if (waitMs(key, now) > 0) return false;
+      accepted.get(key)!.push(now);
+      return true;
+    },
+  };
+}
 
 /** Тело сообщения: версия формата и эмодзи. Отправитель берется из участника LiveKit, а не из тела. */
 export function encodeReaction(emoji: string): Uint8Array {
@@ -42,18 +77,17 @@ export function parseReaction(payload: Uint8Array): string | null {
 
 export interface FloatingReaction {
   id: number;
+  /** Отправитель (identity участника LiveKit или `self`): по нему склеиваются одинаковые реакции */
+  sender: string;
   emoji: string;
-  /** Подпись: имя отправителя или «Вы» */
+  /** Подпись: ник отправителя или «Вы» */
   name: string;
-  /** Горизонтальное положение в процентах ширины области видео */
-  left: number;
-}
-
-export interface ReactionLogEntry {
-  id: number;
-  emoji: string;
-  name: string;
-  at: number;
+  /** Сколько одинаковых реакций склеено («×N» при N > 1) */
+  count: number;
+  /** Случайный сдвиг по горизонтали в пикселях, |dx| ≤ 12 */
+  dx: number;
+  /** Когда пришла последняя из склеенных реакций */
+  lastAt: number;
 }
 
 /** Что нужно от входящего сообщения данных: тема, тело и отправитель (участник LiveKit). */
@@ -69,34 +103,45 @@ export type PublishData = (
 ) => Promise<void>;
 
 /**
- * Реакции: отправка по каналу данных (без гарантии доставки), прием с проверкой, всплывающие эмодзи и лента для
- * чата. Чужие данные не доверенные: тема, формат и эмодзи проверяются, имя берется только из участника LiveKit.
+ * Реакции: отправка по каналу данных (без гарантии доставки), прием с проверкой, всплывающие эмодзи. Чужие данные
+ * не доверенные: тема, формат и эмодзи проверяются, имя берется только из участника LiveKit, лимиты действуют и на
+ * приеме. В чат реакции не попадают.
  */
 export function useReactions(publish: PublishData) {
   const [floating, setFloating] = useState<FloatingReaction[]>([]);
-  const [log, setLog] = useState<ReactionLogEntry[]>([]);
-  const lastSent = useRef(0);
-  const lastFrom = useRef(new Map<string, number>());
+  // Когда снова можно отправить реакцию (мс, Date.now()); 0 – можно сейчас
+  const [blockedUntil, setBlockedUntil] = useState(0);
+  const limiter = useRef(createReactionLimiter());
   const sequence = useRef(0);
 
-  const show = useCallback((name: string, emoji: string) => {
+  const show = useCallback((sender: string, name: string, emoji: string, now: number) => {
     sequence.current += 1;
     const id = sequence.current;
-    setFloating((current) =>
-      current.length >= MAX_FLOATING
-        ? current
-        : [...current, { id, emoji, name, left: 8 + Math.random() * 78 }],
-    );
-    setLog((current) => [...current.slice(-(LOG_LIMIT - 1)), { id, emoji, name, at: Date.now() }]);
+    setFloating((current) => {
+      const same = current.find(
+        (item) =>
+          item.sender === sender && item.emoji === emoji && now - item.lastAt <= MERGE_WINDOW_MS,
+      );
+      if (same) {
+        return current.map((item) =>
+          item === same ? { ...item, count: item.count + 1, lastAt: now } : item,
+        );
+      }
+      if (current.length >= MAX_FLOATING) return current;
+      const dx = Math.round((Math.random() * 2 - 1) * MAX_SHIFT_PX);
+      return [...current, { id, sender, emoji, name, count: 1, dx, lastAt: now }];
+    });
   }, []);
 
   const send = useCallback(
     async (emoji: string): Promise<boolean> => {
       if (!ALLOWED.has(emoji)) return false;
       const now = Date.now();
-      if (now - lastSent.current < REACTION_INTERVAL_MS) return false;
-      lastSent.current = now;
-      show('Вы', emoji);
+      if (!limiter.current.take('self', now)) return false;
+      // Следующая реакция возможна не раньше, чем освободится лимит (интервал или окно из пяти)
+      const wait = limiter.current.waitMs('self', now);
+      setBlockedUntil(wait > 0 ? now + wait : 0);
+      show('self', 'Вы', emoji, now);
       try {
         await publish(encodeReaction(emoji), { reliable: false, topic: REACTION_TOPIC });
       } catch {
@@ -114,9 +159,8 @@ export function useReactions(publish: PublishData) {
       if (emoji === null) return;
       const sender = message.from.identity ?? message.from.name ?? '';
       const now = Date.now();
-      if (now - (lastFrom.current.get(sender) ?? 0) < REACTION_INTERVAL_MS) return;
-      lastFrom.current.set(sender, now);
-      show(message.from.name || 'Участник', emoji);
+      if (!limiter.current.take(sender, now)) return;
+      show(sender, message.from.name || 'Участник', emoji, now);
     },
     [show],
   );
@@ -126,5 +170,5 @@ export function useReactions(publish: PublishData) {
     [],
   );
 
-  return { floating, log, send, receive, expire };
+  return { floating, blockedUntil, send, receive, expire };
 }
