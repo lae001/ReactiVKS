@@ -18,7 +18,7 @@ import { ApiError, fieldOf } from '@/shared/api/problem';
 import { paths } from '@/shared/config/routes';
 import { useLocalMedia } from '@/shared/hooks/use-local-media';
 import { formatDateTime } from '@/shared/lib/format';
-import { setParticipantToken } from '@/shared/lib/participant-session';
+import { setParticipantSession } from '@/shared/lib/participant-session';
 import type { RoomEntry } from '@/shared/lib/room-entry';
 import { checkWebRtcSupport, describeWebRtcProblem } from '@/shared/lib/webrtc-support';
 import { Wordmark } from '@/shared/ui/brand';
@@ -140,18 +140,25 @@ function Lobby({ inviteCode, info }: { inviteCode: string; info: JoinInfo }) {
 
   const flow = useJoinFlow({
     inviteCode,
-    onJoined: (result) => {
-      setParticipantToken(result.participant_token);
+    onJoined: (result, reused) => {
       const entry: RoomEntry = {
         role: 'guest',
-        displayName: displayName.trim(),
-        consent: info.consent_notice ? (consent ?? 'denied') : 'not_required',
+        // вернулись прежним участником: его имя и согласие остаются теми, что записаны на сервере
+        displayName: reused?.displayName ?? displayName.trim(),
+        consent: reused?.consent ?? (info.consent_notice ? (consent ?? 'denied') : 'not_required'),
         cameraOn: media.cameraOn,
         micOn: media.micOn,
         inviteCode,
         participantId: result.participant_id,
         meeting: result.meeting,
       };
+      setParticipantSession({
+        token: result.participant_token,
+        inviteCode,
+        meetingId: result.meeting.id,
+        displayName: entry.displayName,
+        consent: entry.consent,
+      });
       navigate(paths.room(result.meeting.id), { state: entry });
     },
     onFailed: (error) => {

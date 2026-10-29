@@ -39,7 +39,7 @@ import { DevicesPanel } from './DevicesMenu';
 import { EMOTIONS_MOCK_NOTICE, mockEmotionSnapshot } from './emotions-mock';
 import { confirmText, type PendingAction, useModeration } from './moderation';
 import { deviceFailureText } from './notice';
-import { isAgent, roomParticipants } from './participants';
+import { isAgent, isService, roomParticipants } from './participants';
 import { ReactionsOverlay } from './ReactionsOverlay';
 import { type PublishData, REACTION_TOPIC, useReactions } from './reactions';
 import { clearRoomState, saveDevices } from './room-state';
@@ -74,7 +74,7 @@ export function RoomShell({
   const navigate = useNavigate();
   const connectionState = useConnectionState();
   const live = useParticipants();
-  const humans = live.filter((p) => !isAgent(p));
+  const humans = live.filter((p) => !isService(p));
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   // Чат на LiveKit (тема lk.chat): история живет, пока открыта вкладка, и нигде не сохраняется
   const chat = useChat();

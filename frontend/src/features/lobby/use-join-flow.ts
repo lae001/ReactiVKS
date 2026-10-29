@@ -3,6 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { type GuestJoinResult, meetingsApi } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
+import {
+  clearParticipantToken,
+  getParticipantSession,
+  type ParticipantSession,
+} from '@/shared/lib/participant-session';
 
 type JoinBody = Parameters<typeof meetingsApi.joinMeeting>[1];
 
@@ -55,7 +60,8 @@ export function useJoinFlow({
   onFailed,
 }: {
   inviteCode: string;
-  onJoined: (result: GuestJoinResult) => void;
+  /** `reused` – вошли прежним участником этой вкладки (rejoin), новая запись не создавалась */
+  onJoined: (result: GuestJoinResult, reused?: ParticipantSession) => void;
   onFailed: (error: unknown) => void;
 }) {
   const [phase, setPhase] = useState<JoinPhase>('idle');
@@ -128,7 +134,31 @@ export function useJoinFlow({
       run.current += 1;
       setTerminal(null);
       setPhase('idle');
-      attempt(body, null);
+      // Эта вкладка уже входила в эту встречу: возвращаемся тем же участником (rejoin), а не заводим второго.
+      // Удаленный участник так не вернется (`participant_removed`), неизвестный серверу токен – обычный вход.
+      const previous = getParticipantSession(inviteCode);
+      if (!previous) return attempt(body, null);
+      const id = run.current;
+      meetingsApi
+        .rejoin()
+        .then((result) => {
+          if (id !== run.current) return;
+          handlers.current.onJoined({ ...result, participant_token: previous.token }, previous);
+        })
+        .catch((error: unknown) => {
+          if (id !== run.current) return;
+          if (
+            error instanceof ApiError &&
+            TERMINAL_CODES.has(error.code) &&
+            error.code !== 'not_found'
+          ) {
+            setTerminal(error);
+            return;
+          }
+          // токен недействителен или сбой: обычный вход (при 401 прежний токен забываем)
+          if (error instanceof ApiError && error.code === 'unauthorized') clearParticipantToken();
+          attempt(body, null);
+        });
     },
     cancel() {
       run.current += 1;

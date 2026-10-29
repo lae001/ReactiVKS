@@ -1,4 +1,6 @@
-import { isAgent, restIdOf, roomParticipants, toRoomParticipant } from './participants';
+import { ParticipantKind } from 'livekit-client';
+
+import { isAgent, isService, restIdOf, roomParticipants, toRoomParticipant } from './participants';
 
 function person(
   identity: string,
@@ -73,5 +75,39 @@ describe('участники из LiveKit', () => {
   it('id для REST – identity без префикса p_', () => {
     expect(restIdOf('p_0192-abc')).toBe('0192-abc');
     expect(restIdOf('other')).toBe('other');
+  });
+});
+
+describe('счет участников: только люди', () => {
+  const kinds = [
+    ['агент по атрибуту vks.kind', { attributes: { 'vks.kind': 'agent' } }],
+    ['агент по виду LiveKit', { kind: ParticipantKind.AGENT }],
+    ['egress (запись)', { kind: ParticipantKind.EGRESS }],
+    ['ingress', { kind: ParticipantKind.INGRESS }],
+    ['SIP-шлюз', { kind: ParticipantKind.SIP }],
+  ] as const;
+
+  it.each(kinds)('%s не считается человеком: не попадает в список и счетчик', (_name, extra) => {
+    const human = person('p_human', { 'vks.role': 'guest' }, { kind: ParticipantKind.STANDARD });
+    const service = person('svc', 'attributes' in extra ? extra.attributes : {}, { ...extra });
+    expect(isService(service)).toBe(true);
+    expect(toRoomParticipant(service)).toBeNull();
+    expect(roomParticipants([human, service]).map((p) => p.id)).toEqual(['p_human']);
+  });
+
+  it('обычный участник и участник без вида – люди; индикатор анализа только по агенту', () => {
+    expect(isService(person('p_a', {}, { kind: ParticipantKind.STANDARD }))).toBe(false);
+    expect(isService(person('p_b'))).toBe(false);
+    expect(isAgent(person('x', {}, { kind: ParticipantKind.EGRESS }))).toBe(false);
+    expect(isAgent(person('x', {}, { kind: ParticipantKind.AGENT }))).toBe(true);
+  });
+
+  it('одинаковые имена – разные люди: считаются отдельно (счет идет по identity, а не по имени)', () => {
+    const list = [
+      person('p_1', {}, { name: 'Анна', isLocal: true }),
+      person('p_2', {}, { name: 'Анна' }),
+      person('p_3', {}, { name: 'Анна' }),
+    ];
+    expect(roomParticipants(list)).toHaveLength(3);
   });
 });

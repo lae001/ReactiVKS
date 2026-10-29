@@ -4,7 +4,7 @@ import { Track } from 'livekit-client';
 import { PagerNav } from '../PagerNav';
 import { TILES_PER_PAGE } from '../LiveKitGallery';
 
-import { isAgent } from './participants';
+import { isService } from './participants';
 
 /**
  * Галерея комнаты: `GridLayout` по дорожкам камер и демонстрации экрана, пагинация сверх
@@ -16,7 +16,7 @@ export function RoomGallery() {
     { source: Track.Source.Camera, withPlaceholder: true },
     { source: Track.Source.ScreenShare, withPlaceholder: false },
   ]);
-  const tracks = all.filter((t) => !isAgent(t.participant));
+  const tracks = all.filter((t) => !isService(t.participant));
   const pagination = usePagination(TILES_PER_PAGE, tracks);
 
   return (

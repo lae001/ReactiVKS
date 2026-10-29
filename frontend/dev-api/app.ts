@@ -315,7 +315,8 @@ export function createApp({
   const onlineCount = async (m: Meeting) => (await refreshOnline(m)).filter((p) => p.online).length;
 
   function recount(m: Meeting) {
-    m.participants_count = listOf(m.id).filter((p) => !p.is_removed).length;
+    // как в meeting-service: число записей participant встречи (организатор, гости, в том числе удаленные)
+    m.participants_count = listOf(m.id).length;
   }
 
   function requireOpen(m: Meeting) {

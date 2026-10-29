@@ -783,3 +783,62 @@ describe('dev-api: текст уведомления в лобби', () => {
     expect(text).not.toMatch(/dev-api|черновик|mock|TODO/i);
   });
 });
+
+describe('dev-api: participants_count – число записей participant встречи', () => {
+  const count = async (id: string) =>
+    (
+      (await call('GET', `/api/v1/meetings/${id}`, { headers: ORG })).body as unknown as {
+        participants_count: number;
+      }
+    ).participants_count;
+
+  it('организатор в двух вкладках (повторный join) – одна запись', async () => {
+    const m = await activeMeeting();
+    await call('POST', `/api/v1/meetings/${m.id}/join`, {
+      headers: ORG,
+      body: { consent: 'granted' },
+    });
+    await call('POST', `/api/v1/meetings/${m.id}/join`, {
+      headers: ORG,
+      body: { consent: 'granted' },
+    });
+    expect(await count(m.id)).toBe(1);
+  });
+
+  it('гость: rejoin (обновление страницы) запись не создает, новый вход по ссылке – создает', async () => {
+    const m = await activeMeeting();
+    const guest = (await guestJoin(m.invite_code)).body!;
+    expect(await count(m.id)).toBe(2);
+    const auth = { Authorization: `Participant ${guest.participant_token}` };
+    await call('POST', '/api/v1/participants/me/rejoin', { headers: auth });
+    await call('POST', '/api/v1/participants/me/rejoin', { headers: auth });
+    expect(await count(m.id)).toBe(2);
+
+    // вход по ссылке без токена (другая вкладка, другой браузер) – новая запись: человека не отличить
+    await guestJoin(m.invite_code);
+    expect(await count(m.id)).toBe(3);
+  });
+
+  it('одинаковые имена – разные записи', async () => {
+    const m = await activeMeeting();
+    await guestJoin(m.invite_code, 'Анна');
+    await guestJoin(m.invite_code, 'Анна');
+    expect(await count(m.id)).toBe(3);
+    const people = (await call('GET', `/api/v1/meetings/${m.id}/participants`, { headers: ORG }))
+      .body!.items;
+    expect(people.filter((p) => p.display_name === 'Анна')).toHaveLength(2);
+  });
+
+  it('удаленный участник остается записью (как в meeting-service), его rejoin закрыт', async () => {
+    const m = await activeMeeting();
+    const guest = (await guestJoin(m.invite_code)).body!;
+    await call('POST', `/api/v1/meetings/${m.id}/participants/${guest.participant_id}/remove`, {
+      headers: ORG,
+    });
+    expect(await count(m.id)).toBe(2);
+    const again = await call('POST', '/api/v1/participants/me/rejoin', {
+      headers: { Authorization: `Participant ${guest.participant_token}` },
+    });
+    expect(again.status).toBe(409);
+  });
+});

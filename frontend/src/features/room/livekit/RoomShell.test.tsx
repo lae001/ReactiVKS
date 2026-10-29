@@ -702,3 +702,21 @@ describe('история чата и состояние вкладки', () => {
     expect(sessionStorage.getItem('vks.room.chat.m-1')).toBeNull();
   });
 });
+
+describe('счетчик «Участники · N»: только люди', () => {
+  it('служебные участники (агент, egress) и их плитки не считаются; одинаковые имена – отдельные люди', async () => {
+    lk.participants = [
+      person('p_org', 'Иван', { 'vks.role': 'organizer' }, { isLocal: true }),
+      person('p_a', 'Анна', { 'vks.role': 'guest' }),
+      person('p_b', 'Анна', { 'vks.role': 'guest' }),
+      person('agent-1', 'emotion-agent', { 'vks.kind': 'agent' }),
+      person('egress-1', 'recorder', {}, { kind: 2 }), // ParticipantKind.EGRESS
+    ];
+    const user = userEvent.setup();
+    renderShell(organizerEntry);
+    await user.click(screen.getByRole('button', { name: 'Участники' }));
+    expect(screen.getByRole('tab', { name: 'Участники · 3' })).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).queryByText('recorder')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).getAllByText('Анна')).toHaveLength(2);
+  });
+});

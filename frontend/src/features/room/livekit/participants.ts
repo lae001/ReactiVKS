@@ -1,4 +1,4 @@
-import type { Participant } from 'livekit-client';
+import { type Participant, ParticipantKind } from 'livekit-client';
 
 import type { ConsentState, ParticipantRole } from '@/shared/api/types';
 
@@ -17,9 +17,19 @@ export const ATTR = {
 
 const CONSENTS: ConsentState[] = ['granted', 'denied', 'revoked', 'not_required'];
 
-/** ML-агент (`vks.kind = agent`): в галерее и списке участников не показывается. */
-export function isAgent(p: Pick<Participant, 'attributes'>): boolean {
-  return p.attributes?.[ATTR.kind] === 'agent';
+/** ML-агент: атрибут `vks.kind = agent` (docs/api/livekit-integration.md) или служебный вид LiveKit `AGENT`. */
+export function isAgent(p: Pick<Participant, 'attributes'> & { kind?: ParticipantKind }): boolean {
+  return p.attributes?.[ATTR.kind] === 'agent' || p.kind === ParticipantKind.AGENT;
+}
+
+/**
+ * Служебный участник LiveKit, не человек: агент, egress (запись), ingress, SIP-шлюз и т. п. (`participant.kind`
+ * отличен от `STANDARD`). В галерее, списке участников и счетчиках считаются только люди.
+ */
+export function isService(
+  p: Pick<Participant, 'attributes'> & { kind?: ParticipantKind },
+): boolean {
+  return isAgent(p) || (p.kind !== undefined && p.kind !== ParticipantKind.STANDARD);
 }
 
 export function roleOf(p: Pick<Participant, 'attributes'>): ParticipantRole {
@@ -39,11 +49,11 @@ export function restIdOf(identity: string): string {
 type LiveParticipant = Pick<
   Participant,
   'identity' | 'name' | 'attributes' | 'isLocal' | 'isMicrophoneEnabled' | 'isCameraEnabled'
->;
+> & { kind?: ParticipantKind };
 
-/** Участник LiveKit для интерфейса; агент не показывается (null). */
+/** Участник LiveKit для интерфейса; служебные участники (агент, egress и т. п.) не показываются (null). */
 export function toRoomParticipant(p: LiveParticipant): RoomParticipant | null {
-  if (isAgent(p)) return null;
+  if (isService(p)) return null;
   return {
     id: p.identity,
     name: p.name || 'Участник',
