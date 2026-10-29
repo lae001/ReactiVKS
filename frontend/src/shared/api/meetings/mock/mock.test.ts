@@ -74,6 +74,42 @@ describe('mock: коды ошибок реестра (те, что воспро�
     });
   });
 
+  it('meeting_not_started: не начатую встречу не завершают, а отменяют', async () => {
+    const api = setup();
+    await expect(api.endMeeting('m-later')).rejects.toMatchObject({
+      code: 'meeting_not_started',
+      status: 409,
+    });
+    await expect(api.getMeeting('m-later')).resolves.toMatchObject({ status: 'scheduled' });
+    await api.deleteMeeting('m-later');
+    await expect(api.getMeeting('m-later')).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('mute и remove после завершения: meeting_ended', async () => {
+    const api = setup();
+    const guest = await enterAsGuest(api);
+    await api.endMeeting('m-active');
+    await expect(api.removeParticipant('m-active', guest.participant_id)).rejects.toMatchObject({
+      code: 'meeting_ended',
+      status: 409,
+    });
+    await expect(
+      api.muteParticipant('m-active', guest.participant_id, 'video'),
+    ).rejects.toMatchObject({ code: 'meeting_ended' });
+  });
+
+  it('remove организатора: 422 validation_error, он остается во встрече', async () => {
+    const api = setup();
+    await api.joinAsOrganizer('m-active', 'granted');
+    const organizer = (await api.listParticipants('m-active')).find((p) => p.role === 'organizer')!;
+    await expect(api.removeParticipant('m-active', organizer.id)).rejects.toMatchObject({
+      code: 'validation_error',
+      status: 422,
+    });
+    const after = (await api.listParticipants('m-active')).find((p) => p.id === organizer.id);
+    expect(after?.is_removed).toBe(false);
+  });
+
   it('meeting_full: 10 онлайн – одиннадцатый не входит, и гость, и организатор', async () => {
     const api = setup();
     await expect(api.joinMeeting('demofull22', { display_name: 'Анна' })).rejects.toMatchObject({

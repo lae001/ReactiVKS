@@ -125,6 +125,12 @@ export function createMockMeetingsApi(now: () => Date = () => new Date()): MockM
     if (m.status === 'cancelled') fail('meeting_cancelled');
   }
 
+  /** Встреча идет: в ней есть кого модерировать и куда возвращаться (ensure_in_progress бэкенда). */
+  function requireInProgress(m: Meeting) {
+    if (m.status === 'scheduled') fail('meeting_not_started');
+    requireOpen(m);
+  }
+
   function checkFps(fps: number | undefined) {
     if (fps !== undefined && (!Number.isInteger(fps) || fps < 2 || fps > 5)) {
       invalid('analysis_fps', 'Допустимо от 2 до 5');
@@ -278,10 +284,11 @@ export function createMockMeetingsApi(now: () => Date = () => new Date()): MockM
     async endMeeting(id) {
       const m = find(id);
       if (m.status === 'cancelled') fail('meeting_cancelled');
+      // Не начатую встречу не завершают, а отменяют (DELETE): иначе в истории появилась бы «прошедшая» встреча.
+      if (m.status === 'scheduled') fail('meeting_not_started');
       if (m.status !== 'ended') {
         m.status = 'ended';
         m.ended_at = now().toISOString();
-        m.started_at ??= m.ended_at;
         for (const p of listOf(m.id)) {
           if (p.online) p.last_left_at = m.ended_at;
           p.online = false;
@@ -297,13 +304,17 @@ export function createMockMeetingsApi(now: () => Date = () => new Date()): MockM
 
     async muteParticipant(id, participantId) {
       const m = find(id);
-      if (m.status === 'ended') fail('meeting_ended');
       if (!listOf(id).some((p) => p.id === participantId)) fail('not_found');
+      requireInProgress(m);
     },
 
     async removeParticipant(id, participantId) {
-      find(id);
+      const m = find(id);
       const p = listOf(id).find((x) => x.id === participantId) ?? fail('not_found');
+      requireInProgress(m);
+      if (p.role === 'organizer') {
+        invalid('participant_id', 'Организатора из своей встречи не удаляют: встречу завершают');
+      }
       p.is_removed = true;
       p.online = false;
       p.last_left_at = now().toISOString();
@@ -378,7 +389,7 @@ export function createMockMeetingsApi(now: () => Date = () => new Date()): MockM
     async rejoin() {
       const { participant, meeting } = tokenInfo();
       if (participant.is_removed) fail('participant_removed');
-      if (meeting.status === 'ended' || meeting.status === 'cancelled') fail('meeting_ended');
+      requireInProgress(meeting);
       participant.online = true;
       return joinResult(meeting, participant.id);
     },

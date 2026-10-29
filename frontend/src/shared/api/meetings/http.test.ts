@@ -320,6 +320,27 @@ describe('http: коды ошибок реестра', () => {
     });
   });
 
+  it('mute: meeting_not_started, meeting_cancelled и livekit_unavailable доходят как есть', async () => {
+    for (const [status, code] of [
+      [409, 'meeting_not_started'],
+      [409, 'meeting_cancelled'],
+      [503, 'livekit_unavailable'],
+    ] as const) {
+      server.use(
+        http.post('/api/v1/meetings/m1/participants/p1/mute', () => problem(status, code)),
+      );
+      await expect(api.muteParticipant('m1', 'p1', 'audio')).rejects.toMatchObject({
+        code,
+        status,
+      });
+    }
+  });
+
+  it('end: meeting_not_started – не начатую встречу не завершают', async () => {
+    server.use(http.post('/api/v1/meetings/m1/end', () => problem(409, 'meeting_not_started')));
+    await expect(api.endMeeting('m1')).rejects.toMatchObject({ code: 'meeting_not_started' });
+  });
+
   it('429: Retry-After доступен в ошибке', async () => {
     server.use(
       http.get('/api/v1/join/:code', () =>
