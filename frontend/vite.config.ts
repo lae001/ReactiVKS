@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   // Адрес бэкенда для dev-прокси; по умолчанию – локальный auth-service (backend/services/auth_service)
   const apiTarget =
     loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_API_TARGET || 'http://127.0.0.1:8001';
-  // Временный dev-сервер вместо meeting-service (dev-api/README.md); удаляется вместе с ним
+  // meeting-service (make run-meeting, порт 8002); при нехватке ресурсов – облегченный dev-api (dev-api/README.md)
   const meetingTarget =
     loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_MEETING_API_TARGET ||
     'http://127.0.0.1:8002';
@@ -22,9 +22,10 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
-        // Пути meeting-service идут на dev-api (8002), остальное /api – на auth-service (8001).
-        // Правило с регулярным выражением стоит выше общего '/api': Vite берет первое совпадение
-        '^/api/v1/(meetings|join|participants|settings)': {
+        // Пути meeting-service (8002), включая /admin/meetings и /admin/health; остальное /api – auth-service
+        // (8001): /auth, /users, /admin/users. Правило с регулярным выражением стоит выше общего '/api':
+        // Vite берет первое совпадение, поэтому /admin/meetings не попадает на общий /admin
+        '^/api/v1/(meetings|join|participants|settings|admin/(meetings|health))': {
           target: meetingTarget,
           changeOrigin: true,
         },
