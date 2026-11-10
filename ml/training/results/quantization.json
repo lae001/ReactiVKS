@@ -1,0 +1,32 @@
+{
+ "emotion-efficientnetb0-v1.0.0.onnx": {
+  "acc": 0.6882,
+  "f1": 0.6678,
+  "agree_fp32": 1.0,
+  "ms_per_face": {
+   "1": 4.46,
+   "10": 4.93
+  },
+  "mb": 15.3
+ },
+ "emotion-efficientnetb0-v1.0.0-int8-percentile.onnx": {
+  "acc": 0.6402,
+  "f1": 0.6187,
+  "agree_fp32": 0.7848,
+  "ms_per_face": {
+   "1": 4.69,
+   "10": 3.77
+  },
+  "mb": 4.7
+ },
+ "emotion-efficientnetb0-v1.0.0-int8-entropy.onnx": {
+  "acc": 0.557,
+  "f1": 0.4849,
+  "agree_fp32": 0.6287,
+  "ms_per_face": {
+   "1": 4.65,
+   "10": 4.12
+  },
+  "mb": 4.7
+ }
+}

@@ -142,3 +142,89 @@ def _cpu_name() -> str:
     import platform
 
     return platform.processor() or os.environ.get("PROCESSOR_IDENTIFIER", "unknown")
+
+
+class _CalibrationReader:
+    """Калибровочные данные статической квантизации: изображения валидации пакетами по 4.
+
+    Калибровка по перцентилям и энтропии хранит гистограммы всех тензоров сети – пакет 32 не помещался в память.
+    """
+
+    def __init__(self, images: np.ndarray) -> None:
+        batches = [images[i : i + 4] for i in range(0, len(images), 4)]
+        self._batches = iter([{"face": to_tensor(b).numpy()} for b in batches])
+
+    def get_next(self) -> dict[str, np.ndarray] | None:
+        return next(self._batches, None)
+
+
+def quantize_int8(
+    onnx_path: Path, base_dir: Path, calibration_size: int = 512, seed: int = 42, method: str = "percentile"
+) -> Path:
+    """Статическая INT8-квантизация (QDQ, по каналам) с калибровкой на валидации FER-2013.
+
+    Динамическая квантизация для сверточной сети почти бесполезна (квантуются только матричные умножения), поэтому –
+    статическая: диапазоны активаций оцениваются на calibration_size изображениях валидации. Тест в калибровке не
+    участвует.
+    """
+    from onnxruntime.quantization import CalibrationMethod, QuantFormat, QuantType, quantize_static
+    from onnxruntime.quantization.shape_inference import quant_pre_process
+
+    from fer_training.config import DataConfig
+
+    val = build_splits(DataConfig(), seed, base_dir).val
+    index = np.random.default_rng(seed).choice(len(val), min(calibration_size, len(val)), replace=False)
+    import onnx
+
+    prepared = onnx_path.with_name(onnx_path.stem + "-prep.onnx")
+    quant_pre_process(str(onnx_path), str(prepared))
+    out = onnx_path.with_name(f"{onnx_path.stem}-int8-{method}.onnx")
+    # Входная часть графа (увеличение 48 → 224, повтор канала, нормализация) и голова остаются в FP32: ошибка
+    # квантизации здесь копится по всей сети, а выигрыша по времени почти нет.
+    graph = onnx.load(str(prepared)).graph
+    keep_fp32 = [n.name for n in graph.node if n.op_type in ("Resize", "Tile", "Sub", "Div", "Softmax", "Gemm")]
+    methods = {
+        "minmax": CalibrationMethod.MinMax,
+        "percentile": CalibrationMethod.Percentile,
+        "entropy": CalibrationMethod.Entropy,
+    }
+    quantize_static(
+        str(prepared),
+        str(out),
+        _CalibrationReader(val.images[np.sort(index)]),
+        quant_format=QuantFormat.QDQ,
+        per_channel=True,
+        activation_type=QuantType.QUInt8,
+        weight_type=QuantType.QInt8,
+        calibrate_method=methods[method],
+        nodes_to_exclude=keep_fp32,
+        extra_options={"CalibPercentile": 99.99},
+    )
+    prepared.unlink(missing_ok=True)
+    log.info("INT8: %s (%.1f МБ → %.1f МБ)", out, onnx_path.stat().st_size / 2**20, out.stat().st_size / 2**20)
+    return out
+
+
+def bench_gpu(checkpoint: Path, batches: tuple[int, ...] = (1, 10), iterations: int = 200) -> dict[str, Any]:
+    """Задержка PyTorch на GPU (CUDA, bf16), мс на лицо – для варианта развертывания ML-сервиса на узле с GPU."""
+    if not torch.cuda.is_available():
+        return {"gpu": None}
+    model, _ = load_checkpoint(checkpoint, torch.device("cuda"))
+    model = model.cuda().eval()
+    result: dict[str, Any] = {"gpu": torch.cuda.get_device_name(0), "ms_per_face": {}, "ms_per_batch": {}}
+    with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        for batch in batches:
+            x = torch.rand(batch, 1, CROP_SIZE, CROP_SIZE, device="cuda")
+            for _ in range(20):
+                model(x)
+            torch.cuda.synchronize()
+            timings = []
+            for _ in range(iterations):
+                start = time.perf_counter()
+                model(x)
+                torch.cuda.synchronize()
+                timings.append((time.perf_counter() - start) * 1000)
+            median = float(np.median(timings))
+            result["ms_per_batch"][str(batch)] = round(median, 2)
+            result["ms_per_face"][str(batch)] = round(median / batch, 3)
+    return result

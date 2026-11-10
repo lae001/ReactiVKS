@@ -24,6 +24,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
 from fer_training.config import DataConfig
+from fer_training.occlusions import RandomOcclusion
 
 log = logging.getLogger(__name__)
 
@@ -50,19 +51,28 @@ class ImageSet:
     images: np.ndarray
     labels: np.ndarray
     source: str
+    # 5 точек YuNet в координатах 48×48 (N, 5, 2), NaN – не найдены; нужны синтетическим очкам и бороде.
+    landmarks: np.ndarray | None = None
 
     def __len__(self) -> int:
         return len(self.labels)
 
     def subset(self, index: np.ndarray) -> ImageSet:
-        return ImageSet(self.images[index], self.labels[index], self.source)
+        points = None if self.landmarks is None else self.landmarks[index]
+        return ImageSet(self.images[index], self.labels[index], self.source, points)
 
     def class_counts(self) -> np.ndarray:
         return np.bincount(self.labels, minlength=NUM_CLASSES)
 
 
 def concat(sets: list[ImageSet], source: str) -> ImageSet:
-    return ImageSet(np.concatenate([s.images for s in sets]), np.concatenate([s.labels for s in sets]), source)
+    points = [s.landmarks if s.landmarks is not None else np.full((len(s), 5, 2), np.nan, np.float32) for s in sets]
+    return ImageSet(
+        np.concatenate([s.images for s in sets]),
+        np.concatenate([s.labels for s in sets]),
+        source,
+        np.concatenate(points),
+    )
 
 
 def decode_gray(data: bytes) -> np.ndarray:
@@ -82,9 +92,11 @@ def load_fer2013(root: str | Path) -> dict[str, ImageSet]:
     root = Path(root)
     cache = root / "fer2013.npz"
     if cache.exists():
+        landmarks_path = root / "landmarks.npz"
+        points = dict(np.load(landmarks_path)) if landmarks_path.exists() else {}
         with np.load(cache) as packed:
             return {
-                name: ImageSet(packed[f"{name}_images"], packed[f"{name}_labels"], f"fer2013/{name}")
+                name: ImageSet(packed[f"{name}_images"], packed[f"{name}_labels"], f"fer2013/{name}", points.get(name))
                 for name in FER_SPLITS
             }
     sets: dict[str, ImageSet] = {}
@@ -242,15 +254,24 @@ def build_splits(cfg: DataConfig, seed: int, base_dir: Path | None = None) -> Sp
 class FaceDataset(Dataset[tuple[torch.Tensor, int]]):
     """Отдает (1, 48, 48) float32 в [0, 1] – ровно тот вход, что получает модель в сервисе."""
 
-    def __init__(self, data: ImageSet, transform: Callable[..., dict[str, np.ndarray]] | None = None) -> None:
+    def __init__(
+        self,
+        data: ImageSet,
+        transform: Callable[..., dict[str, np.ndarray]] | None = None,
+        occlusion: RandomOcclusion | None = None,
+    ) -> None:
         self.data = data
         self.transform = transform
+        self.occlusion = occlusion
 
     def __len__(self) -> int:
         return len(self.data)
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
         image = self.data.images[index]
+        if self.occlusion is not None:
+            points = None if self.data.landmarks is None else self.data.landmarks[index]
+            image = self.occlusion(image, points)
         if self.transform is not None:
             image = self.transform(image=image)["image"]
         tensor = torch.from_numpy(np.ascontiguousarray(image)).float().div_(255.0).unsqueeze(0)

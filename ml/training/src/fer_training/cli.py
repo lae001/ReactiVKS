@@ -69,6 +69,18 @@ def cmd_bench(args: argparse.Namespace) -> None:
     print(json.dumps(bench_cpu(Path(args.onnx), threads=args.threads), ensure_ascii=False, indent=2))
 
 
+def cmd_quantize(args: argparse.Namespace) -> None:
+    from fer_training.export import quantize_int8
+
+    print(quantize_int8(Path(args.onnx), Path.cwd(), calibration_size=args.calibration, method=args.method))
+
+
+def cmd_bench_gpu(args: argparse.Namespace) -> None:
+    from fer_training.export import bench_gpu
+
+    print(json.dumps(bench_gpu(Path(args.checkpoint)), ensure_ascii=False, indent=2))
+
+
 def cmd_report(args: argparse.Namespace) -> None:
     """Строки таблицы для experiments.md по каталогам запусков."""
     columns = ["Запуск", "Архитектура", "Параметры, M", "Эпоха", "Val acc", "Test acc", "Test macro-F1", "Private acc"]
@@ -114,6 +126,16 @@ def main() -> None:
     p.add_argument("--onnx", required=True)
     p.add_argument("--threads", type=int, default=4)
     p.set_defaults(func=cmd_bench)
+
+    p = sub.add_parser("quantize", help="статическая INT8-квантизация ONNX с калибровкой на валидации")
+    p.add_argument("--onnx", required=True)
+    p.add_argument("--calibration", type=int, default=512)
+    p.add_argument("--method", choices=["minmax", "percentile", "entropy"], default="percentile")
+    p.set_defaults(func=cmd_quantize)
+
+    p = sub.add_parser("bench-gpu", help="задержка PyTorch на GPU")
+    p.add_argument("--checkpoint", required=True)
+    p.set_defaults(func=cmd_bench_gpu)
 
     p = sub.add_parser("report")
     p.add_argument("runs", nargs="+")

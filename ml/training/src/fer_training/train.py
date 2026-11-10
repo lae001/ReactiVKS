@@ -24,6 +24,7 @@ from fer_training.config import ExperimentConfig, config_from_dict
 from fer_training.data import FaceDataset, ImageSet, build_splits, to_tensor
 from fer_training.metrics import compute_metrics, plot_confusion, summary_line
 from fer_training.models import EmotionNet, build_model, count_parameters
+from fer_training.occlusions import RandomOcclusion
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +103,8 @@ def train(cfg: ExperimentConfig, base_dir: Path) -> Path:
     log.info("Классы train: %s", dict(zip(LABELS, splits.train.class_counts().tolist(), strict=True)))
 
     tc = cfg.train
-    dataset = FaceDataset(splits.train, build_train_transform(cfg.augment.level))
+    occlusion = RandomOcclusion(cfg.augment.occlusion, cfg.augment.occlusion) if cfg.augment.occlusion > 0 else None
+    dataset = FaceDataset(splits.train, build_train_transform(cfg.augment.level), occlusion)
     sampler = None
     if tc.balance == "sampler":
         per_class = 1.0 / np.clip(splits.train.class_counts(), 1, None)

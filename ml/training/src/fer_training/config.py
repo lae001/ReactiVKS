@@ -58,6 +58,8 @@ class TrainConfig:
 @dataclass
 class AugmentConfig:
     level: AugmentLevel = "vks"
+    # Вероятность синтетических очков и (независимо) бороды на обучающем изображении (fer_training.occlusions).
+    occlusion: float = 0.0
 
 
 @dataclass
