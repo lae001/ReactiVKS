@@ -1,0 +1,31 @@
+{
+  "meetings": 2,
+  "participants_per_meeting": 10,
+  "target_fps": 3,
+  "seconds": 60.0,
+  "logical_cpus": 24,
+  "agent_cpu_percent": {
+    "mean": 1341.1,
+    "max": 1953.6
+  },
+  "agent_rss_mb_max": 2558.0,
+  "samples_per_participant_per_s": {
+    "1c327b1a": 2.25,
+    "93be4d38": 1.67
+  },
+  "face_ratio": {
+    "1c327b1a": 1.0,
+    "93be4d38": 1.0
+  },
+  "effective_fps_mean": {
+    "1c327b1a": 3.01,
+    "93be4d38": 2.26
+  },
+  "delay_ms": {
+    "p50": 319.0,
+    "p95": 424.8,
+    "max": 591.9,
+    "n": 2548
+  },
+  "degraded_status_events": 0
+}

@@ -20,34 +20,49 @@ def _optional_path(value: str) -> Path | None:
 @dataclass(frozen=True)
 class Settings:
     model_card: Path
+    # Устойчивая к очкам и бороде модель; есть – маршрутизация RoutedClassifier (classifier.py).
+    robust_model_card: Path | None
     detector_model: Path
     # Сетка лица MediaPipe; пустая строка или отсутствующий файл – работа только на 5 точках YuNet.
     face_mesh_model: Path | None
+    # Детектор очков и бороды (attributes.py); отсутствует – признаки не учитываются.
+    attributes_card: Path | None
     target_fps: float
     min_fps: float
     max_fps: float
     ema_alpha: float
     onnx_threads: int
+    # Потоки обработки лиц такта (детекция, кроп, сетка); 1 – последовательно.
+    face_workers: int
+    # Заранее прогретые процессы заданий (модели загружены): каждый ≈ 1,3 ГБ памяти.
+    idle_processes: int
     max_side: int
     worker_id: str
     # Доля загрузки CPU, при которой воркер перестает брать новые встречи (по умолчанию LiveKit Agents – 0,7).
     load_threshold: float
     # > 0 – первые N секунд анализа участника считаются его нейтральным лицом (calibration.py); 0 – выключено.
     auto_neutral_s: float
+    # Адрес Kafka (host:port[,…]); пусто – события пишутся в журнал (разработка без брокера).
+    kafka_bootstrap: str
 
     @classmethod
     def from_env(cls) -> Settings:
         return cls(
             model_card=Path(_env("ML_MODEL_CARD", "../models/emotion/model_card.json")),
+            robust_model_card=_optional_path(_env("ML_ROBUST_MODEL_CARD", "../models/emotion-robust/model_card.json")),
             detector_model=Path(_env("ML_DETECTOR_MODEL", "../models/yunet/face_detection_yunet_2023mar.onnx")),
             face_mesh_model=_optional_path(_env("ML_FACE_MESH_MODEL", "../models/mediapipe/face_landmarker.task")),
+            attributes_card=_optional_path(_env("ML_ATTRIBUTES_CARD", "../models/attributes/attributes_card.json")),
             target_fps=float(_env("ML_TARGET_FPS", "3")),
             min_fps=float(_env("ML_MIN_FPS", "2")),
             max_fps=float(_env("ML_MAX_FPS", "5")),
             ema_alpha=float(_env("ML_EMA_ALPHA", "0.4")),
-            onnx_threads=int(_env("ML_ONNX_THREADS", "2")),
+            onnx_threads=int(_env("ML_ONNX_THREADS", "4")),
+            face_workers=int(_env("ML_FACE_WORKERS", "4")),
+            idle_processes=int(_env("ML_IDLE_PROCESSES", "1")),
             max_side=int(_env("ML_MAX_SIDE", "640")),
             worker_id=_env("ML_WORKER_ID", socket.gethostname()),
             load_threshold=float(_env("ML_LOAD_THRESHOLD", "0.7")),
             auto_neutral_s=float(_env("ML_AUTO_NEUTRAL_S", "0")),
+            kafka_bootstrap=_env("ML_KAFKA_BOOTSTRAP", ""),
         )

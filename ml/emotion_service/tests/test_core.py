@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from emotion_service.attention import AttentionTracker, head_pose, mesh_pose
-from emotion_service.events import StateThrottle, emotion_sample, envelope, iso_now, uuid7
+from emotion_service.events import StateThrottle, emotion_sample, envelope, iso_now, ml_status, uuid7
 from emotion_service.labels import LABELS
 from emotion_service.pipeline import EmotionPipeline
 from emotion_service.preprocessing import CROP_SIZE, FaceBox, align_crop, eye_angle, to_model_batch
@@ -159,29 +159,74 @@ def test_pipeline_downscales_large_frames_and_ignores_tiny_faces() -> None:
 
 
 def test_uuid7_version_and_order() -> None:
-    first, second = uuid.UUID(uuid7()), uuid.UUID(uuid7())
+    first, second = uuid7(), uuid7()
     assert first.version == 7 and first.variant == uuid.RFC_4122
     assert first.int >> 80 <= second.int >> 80
 
 
+MEETING = "0192f1c4-0000-7000-8000-000000000001"
+PARTICIPANT = "0192f1c4-0000-7000-8000-000000000002"
+
+
 def test_emotion_sample_matches_contract() -> None:
-    face = FaceBox(100, 50, 120, 120, 0.95, None)
-    pipeline = EmotionPipeline(FixedDetector({640: [face]}), FixedClassifier(one_hot(6)))
-    (result,) = pipeline.process([("p1", np.zeros((360, 640, 3), np.uint8))], now=0.0)
     from datetime import UTC, datetime
 
-    payload = emotion_sample("m1", "p1", datetime(2026, 11, 20, 7, 12, 3, 643000, tzinfo=UTC), "test@0", result)
-    assert payload["ts"] == "2026-11-20T07:12:03.643Z"
-    assert set(payload) == {
-        "meeting_id", "participant_id", "ts", "state", "probs", "raw_dominant", "dominant", "confidence",
-        "face_box_area", "model_version", "attention",
-    }  # fmt: skip
-    assert payload["dominant"] == "neutral" and payload["state"] == "analyzing"
-    off = emotion_sample("m1", "p1", datetime.now(UTC), "test@0", state="camera_off")
-    assert off["state"] == "camera_off" and off["probs"] is None
-    event = envelope("emotion.sample", payload)
-    assert event["producer"] == "emotion-ml-service" and event["version"] == 1
+    from vks_contracts.envelope import EventEnvelope
+    from vks_contracts.ml_events import EmotionSample
+
+    face = FaceBox(100, 50, 120, 120, 0.95, None)
+    pipeline = EmotionPipeline(FixedDetector({640: [face]}), FixedClassifier(one_hot(6)))
+    (result,) = pipeline.process([(PARTICIPANT, np.zeros((360, 640, 3), np.uint8))], now=0.0)
+    sample = emotion_sample(MEETING, PARTICIPANT, datetime(2026, 11, 20, 7, 12, 3, 643000, tzinfo=UTC), "t@0", result)
+    assert isinstance(sample, EmotionSample) and sample.key() == MEETING
+    assert sample.dominant == "neutral" and sample.state == "analyzing" and sample.probs is not None
+    assert sample.attention is not None and sample.attention.state == "attentive"
+    off = emotion_sample(MEETING, PARTICIPANT, datetime.now(UTC), "t@0", state="camera_off")
+    assert off.state == "camera_off" and off.probs is None and off.attention is None
+    event = envelope(sample)
+    assert isinstance(event, EventEnvelope) and event.producer == "emotion-ml-service" and event.version == 1
+    assert event.event_id.version == 7 and event.payload["ts"] == "2026-11-20T07:12:03.643000Z"
     assert iso_now().endswith("Z")
+
+
+def test_ml_status_target_fps_is_integer_per_contract() -> None:
+    status = ml_status(MEETING, "active", 2.96, 3.0, "w1")
+    assert status.target_fps == 3 and status.effective_fps == 2.96
+
+
+async def test_kafka_sink_sends_contract_messages_and_counts_failures() -> None:
+    import asyncio
+    import json
+
+    from emotion_service.sinks import KafkaSink
+
+    class FakeProducer:
+        def __init__(self) -> None:
+            self.messages: list[tuple[str, bytes, bytes, list[tuple[str, bytes]]]] = []
+            self.fail_next = False
+
+        async def start(self) -> None: ...
+
+        async def stop(self) -> None: ...
+
+        async def send(self, topic: str, value: bytes, key: bytes, headers: list[tuple[str, bytes]]) -> asyncio.Future:
+            if self.fail_next:
+                raise RuntimeError("buffer full")
+            self.messages.append((topic, key, value, headers))
+            future: asyncio.Future[object] = asyncio.get_running_loop().create_future()
+            future.set_result(object())
+            return future
+
+    producer = FakeProducer()
+    sink = KafkaSink("unused", producer=producer)
+    await sink.publish([ml_status(MEETING, "active", 3.0, 3, "w1")])
+    producer.fail_next = True
+    await sink.publish([ml_status(MEETING, "active", 3.0, 3, "w1")])
+    await asyncio.sleep(0)
+    topic, key, value, headers = producer.messages[0]
+    assert topic == "ml.status" and key == MEETING.encode()
+    assert json.loads(value)["type"] == "ml.status" and dict(headers)["event_type"] == b"ml.status"
+    assert sink.sent == 1 and sink.errors == 1
 
 
 def test_state_throttle_rules() -> None:
@@ -273,3 +318,63 @@ def test_pipeline_resets_smoothing_when_calibration_completes() -> None:
     results = [pipeline.process(frame, 0.1 + t * 0.4)[0] for t in range(12)]
     assert results[-1].calibration is not None and results[-1].calibration.state == "ready"
     assert results[-1].dominant == "neutral"
+
+
+# ---------------------------------------------------------------------------- очки и борода
+
+
+def test_condition_and_masking_of_occluded_zones() -> None:
+    from emotion_service.fusion import BlendshapeHead, condition_of
+    from emotion_service.landmarks import BLENDSHAPE_NAMES
+
+    assert condition_of(()) == "none" and condition_of(("beard", "glasses")) == "glasses_beard"
+    n = len(BLENDSHAPE_NAMES)
+    head = BlendshapeHead(
+        names=BLENDSHAPE_NAMES, mean=np.full(n, 0.1, np.float32), std=np.ones(n, np.float32),
+        coef=np.zeros((7, n), np.float32), intercept=np.zeros(7, np.float32), weight=0.3,
+        weights={"none": 0.3, "glasses": 0.1, "beard": 0.0, "glasses_beard": 0.0},
+    )  # fmt: skip
+    features = np.ones(n, np.float32)
+    masked = head.mask(features, ("glasses",))
+    names = dict(zip(BLENDSHAPE_NAMES, masked, strict=True))
+    assert names["eyeWideLeft"] == pytest.approx(0.1) and names["browInnerUp"] == pytest.approx(0.1)
+    assert names["jawOpen"] == 1.0 and names["mouthSmileLeft"] == 1.0
+    beard = dict(zip(BLENDSHAPE_NAMES, head.mask(features, ("beard",)), strict=True))
+    assert beard["jawOpen"] == pytest.approx(0.1) and beard["mouthSmileLeft"] == pytest.approx(0.1)
+    assert beard["eyeWideLeft"] == 1.0
+    # Вес 0 для бороды – результат равен ответу CNN.
+    cnn = one_hot(5)
+    assert np.allclose(head.fuse_with_attributes(cnn, features, ("beard",)), cnn / cnn.sum(), atol=1e-5)
+
+
+def test_routed_classifier_uses_robust_model_for_occluded_faces() -> None:
+    from emotion_service.classifier import RoutedClassifier
+
+    base, robust = FixedClassifier(one_hot(4)), FixedClassifier(one_hot(6))
+    robust.model_version = "emotion-x@1.1.0"
+    base.model_version = "emotion-x@1.0.0"
+    routed = RoutedClassifier(base, robust)
+    faces = np.zeros((2, 1, CROP_SIZE, CROP_SIZE), np.float32)
+    probs = routed.predict(faces, np.array([False, True]))
+    assert probs[0] == pytest.approx((one_hot(4) + one_hot(6)) / 2)
+    assert probs[1] == pytest.approx(one_hot(6))
+    assert routed.model_version == "emotion-x@1.1.0+1.0.0"
+    assert base.calls == [1]  # базовая модель считается только для лиц без очков и бороды
+
+
+def test_parallel_pipeline_matches_sequential() -> None:
+    face = FaceBox(100, 50, 120, 120, 0.95, None)
+    frames = [(f"p{i}", np.zeros((360, 640 if i % 3 else 320, 3), np.uint8)) for i in range(7)]
+
+    def build(workers: int) -> EmotionPipeline:
+        return EmotionPipeline(
+            FixedDetector({640: [face]}), FixedClassifier(one_hot(3)), workers=workers,
+            detector_factory=lambda: FixedDetector({640: [face]}),
+        )  # fmt: skip
+
+    sequential = build(1).process(frames, 0.0)
+    parallel = build(3).process(frames, 0.0)
+    assert [(r.participant_id, r.state, r.dominant) for r in sequential] == [
+        (r.participant_id, r.state, r.dominant) for r in parallel
+    ]
+    assert [r.state for r in parallel].count("no_face") == 3

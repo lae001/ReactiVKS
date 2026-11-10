@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import logging
 
-from livekit.agents import AutoSubscribe, JobContext, JobProcess, WorkerOptions, cli
+from livekit.agents import AutoSubscribe, JobContext, JobExecutorType, JobProcess, WorkerOptions, cli
 
+from emotion_service.attributes import AttributeDetector
 from emotion_service.calibration import NeutralCalibrator
-from emotion_service.classifier import OnnxEmotionClassifier
+from emotion_service.classifier import OnnxEmotionClassifier, RoutedClassifier
 from emotion_service.detection import YuNetDetector
 from emotion_service.fusion import BlendshapeHead
 from emotion_service.landmarks import FaceMeshAnalyzer
@@ -20,7 +21,7 @@ from emotion_service.pipeline import EmotionPipeline
 from emotion_service.room import RoomAnalyzer
 from emotion_service.sampling import AdaptiveRate
 from emotion_service.settings import Settings
-from emotion_service.sinks import LoggingSink
+from emotion_service.sinks import KafkaSink, LoggingSink, ResultSink
 from emotion_service.smoothing import TemporalSmoother
 
 AGENT_NAME = "emotion-agent"
@@ -31,9 +32,14 @@ def prewarm(proc: JobProcess) -> None:
     """Модель загружается один раз на процесс задания, до назначения комнаты."""
     settings = Settings.from_env()
     proc.userdata["settings"] = settings
-    proc.userdata["classifier"] = OnnxEmotionClassifier(settings.model_card, threads=settings.onnx_threads)
+    base = OnnxEmotionClassifier(settings.model_card, threads=settings.onnx_threads)
+    proc.userdata["classifier"] = (
+        RoutedClassifier(base, OnnxEmotionClassifier(settings.robust_model_card, threads=settings.onnx_threads))
+        if settings.robust_model_card
+        else base
+    )
     # Голова по мимике лежит рядом с карточкой модели (ml/training/scripts/train_blendshape_head.py).
-    head_path = settings.model_card.parent / "blendshape_head.json"
+    head_path = (settings.robust_model_card or settings.model_card).parent / "blendshape_head.json"
     proc.userdata["blendshape_head"] = (
         BlendshapeHead.load(head_path) if head_path.exists() and settings.face_mesh_model else None
     )
@@ -49,7 +55,7 @@ def target_fps(metadata: str | None, settings: Settings) -> float:
 
 async def entrypoint(ctx: JobContext) -> None:
     settings: Settings = ctx.proc.userdata["settings"]
-    classifier: OnnxEmotionClassifier = ctx.proc.userdata["classifier"]
+    classifier: OnnxEmotionClassifier | RoutedClassifier = ctx.proc.userdata["classifier"]
     fps = target_fps(ctx.job.metadata, settings)
 
     # Подписка вручную: только камеры участников с согласием.
@@ -64,18 +70,34 @@ async def entrypoint(ctx: JobContext) -> None:
         mesh=FaceMeshAnalyzer(settings.face_mesh_model) if settings.face_mesh_model else None,
         blendshape_head=ctx.proc.userdata["blendshape_head"],
         calibrator=NeutralCalibrator(duration_s=settings.auto_neutral_s or 3.0),
+        attribute_detector=AttributeDetector(settings.attributes_card) if settings.attributes_card else None,
         max_side=settings.max_side,
+        workers=settings.face_workers,
+        detector_factory=lambda: YuNetDetector(settings.detector_model),
+        mesh_factory=(lambda: FaceMeshAnalyzer(mesh_model)) if (mesh_model := settings.face_mesh_model) else None,
     )
+    sink: ResultSink
+    if settings.kafka_bootstrap:
+        kafka = KafkaSink(settings.kafka_bootstrap, client_id=f"emotion-ml-service-{settings.worker_id}")
+        await kafka.start()
+        sink = kafka
+    else:
+        sink = LoggingSink()
     analyzer = RoomAnalyzer(
         ctx.room,
         pipeline,
-        LoggingSink(),
+        sink,
         AdaptiveRate(target_fps=fps, min_fps=settings.min_fps, max_fps=settings.max_fps),
         worker_id=settings.worker_id,
         model_version=classifier.model_version,
         auto_calibrate=settings.auto_neutral_s > 0,
     )
-    ctx.add_shutdown_callback(analyzer.aclose)
+
+    async def shutdown(reason: str) -> None:
+        await analyzer.aclose(reason)
+        await sink.aclose()
+
+    ctx.add_shutdown_callback(shutdown)
     await analyzer.run()
 
 
@@ -87,6 +109,11 @@ def main() -> None:
             prewarm_fnc=prewarm,
             agent_name=AGENT_NAME,
             load_threshold=settings.load_threshold,
+            # Процесс на встречу (ADR-007, emotion-ml-service.md): сбой или зависание одной встречи не задевает
+            # другие. В потоковом режиме (по умолчанию в livekit-agents 1.8) два конвейера с MediaPipe в одном
+            # процессе зависали – нагрузочный замер 2 × 10, load-test.md.
+            job_executor_type=JobExecutorType.PROCESS,
+            num_idle_processes=settings.idle_processes,
         )
     )
 

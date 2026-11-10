@@ -16,6 +16,18 @@ import numpy as np
 
 from emotion_service.labels import LABELS
 
+# Зоны лица, которые закрывают очки и борода: их мимические коэффициенты при этом недостоверны (оправа и блики
+# сбивают точки век и бровей, борода – губ и подбородка) и заменяются средним по обучению, т. е. «нет сведений».
+OCCLUDED_ZONES: dict[str, tuple[str, ...]] = {
+    "glasses": ("brow", "eyeBlink", "eyeLook", "eyeSquint", "eyeWide"),
+    "beard": ("jaw", "mouth", "cheek", "noseSneer"),
+}
+
+
+def condition_of(occluded: tuple[str, ...]) -> str:
+    """Условие для выбора веса смешивания: none | glasses | beard | glasses_beard."""
+    return "_".join(name for name in ("glasses", "beard") if name in occluded) or "none"
+
 
 def fuse(cnn: np.ndarray, head: np.ndarray, weight: float) -> np.ndarray:
     """Взвешенное среднее геометрическое распределений: p ∝ cnn^(1−w) · head^w."""
@@ -33,7 +45,10 @@ class BlendshapeHead:
     std: np.ndarray
     coef: np.ndarray  # (7, n)
     intercept: np.ndarray  # (7,)
-    weight: float  # вес головы при смешивании с CNN
+    weight: float  # вес головы при смешивании с CNN (лицо без очков и бороды)
+    # Вес по условию (none | glasses | beard | glasses_beard), подобран на валидации с синтетическими очками и
+    # бородой (train_blendshape_head.py); нет условия – weight.
+    weights: dict[str, float] | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> BlendshapeHead:
@@ -47,6 +62,7 @@ class BlendshapeHead:
             coef=np.asarray(raw["coef"], np.float32),
             intercept=np.asarray(raw["intercept"], np.float32),
             weight=float(raw["fusion_weight"]),
+            weights={k: float(v) for k, v in raw.get("fusion_weights", {}).items()} or None,
         )
 
     def predict(self, features: np.ndarray) -> np.ndarray:
@@ -59,3 +75,20 @@ class BlendshapeHead:
 
     def fuse(self, cnn_probs: np.ndarray, features: np.ndarray) -> np.ndarray:
         return fuse(cnn_probs, self.predict(features), self.weight)
+
+    def mask(self, features: np.ndarray, occluded: tuple[str, ...]) -> np.ndarray:
+        """Коэффициенты закрытых зон → среднее по обучению (после стандартизации – 0, т. е. не влияют)."""
+        out = np.array(features, dtype=np.float32, copy=True)
+        for name in occluded:
+            prefixes = OCCLUDED_ZONES.get(name, ())
+            for i, feature in enumerate(self.names):
+                if feature.startswith(prefixes):
+                    out[..., i] = self.mean[i]
+        return out
+
+    def fuse_with_attributes(
+        self, cnn_probs: np.ndarray, features: np.ndarray, occluded: tuple[str, ...]
+    ) -> np.ndarray:
+        """Смешивание с учетом очков и бороды: закрытые зоны отключены, вес – свой для условия."""
+        weight = (self.weights or {}).get(condition_of(occluded), self.weight)
+        return fuse(cnn_probs, self.predict(self.mask(features, occluded)), weight)

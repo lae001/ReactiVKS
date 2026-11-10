@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -66,3 +67,36 @@ class OnnxEmotionClassifier:
             return np.zeros((0, len(self.labels)), dtype=np.float32)
         probs: np.ndarray = self._session.run(None, {self._input: faces.astype(np.float32, copy=False)})[0]
         return probs
+
+
+class RoutedClassifier:
+    """Выбор модели по внешним признакам лица (experiments.md, §9): решение принято по валидации.
+
+    - лицо без очков и бороды – среднее вероятностей базовой (v1.0) и устойчивой (v1.1) моделей: ансамбль точнее
+      каждой (val 0,709 против 0,695 / 0,692);
+    - очки и/или борода – только устойчивая модель, обученная с синтетическими очками и бородой (val с очками
+      0,662 против 0,649 у ансамбля, с бородой 0,636 против 0,601).
+    """
+
+    def __init__(self, base: EmotionClassifier, robust: EmotionClassifier) -> None:
+        if base.labels != robust.labels:
+            raise ValueError("У моделей разный порядок классов")
+        self.base = base
+        self.robust = robust
+        self.labels = base.labels
+        self.model_version = f"{robust.model_version}+{base.model_version.rsplit('@', 1)[-1]}"
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="base-model")
+
+    def predict(self, faces: np.ndarray, occluded: np.ndarray | None = None) -> np.ndarray:
+        """occluded – (N,) bool: у лица найдены очки или борода; None – признаки неизвестны (ансамбль для всех)."""
+        if occluded is None:
+            occluded = np.zeros(len(faces), dtype=bool)
+        clean = ~occluded
+        if not clean.any():
+            return self.robust.predict(faces)
+        # Модели независимы – считаются параллельно (ONNX Runtime отпускает GIL): такт короче почти вдвое.
+        base_future = self._pool.submit(self.base.predict, faces[clean])
+        robust = self.robust.predict(faces)
+        result = robust.copy()
+        result[clean] = (robust[clean] + base_future.result()) / 2
+        return result

@@ -91,6 +91,26 @@
       <div class="note">Нажмите и 3 секунды смотрите в камеру со спокойным лицом. Дальше эмоции считаются относительно вашего нейтрального выражения: свет, ракурс и индивидуальные черты лица перестают сдвигать ответ в сторону «Грусти».</div>
     </div>
     <div class="card">
+      <h2>Внешние признаки</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span id="attr-glasses" class="chip">очки: —</span>
+        <span id="attr-beard" class="chip">борода/усы: —</span>
+      </div>
+      <div class="note" id="attr-note">Очки закрывают глаза и брови, борода – рот и подбородок. Мимика закрытых зон в оценке не участвует, вес оценки по мимике подобран отдельно для каждого случая.</div>
+    </div>
+    <div class="card">
+      <h2>Сбор выборки (оценка на своих лицах)</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="rec-label">
+          <option value="neutral">Нейтральное</option><option value="happy">Радость</option><option value="surprise">Удивление</option>
+          <option value="sad">Грусть</option><option value="angry">Гнев</option><option value="fear">Страх</option><option value="disgust">Отвращение</option>
+        </select>
+        <button id="rec-start">Записать 3 с</button>
+        <span id="rec-state" class="chip">не записывается</span>
+      </div>
+      <div class="note" id="rec-count">Изобразите выбранную эмоцию и нажмите «Записать». Сохраняются только кроп лица 48×48 и коэффициенты мимики – локально, в ml/training/data/own.</div>
+    </div>
+    <div class="card">
       <h2>Сейчас</h2>
       <div class="dominant">
         <div class="swatch" id="swatch"></div>
@@ -270,8 +290,29 @@ function renderCalibration(c) {
   $("cal-progress").style.width = (c.progress * 100).toFixed(0) + "%";
 }
 
+function renderExtras(r) {
+  if (r.attributes) {
+    const a = r.attributes;
+    $("attr-glasses").textContent = `очки: ${a.glasses ? "да" : "нет"} (${(a.glasses_prob * 100).toFixed(0)} %)`;
+    $("attr-glasses").className = "chip " + (a.glasses ? "warn" : "");
+    $("attr-beard").textContent = `борода/усы: ${a.beard ? "да" : "нет"} (${(a.beard_prob * 100).toFixed(0)} %)`;
+    $("attr-beard").className = "chip " + (a.beard ? "warn" : "");
+    $("attr-note").textContent = a.masked.length
+      ? `Не учитываются коэффициенты мимики: ${a.masked.join(", ")}. Оценка опирается на CNN и открытые зоны лица.`
+      : "Глаза и рот открыты – мимика учитывается полностью.";
+  }
+  if (r.recording) {
+    const rec = r.recording;
+    $("rec-state").textContent = rec.label ? "запись: " + TITLES[rec.label] : "не записывается";
+    $("rec-state").className = "chip " + (rec.label ? "on" : "");
+    const total = Object.entries(rec.saved).map(([k, v]) => `${TITLES[k]} ${v}`).join(" · ");
+    if (total) $("rec-count").textContent = "Сохранено кадров: " + total;
+  }
+}
+
 function render(r) {
   last = r;
+  renderExtras(r);
   renderCalibration(r.calibration);
   renderAttention(r.attention);
   history.push({ t: performance.now(), probs: r.probs || null, interest: r.attention ? r.attention.interest : null });
@@ -395,6 +436,7 @@ function drawTimeline() {
 $("start").onclick = () => (stream ? stopCamera() : startCamera().catch((e) => setStatus("нет доступа к камере: " + e.message, "warn")));
 $("camera").onchange = () => stream && startCamera();
 $("calibrate").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "calibrate" }));
+$("rec-start").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "record", label: $("rec-label").value, seconds: 3 }));
 $("reset-cal").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "reset_calibration" }));
 listCameras().catch(() => {});
 </script>

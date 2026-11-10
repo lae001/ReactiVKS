@@ -9,6 +9,8 @@ dependencies = [
     "numpy>=2.0",
     "opencv-python-headless>=4.10",
     "onnxruntime>=1.20",
+    # Контракты событий Kafka – тот же пакет, что у потребителей (realtime-, analytics-service).
+    "vks-contracts",
 ]
 
 [project.optional-dependencies]
@@ -20,8 +22,12 @@ mesh = [
 agent = [
     "livekit-agents>=1.2",
     "livekit>=1.0",
+    "aiokafka>=0.12",
     "emotion-service[mesh]",
 ]
+
+[tool.uv.sources]
+vks-contracts = { path = "../../backend/libs/vks_contracts", editable = true }
 
 [project.scripts]
 emotion-agent = "emotion_service.agent:main"
@@ -58,7 +64,7 @@ strict = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["cv2.*", "onnxruntime.*", "mediapipe.*"]
+module = ["cv2.*", "onnxruntime.*", "mediapipe.*", "aiokafka.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

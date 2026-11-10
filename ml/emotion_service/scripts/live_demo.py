@@ -14,18 +14,21 @@ import base64
 import json
 import logging
 import time
+from datetime import datetime
 from pathlib import Path
 
 import cv2
 import numpy as np
 from aiohttp import WSMsgType, web
 
-from emotion_service.classifier import OnnxEmotionClassifier
+from emotion_service.attributes import AttributeDetector
+from emotion_service.classifier import OnnxEmotionClassifier, RoutedClassifier
 from emotion_service.detection import YuNetDetector
 from emotion_service.events import attention_payload
-from emotion_service.fusion import BlendshapeHead
+from emotion_service.fusion import OCCLUDED_ZONES, BlendshapeHead
+from emotion_service.labels import LABELS
 from emotion_service.landmarks import FaceMeshAnalyzer
-from emotion_service.pipeline import EmotionPipeline
+from emotion_service.pipeline import EmotionPipeline, FaceResult
 from emotion_service.smoothing import TemporalSmoother
 
 HERE = Path(__file__).absolute().parent
@@ -35,14 +38,68 @@ log = logging.getLogger("live_demo")
 
 def build_pipeline(card: Path, alpha: float) -> EmotionPipeline:
     mesh_model = MODELS / "mediapipe" / "face_landmarker.task"
+    attributes_card = MODELS / "attributes" / "attributes_card.json"
+    robust_card = MODELS / "emotion-robust" / "model_card.json"
+    classifier: OnnxEmotionClassifier | RoutedClassifier = OnnxEmotionClassifier(card, threads=2)
     head_path = card.parent / "blendshape_head.json"
+    if robust_card.exists() and robust_card.resolve() != card.resolve():
+        # Без очков и бороды – ансамбль базовой и устойчивой моделей, с ними – устойчивая (experiments.md, §9).
+        classifier = RoutedClassifier(classifier, OnnxEmotionClassifier(robust_card, threads=2))
+        head_path = robust_card.parent / "blendshape_head.json"
     return EmotionPipeline(
         YuNetDetector(MODELS / "yunet" / "face_detection_yunet_2023mar.onnx"),
-        OnnxEmotionClassifier(card, threads=2),
+        classifier,
         TemporalSmoother(alpha=alpha),
         mesh=FaceMeshAnalyzer(mesh_model) if mesh_model.exists() else None,
         blendshape_head=BlendshapeHead.load(head_path) if head_path.exists() else None,
+        attribute_detector=AttributeDetector(attributes_card) if attributes_card.exists() else None,
     )
+
+
+class Recorder:
+    """Сбор собственной выборки (EMO-92): кадры с меткой «какую эмоцию я сейчас изображаю».
+
+    Сохраняются только входы моделей – кроп 48×48 (PNG), коэффициенты мимики и вероятности очков / бороды
+    (JSON); полные кадры не пишутся. Папка – --record-dir, по умолчанию ml/training/data/own (в .gitignore).
+    Оценка – ml/training/scripts/eval_own.py.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.label: str | None = None
+        self.until = 0.0
+        self.saved: dict[str, int] = {}
+        self.recording_id = ""
+
+    def start(self, label: str, seconds: float) -> None:
+        if label in LABELS:
+            self.label, self.until = label, time.monotonic() + seconds
+            self.recording_id = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+
+    def maybe_save(self, result: FaceResult) -> None:
+        if self.label is None:
+            return
+        if time.monotonic() > self.until:
+            self.label = None
+            return
+        if result.state != "analyzing" or result.crop is None:
+            return
+        folder = self.root / self.label
+        folder.mkdir(parents=True, exist_ok=True)
+        stem = folder / datetime.now().astimezone().strftime("%Y%m%d-%H%M%S-%f")
+        cv2.imwrite(str(stem.with_suffix(".png")), result.crop)
+        meta = {
+            "label": self.label,
+            "recording_id": self.recording_id,
+            "blendshapes": result.mesh.blendshapes if result.mesh is not None else None,
+            "attributes": (
+                {"glasses": result.attributes.glasses_prob, "beard": result.attributes.beard_prob}
+                if result.attributes is not None
+                else None
+            ),
+        }
+        stem.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
+        self.saved[self.label] = self.saved.get(self.label, 0) + 1
 
 
 # Мимические коэффициенты, которые показывает страница: (название, коэффициенты MediaPipe для усреднения).
@@ -88,6 +145,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     await ws.prepare(request)
     # Свое сглаживание на каждое подключение: новая вкладка начинает с чистого состояния.
     pipeline = build_pipeline(request.app["card_path"], request.app["alpha"])
+    recorder: Recorder = request.app["recorder"]
     async for msg in ws:
         if msg.type == WSMsgType.TEXT:
             command = json.loads(msg.data).get("cmd")
@@ -96,6 +154,9 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
             elif command == "reset_calibration":
                 pipeline.calibrator.reset("me")
                 pipeline.smoother.reset("me")
+            elif command == "record":
+                data = json.loads(msg.data)
+                recorder.start(str(data.get("label")), float(data.get("seconds", 3)))
             continue
         if msg.type != WSMsgType.BINARY:
             continue
@@ -107,6 +168,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
         decoded = time.perf_counter()
         (result,) = pipeline.process([("me", rgb)], time.monotonic())
         processed = time.perf_counter()
+        recorder.maybe_save(result)
         payload: dict[str, object] = {
             "state": result.state,
             "frame": [rgb.shape[1], rgb.shape[0]],
@@ -119,6 +181,16 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
         payload["calibration"] = {"state": status.state, "progress": round(status.progress, 2)}
         if result.attention is not None:
             payload["attention"] = attention_payload(result.attention)
+        payload["recording"] = {"label": recorder.label, "saved": recorder.saved}
+        if result.attributes is not None:
+            a = result.attributes
+            payload["attributes"] = {
+                "glasses": a.glasses,
+                "beard": a.beard,
+                "glasses_prob": a.glasses_prob,
+                "beard_prob": a.beard_prob,
+                "masked": [zone for name in a.occluded for zone in OCCLUDED_ZONES[name]],
+            }
         if result.state == "analyzing" and result.face is not None and result.crop is not None:
             face, k = result.face, result.scale
             payload.update(
@@ -156,6 +228,7 @@ def main() -> None:
     parser.add_argument("--card", required=True, help="model_card.json (ONNX-файл – рядом)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--alpha", type=float, default=0.4)
+    parser.add_argument("--record-dir", default=str(HERE.parents[1] / "training" / "data" / "own"))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
 
@@ -165,6 +238,7 @@ def main() -> None:
     app["card"] = json.loads(card_path.read_text(encoding="utf-8"))
     app["alpha"] = args.alpha
     app["pipeline"] = build_pipeline(card_path, args.alpha)
+    app["recorder"] = Recorder(Path(args.record_dir))
     app.add_routes([web.get("/", index), web.get("/info", info), web.get("/ws", ws_handler)])
     # Только localhost: камера и лицо не уходят с машины.
     web.run_app(app, host="127.0.0.1", port=args.port)

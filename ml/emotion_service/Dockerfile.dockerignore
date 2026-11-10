@@ -1,0 +1,8 @@
+# Контекст – корень репозитория; в образ попадают только пакет сервиса и контракты (данные обучения – гигабайты).
+*
+!backend/libs/vks_contracts/
+!ml/emotion_service/pyproject.toml
+!ml/emotion_service/uv.lock
+!ml/emotion_service/src/
+**/__pycache__
+**/.venv

@@ -39,7 +39,14 @@ uv run emotion-agent start
 | `ML_DETECTOR_MODEL` | `../models/yunet/face_detection_yunet_2023mar.onnx` | Детектор лиц |
 | `ML_TARGET_FPS` / `ML_MIN_FPS` / `ML_MAX_FPS` | 3 / 2 / 5 | Частота тактов (целевая берется из metadata диспетчеризации) |
 | `ML_EMA_ALPHA` | 0.4 | Коэффициент сглаживания |
-| `ML_ONNX_THREADS` | 2 | Потоки ONNX Runtime на задание |
+| `ML_ROBUST_MODEL_CARD` | `../models/emotion-robust/model_card.json` | Устойчивая к очкам и бороде модель; есть – маршрутизация |
+| `ML_ATTRIBUTES_CARD` | `../models/attributes/attributes_card.json` | Детектор очков и бороды |
+| `ML_FACE_MESH_MODEL` | `../models/mediapipe/face_landmarker.task` | Сетка лица (мимика, поза, взгляд); пусто – 5 точек YuNet |
+| `ML_KAFKA_BOOTSTRAP` | пусто | Kafka для `emotion.samples` / `ml.status`; пусто – журнал |
+| `ML_ONNX_THREADS` | 4 | Потоки ONNX Runtime на модель |
+| `ML_FACE_WORKERS` | 4 | Потоки обработки лиц такта (детекция, сетка) |
+| `ML_IDLE_PROCESSES` | 1 | Прогретые процессы заданий (≈ 1,3 ГБ каждый) |
+| `ML_AUTO_NEUTRAL_S` | 0 | Автокалибровка по первым N секундам |
 | `ML_MAX_SIDE` | 640 | Кадр уменьшается до этой стороны перед детекцией |
 | `ML_LOAD_THRESHOLD` | 0.7 | Загрузка CPU, выше которой воркер не берет новые встречи |
 | `ML_WORKER_ID` | имя хоста | `worker_id` в `ml.status` |

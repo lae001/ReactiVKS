@@ -9,20 +9,18 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import numpy as np
 from livekit import rtc
+from vks_contracts.envelope import EventPayload
 
-from emotion_service.events import StateThrottle, emotion_sample, envelope, ml_status
+from emotion_service.events import StateThrottle, emotion_sample, ml_status
 from emotion_service.pipeline import EmotionPipeline
 from emotion_service.sampling import AdaptiveRate, FrameSampler
 from emotion_service.sinks import ResultSink
 
 log = logging.getLogger(__name__)
 
-SAMPLES_TOPIC = "emotion.samples"
-STATUS_TOPIC = "ml.status"
 HEARTBEAT_S = 5.0
 IDENTITY_PREFIX = "p_"
 
@@ -76,7 +74,7 @@ class RoomAnalyzer:
         self.sampler: FrameSampler[rtc.VideoFrame] = FrameSampler()
         self._readers: dict[str, asyncio.Task[None]] = {}  # track sid → чтение дорожки
         self._throttle = StateThrottle()
-        self._pending: list[dict[str, Any]] = []  # события состояний из обработчиков, уходят в ближайшем такте
+        self._pending: list[EventPayload] = []  # события состояний из обработчиков, уходят в ближайшем такте
         self._stopped = asyncio.Event()
         self._status = "active"
         self.ticks = 0
@@ -164,12 +162,14 @@ class RoomAnalyzer:
         self.pipeline.smoother.reset(pid)
         self.pipeline.attention.reset(pid)
         self.pipeline.calibrator.reset(pid)
+        if self.pipeline.attribute_detector is not None:
+            self.pipeline.attribute_detector.reset(pid)
 
     def _queue_state(self, participant: rtc.RemoteParticipant, state: str) -> None:
         pid = participant_id(participant)
         if self._throttle.should_publish(pid, state, time.monotonic()):
-            payload = emotion_sample(self.meeting_id, pid, datetime.now(UTC), self.model_version, state=state)  # type: ignore[arg-type]
-            self._pending.append(envelope("emotion.sample", payload))
+            sample = emotion_sample(self.meeting_id, pid, datetime.now(UTC), self.model_version, state=state)  # type: ignore[arg-type]
+            self._pending.append(sample)
 
     # ------------------------------------------------------------------ такты
 
@@ -185,17 +185,18 @@ class RoomAnalyzer:
                 if not self._throttle.should_publish(result.participant_id, result.state, now_mono):
                     continue
                 received = now_wall - timedelta(seconds=now_mono - sample.received_at)
-                payload = emotion_sample(self.meeting_id, result.participant_id, received, self.model_version, result)
-                events.append(envelope("emotion.sample", payload))
+                events.append(
+                    emotion_sample(self.meeting_id, result.participant_id, received, self.model_version, result)
+                )
                 self.faces_analyzed += result.state == "analyzing"
         if events:
-            await self.sink.publish(SAMPLES_TOPIC, self.meeting_id, events)
+            await self.sink.publish(events)
         self.ticks += 1
         return len(samples)
 
     async def _publish_status(self, state: str, effective_fps: float, reason: str | None = None) -> None:
-        payload = ml_status(self.meeting_id, state, effective_fps, self.rate.target_fps, self.worker_id, reason)  # type: ignore[arg-type]
-        await self.sink.publish(STATUS_TOPIC, self.meeting_id, [envelope("ml.status", payload)])
+        status = ml_status(self.meeting_id, state, effective_fps, self.rate.target_fps, self.worker_id, reason)  # type: ignore[arg-type]
+        await self.sink.publish([status])
 
     async def run(self) -> None:
         """Такты до отключения от комнаты; ml.status – при старте, смене состояния и каждые 5 с."""
