@@ -109,6 +109,92 @@
     "emotion.sample.v1": {
       "payload": {
         "$defs": {
+          "Attention": {
+            "description": "Внимание участника по позе головы, взгляду и времени (не эмоция): engaged – смотрит в камеру ≈ 5 с,\ndistracted – отвернулся, отвел взгляд или вышел из кадра ≈ 2,5 с (ml/emotion_service/.../attention.py).",
+            "properties": {
+              "gaze_x": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Положение радужки в глазу: −1 … 1, 0 – по центру",
+                "title": "Gaze X"
+              },
+              "interest": {
+                "description": "Заинтересованность; отвлеченность = 1 − interest",
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Interest",
+                "type": "number"
+              },
+              "looking": {
+                "description": "Голова и взгляд направлены в камеру на этом кадре",
+                "title": "Looking",
+                "type": "boolean"
+              },
+              "pitch_deg": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Pitch Deg"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "mesh",
+                      "landmarks5"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source"
+              },
+              "state": {
+                "enum": [
+                  "engaged",
+                  "attentive",
+                  "distracted"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "yaw_deg": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Yaw Deg"
+              }
+            },
+            "required": [
+              "state",
+              "interest",
+              "looking"
+            ],
+            "title": "Attention",
+            "type": "object"
+          },
           "EmotionProbabilities": {
             "description": "Сглаженные вероятности 7 классов.",
             "properties": {
@@ -170,6 +256,18 @@
         },
         "description": "Отсчет распознавания по одному участнику. Без координат лица и без кадров (ADR-009).",
         "properties": {
+          "attention": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Attention"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Необязательное (без смены version); null у no_consent и camera_off"
+          },
           "confidence": {
             "anyOf": [
               {
