@@ -195,6 +195,143 @@
             "title": "Attention",
             "type": "object"
           },
+          "Behavior": {
+            "description": "Поведенческие сигналы по сетке лица (не эмоции): кивки и покачивания головой, усталость (ADR-013).",
+            "properties": {
+              "agreement": {
+                "description": "Кивает / качает головой / нет жеста",
+                "enum": [
+                  "agree",
+                  "disagree",
+                  "none"
+                ],
+                "title": "Agreement",
+                "type": "string"
+              },
+              "fatigue": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "alert",
+                      "tired"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "None – мало данных (< 10 с)",
+                "title": "Fatigue"
+              },
+              "fatigue_score": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fatigue Score"
+              },
+              "nod_score": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Nod Score",
+                "type": "number"
+              },
+              "perclos": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Доля времени с прикрытыми глазами за 30 с",
+                "title": "Perclos"
+              },
+              "shake_score": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Shake Score",
+                "type": "number"
+              },
+              "yawns_per_min": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Yawns Per Min"
+              }
+            },
+            "required": [
+              "agreement",
+              "nod_score",
+              "shake_score"
+            ],
+            "title": "Behavior",
+            "type": "object"
+          },
+          "EmotionGroupProbabilities": {
+            "description": "Вероятности 5 групп – суммы вероятностей их классов (сглаженные).",
+            "properties": {
+              "discontent": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Discontent",
+                "type": "number"
+              },
+              "joy": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Joy",
+                "type": "number"
+              },
+              "neutral": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Neutral",
+                "type": "number"
+              },
+              "surprise": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Surprise",
+                "type": "number"
+              },
+              "tension": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Tension",
+                "type": "number"
+              }
+            },
+            "required": [
+              "joy",
+              "surprise",
+              "neutral",
+              "discontent",
+              "tension"
+            ],
+            "title": "EmotionGroupProbabilities",
+            "type": "object"
+          },
           "EmotionProbabilities": {
             "description": "Сглаженные вероятности 7 классов.",
             "properties": {
@@ -268,6 +405,18 @@
             "default": null,
             "description": "Необязательное (без смены version); null у no_consent и camera_off"
           },
+          "behavior": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Behavior"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Необязательное: нужна сетка лица"
+          },
           "confidence": {
             "anyOf": [
               {
@@ -303,6 +452,25 @@
             "default": null,
             "title": "Dominant"
           },
+          "dominant_group": {
+            "anyOf": [
+              {
+                "enum": [
+                  "joy",
+                  "surprise",
+                  "neutral",
+                  "discontent",
+                  "tension"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dominant Group"
+          },
           "face_box_area": {
             "anyOf": [
               {
@@ -317,6 +485,18 @@
             "default": null,
             "description": "Доля площади кадра",
             "title": "Face Box Area"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EmotionGroupProbabilities"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Необязательное: 5 групп для панели (ADR-013); есть, когда есть probs"
           },
           "meeting_id": {
             "format": "uuid",

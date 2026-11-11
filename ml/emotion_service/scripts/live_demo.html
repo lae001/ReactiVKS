@@ -122,6 +122,28 @@
       </div>
     </div>
     <div class="card">
+      <h2>Эмоции (5 групп – так видит организатор)</h2>
+      <div class="dominant" style="margin-bottom:10px">
+        <div class="swatch" id="grp-swatch"></div>
+        <div><div class="big" id="grp-dominant">—</div><div style="color:var(--muted)">преобладающая группа</div></div>
+      </div>
+      <div class="bars" id="groups"></div>
+      <div class="note">Недовольство = гнев + отвращение, напряжение = грусть + страх: эти классы модель путает между собой, а на встрече они значат одно и то же (точность 5 групп на тесте – 75 % против 70 % у 7 классов).</div>
+    </div>
+    <div class="card">
+      <h2>Согласие и усталость</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <span id="agree-chip" class="chip">жест: —</span>
+        <span id="fatigue-chip" class="chip">усталость: копим данные</span>
+      </div>
+      <div class="bars">
+        <div class="bar"><span>Кивок (да)</span><div class="track"><div class="fill" id="nod-bar" style="background:#1f9d55"></div></div><span class="num" id="nod-n">—</span></div>
+        <div class="bar"><span>Покачивание (нет)</span><div class="track"><div class="fill" id="shake-bar" style="background:#c2410c"></div></div><span class="num" id="shake-n">—</span></div>
+        <div class="bar"><span>Усталость</span><div class="track"><div class="fill" id="fat-bar" style="background:#7c3aed"></div></div><span class="num" id="fat-n">—</span></div>
+      </div>
+      <div class="note" id="fat-note">Согласие – кивки, несогласие – покачивания головой за последние 2 с (лучше при 5 кадр/с). Усталость – доля времени с прикрытыми глазами (PERCLOS), зевки и опущенная голова за 30 с; первая оценка – через 10 с.</div>
+    </div>
+    <div class="card">
       <h2>Внимание</h2>
       <div class="dominant" style="margin-bottom:10px">
         <div class="swatch" id="att-swatch"></div>
@@ -139,7 +161,7 @@
       <div class="note">Коэффициенты MediaPipe 0–1. Удивление – брови вверх + глаза широко + рот открыт; радость – улыбка и прищур; гнев – брови сведены.</div>
     </div>
     <div class="card">
-      <h2>Вероятности эмоций</h2>
+      <h2>Подробно: 7 классов модели</h2>
       <div class="bars" id="bars"></div>
       <div class="note">Полоса – сглаженное значение (EMA, его видит организатор), риска – ответ на текущем кадре (CNN по пикселям, смешанная с оценкой по мимике).</div>
       <div class="note" id="sources"></div>
@@ -290,7 +312,44 @@ function renderCalibration(c) {
   $("cal-progress").style.width = (c.progress * 100).toFixed(0) + "%";
 }
 
+const GROUPS = { joy: ["Радость", "--emotion-happy"], surprise: ["Удивление", "--emotion-surprise"], neutral: ["Нейтрально", "--emotion-neutral"],
+  discontent: ["Недовольство", "--emotion-angry"], tension: ["Напряжение", "--emotion-sad"] };
+const groupBars = {};
+for (const [key, [title, cssVar]] of Object.entries(GROUPS)) {
+  const row = document.createElement("div");
+  row.className = "bar";
+  row.innerHTML = `<span>${title}</span><div class="track"><div class="fill" style="background:var(${cssVar})"></div></div><span class="num">—</span>`;
+  document.getElementById("groups").append(row);
+  groupBars[key] = { fill: row.querySelector(".fill"), num: row.querySelector(".num") };
+}
+
+function renderGroups(r) {
+  if (!r.groups) return;
+  for (const [key, v] of Object.entries(r.groups)) {
+    groupBars[key].fill.style.width = (v * 100).toFixed(1) + "%";
+    groupBars[key].num.textContent = (v * 100).toFixed(0) + " %";
+  }
+  const [title, cssVar] = GROUPS[r.dominant_group];
+  $("grp-dominant").textContent = title;
+  $("grp-swatch").style.background = `var(${cssVar})`;
+}
+
+function renderBehavior(b) {
+  if (!b) { $("agree-chip").textContent = "жест: нужна сетка лица"; return; }
+  const gesture = { agree: ["кивает – согласие", "on"], disagree: ["качает головой – несогласие", "warn"], none: ["жеста нет", ""] }[b.agreement];
+  $("agree-chip").textContent = gesture[0]; $("agree-chip").className = "chip " + gesture[1];
+  $("nod-bar").style.width = (b.nod_score * 100).toFixed(0) + "%"; $("nod-n").textContent = (b.nod_score * 100).toFixed(0) + " %";
+  $("shake-bar").style.width = (b.shake_score * 100).toFixed(0) + "%"; $("shake-n").textContent = (b.shake_score * 100).toFixed(0) + " %";
+  if (b.fatigue == null) { $("fatigue-chip").textContent = "усталость: копим данные"; $("fatigue-chip").className = "chip"; return; }
+  $("fatigue-chip").textContent = b.fatigue === "tired" ? "усталость: устал" : "усталость: бодр";
+  $("fatigue-chip").className = "chip " + (b.fatigue === "tired" ? "warn" : "on");
+  $("fat-bar").style.width = (b.fatigue_score * 100).toFixed(0) + "%"; $("fat-n").textContent = (b.fatigue_score * 100).toFixed(0) + " %";
+  $("fat-note").textContent = `Глаза прикрыты ${(b.perclos * 100).toFixed(0)} % времени за 30 с (порог усталости – 15 %), зевков в минуту: ${b.yawns_per_min}.`;
+}
+
 function renderExtras(r) {
+  renderGroups(r);
+  renderBehavior(r.behavior);
   if (r.attributes) {
     const a = r.attributes;
     $("attr-glasses").textContent = `очки: ${a.glasses ? "да" : "нет"} (${(a.glasses_prob * 100).toFixed(0)} %)`;

@@ -378,3 +378,70 @@ def test_parallel_pipeline_matches_sequential() -> None:
         (r.participant_id, r.state, r.dominant) for r in parallel
     ]
     assert [r.state for r in parallel].count("no_face") == 3
+
+
+# ---------------------------------------------------------------------------- согласие, несогласие, усталость
+
+
+def _mesh(yaw: float = 0.0, pitch: float = 5.0, blink: float = 0.0, jaw: float = 0.0):  # type: ignore[no-untyped-def]
+    from emotion_service.landmarks import FaceMesh
+
+    shapes = {"eyeBlinkLeft": blink, "eyeBlinkRight": blink, "jawOpen": jaw}
+    return FaceMesh(np.zeros((478, 3), np.float32), shapes, yaw, pitch, 0.0, 0.0, 0.0)
+
+
+def _run(fps: float, seconds: float, motion):  # type: ignore[no-untyped-def]
+    from emotion_service.behavior import BehaviorTracker
+
+    tracker, out = BehaviorTracker(), []
+    for k in range(int(fps * seconds)):
+        t = k / fps
+        out.append(tracker.update("p", _mesh(**motion(t)), t))
+    return out
+
+
+@pytest.mark.parametrize("fps", [3.0, 5.0])
+def test_nod_means_agree_and_shake_means_disagree(fps: float) -> None:
+    nod = _run(fps, 3.0, lambda t: {"pitch": 5 + 12 * np.sin(2 * np.pi * 1.1 * t + 0.3)})
+    shake = _run(fps, 3.0, lambda t: {"yaw": 15 * np.sin(2 * np.pi * 1.1 * t + 0.3)})
+    assert nod[-1].agreement == "agree" and nod[-1].nod_score > 0
+    assert shake[-1].agreement == "disagree" and shake[-1].shake_score > 0
+
+
+def test_no_gesture_for_still_jitter_or_single_glance() -> None:
+    rng = np.random.default_rng(0)
+    still = _run(5.0, 3.0, lambda t: {"pitch": 5 + rng.normal(0, 1.5), "yaw": rng.normal(0, 1.5)})
+    glance = _run(5.0, 3.0, lambda t: {"pitch": 5 + (18 if 1.0 < t < 1.8 else 0)})  # посмотрел вниз и вернулся
+    assert still[-1].agreement == "none" and all(b.agreement == "none" for b in glance)
+
+
+def test_swings_counts_reversals() -> None:
+    from emotion_service.behavior import swings
+
+    assert swings(np.array([0, -10, 0, -10, 0]), 6) == 3
+    assert swings(np.array([0, 2, -1, 3, 0]), 6) == 0
+    assert swings(np.array([0, -10, -12, 0]), 6) == 1
+
+
+def test_fatigue_from_closed_eyes_and_yawns() -> None:
+    alert = _run(3.0, 15.0, lambda t: {"blink": 0.05})
+    assert alert[0].fatigue is None  # мало данных
+    assert alert[-1].fatigue == "alert" and alert[-1].perclos == 0.0
+    # Глаза прикрыты 40 % времени, два зевка по 2 с.
+    tired = _run(
+        3.0, 30.0, lambda t: {"blink": 0.8 if (t % 5) < 2 else 0.05, "jaw": 0.8 if 5 < t < 7 or 15 < t < 17 else 0.0}
+    )
+    last = tired[-1]
+    assert last.fatigue == "tired" and last.perclos is not None and last.perclos > 0.3
+    assert last.yawns_per_min is not None and last.yawns_per_min >= 2
+
+
+def test_pipeline_reports_groups_and_behavior() -> None:
+    probs = np.array([0.2, 0.1, 0.05, 0.05, 0.3, 0.1, 0.2], np.float32)
+    face = FaceBox(100, 50, 120, 120, 0.95, None)
+    pipeline = EmotionPipeline(FixedDetector({640: [face]}), FixedClassifier(probs))
+    (result,) = pipeline.process([("p", np.zeros((360, 640, 3), np.uint8))], now=0.0)
+    assert result.groups is not None and sum(result.groups.values()) == pytest.approx(1.0, abs=1e-3)
+    assert result.groups["discontent"] == pytest.approx(0.3, abs=1e-3)
+    assert result.dominant == "sad" and result.dominant_group == "tension"
+    assert result.behavior is None  # без сетки лица поведение не оценивается

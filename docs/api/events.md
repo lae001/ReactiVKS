@@ -98,6 +98,21 @@ realtime-service использует **отдельную группу на э�
 }
 ```
 
+Еще три необязательных поля (без смены `version`, [ADR-013](../adr/ADR-013-emotion-groups-and-behavior.md)):
+
+```json
+  "groups": {"joy": 0.21, "surprise": 0.08, "neutral": 0.58, "discontent": 0.04, "tension": 0.09},
+  "dominant_group": "neutral",          // 5 групп для панели: суммы вероятностей классов (EMOTION_GROUPS)
+  "behavior": {
+    "agreement": "agree",               // agree – кивает, disagree – качает головой, none
+    "nod_score": 0.62, "shake_score": 0.0,
+    "fatigue": "alert",                 // alert | tired | null (меньше 10 с данных или нет сетки лица)
+    "fatigue_score": 0.12, "perclos": 0.04, "yawns_per_min": 0.0
+  }
+```
+
+`groups` и `dominant_group` есть, когда есть `probs`; `behavior` – когда построена сетка лица.
+
 `attention` – оценка внимания по позе головы и времени (не по направлению взгляда): заинтересован – смотрит в камеру
 ≈ 5 с, отвлечен – отвернулся или вышел из кадра ≈ 2,5 с. Алгоритм – `ml/emotion_service/src/emotion_service/attention.py`.
 Поле добавлено без смены `version` (необязательное), потребители, не знающие его, игнорируют.

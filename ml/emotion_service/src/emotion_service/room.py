@@ -162,6 +162,7 @@ class RoomAnalyzer:
         self.pipeline.smoother.reset(pid)
         self.pipeline.attention.reset(pid)
         self.pipeline.calibrator.reset(pid)
+        self.pipeline.behavior.reset(pid)
         if self.pipeline.attribute_detector is not None:
             self.pipeline.attribute_detector.reset(pid)
 

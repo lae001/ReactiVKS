@@ -11,7 +11,19 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 from vks_contracts.envelope import MeetingKeyed
 from vks_contracts.topics import Topic
 
-__all__ = ["EMOTIONS", "Attention", "Emotion", "EmotionProbabilities", "EmotionSample", "MlStatus"]
+__all__ = [
+    "EMOTIONS",
+    "EMOTION_GROUPS",
+    "Attention",
+    "Behavior",
+    "Emotion",
+    "EmotionGroup",
+    "EmotionGroupProbabilities",
+    "EmotionProbabilities",
+    "EmotionSample",
+    "MlStatus",
+    "group_probabilities",
+]
 
 
 class MlStatus(MeetingKeyed):
@@ -43,6 +55,51 @@ class EmotionProbabilities(BaseModel):
     sad: float = Field(ge=0, le=1)
     surprise: float = Field(ge=0, le=1)
     neutral: float = Field(ge=0, le=1)
+
+
+EmotionGroup = Literal["joy", "surprise", "neutral", "discontent", "tension"]
+# Группы для панели организатора и отчета (ADR-013): модель распознает 7 классов, организатор видит 5 групп –
+# классы, которые модель путает между собой и которые на встрече значат одно и то же, объединены.
+EMOTION_GROUPS: dict[EmotionGroup, tuple[Emotion, ...]] = {
+    "joy": ("happy",),
+    "surprise": ("surprise",),
+    "neutral": ("neutral",),
+    "discontent": ("angry", "disgust"),  # недовольство: гнев и отвращение (модель путает их в 24 % случаев)
+    "tension": ("sad", "fear"),  # напряжение: грусть и страх (страх уходит в грусть в 20 % случаев)
+}
+
+
+class EmotionGroupProbabilities(BaseModel):
+    """Вероятности 5 групп – суммы вероятностей их классов (сглаженные)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    joy: float = Field(ge=0, le=1)
+    surprise: float = Field(ge=0, le=1)
+    neutral: float = Field(ge=0, le=1)
+    discontent: float = Field(ge=0, le=1)
+    tension: float = Field(ge=0, le=1)
+
+
+def group_probabilities(probs: EmotionProbabilities) -> EmotionGroupProbabilities:
+    values = probs.model_dump()
+    return EmotionGroupProbabilities(
+        **{group: min(1.0, sum(values[e] for e in members)) for group, members in EMOTION_GROUPS.items()}
+    )
+
+
+class Behavior(BaseModel):
+    """Поведенческие сигналы по сетке лица (не эмоции): кивки и покачивания головой, усталость (ADR-013)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    agreement: Literal["agree", "disagree", "none"] = Field(description="Кивает / качает головой / нет жеста")
+    nod_score: float = Field(ge=0, le=1)
+    shake_score: float = Field(ge=0, le=1)
+    fatigue: Literal["alert", "tired"] | None = Field(default=None, description="None – мало данных (< 10 с)")
+    fatigue_score: float | None = Field(default=None, ge=0, le=1)
+    perclos: float | None = Field(default=None, ge=0, le=1, description="Доля времени с прикрытыми глазами за 30 с")
+    yawns_per_min: float | None = Field(default=None, ge=0)
 
 
 class Attention(BaseModel):
@@ -78,6 +135,11 @@ class EmotionSample(MeetingKeyed):
     attention: Attention | None = Field(
         default=None, description="Необязательное (без смены version); null у no_consent и camera_off"
     )
+    groups: EmotionGroupProbabilities | None = Field(
+        default=None, description="Необязательное: 5 групп для панели (ADR-013); есть, когда есть probs"
+    )
+    dominant_group: EmotionGroup | None = None
+    behavior: Behavior | None = Field(default=None, description="Необязательное: нужна сетка лица")
 
     @model_validator(mode="after")
     def _probabilities_only_while_analyzing(self) -> Self:

@@ -24,7 +24,7 @@ from aiohttp import WSMsgType, web
 from emotion_service.attributes import AttributeDetector
 from emotion_service.classifier import OnnxEmotionClassifier, RoutedClassifier
 from emotion_service.detection import YuNetDetector
-from emotion_service.events import attention_payload
+from emotion_service.events import attention_payload, behavior_model
 from emotion_service.fusion import OCCLUDED_ZONES, BlendshapeHead
 from emotion_service.labels import LABELS
 from emotion_service.landmarks import FaceMeshAnalyzer
@@ -206,6 +206,11 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
                 crop=encode_png(result.crop),
                 cnn_probs=result.cnn_probs,
                 uncalibrated_probs=result.uncalibrated_probs,
+                groups=result.groups,
+                dominant_group=result.dominant_group,
+                behavior=(
+                    behavior_model(result.behavior).model_dump(mode="json") if result.behavior is not None else None
+                ),
             )
             if result.mesh is not None:
                 mesh = result.mesh

@@ -13,9 +13,11 @@ from typing import Literal
 
 import cv2
 import numpy as np
+from vks_contracts.ml_events import EMOTION_GROUPS
 
 from emotion_service.attention import Attention, AttentionTracker, HeadPose, head_pose, mesh_pose
 from emotion_service.attributes import AttributeDetector, FaceAttributes
+from emotion_service.behavior import Behavior, BehaviorTracker
 from emotion_service.calibration import CalibrationStatus, NeutralCalibrator
 from emotion_service.classifier import EmotionClassifier, RoutedClassifier
 from emotion_service.detection import FaceDetector
@@ -37,6 +39,9 @@ class FaceResult:
     confidence: float | None = None
     face_box_area: float | None = None  # доля площади кадра
     attention: Attention | None = None
+    groups: dict[str, float] | None = None  # 5 групп для панели (ADR-013), суммы сглаженных вероятностей
+    dominant_group: str | None = None
+    behavior: Behavior | None = None  # кивки / покачивания, усталость – нужна сетка лица
     attributes: FaceAttributes | None = field(default=None, compare=False)  # очки / борода; в события не уходят
     # Только для отладки и демонстрации: в события не попадают (приватность – координаты и изображение лица).
     face: FaceBox | None = field(default=None, repr=False, compare=False)
@@ -60,6 +65,7 @@ class EmotionPipeline:
         blendshape_head: BlendshapeHead | None = None,
         calibrator: NeutralCalibrator | None = None,
         attribute_detector: AttributeDetector | None = None,
+        behavior: BehaviorTracker | None = None,
         max_side: int = 640,
         min_face_px: int = 24,
         workers: int = 1,
@@ -74,6 +80,7 @@ class EmotionPipeline:
         self.blendshape_head = blendshape_head
         self.calibrator = calibrator or NeutralCalibrator()
         self.attribute_detector = attribute_detector
+        self.behavior = behavior or BehaviorTracker()
         self.max_side = max_side
         self.min_face_px = min_face_px
         # Лица участников обрабатываются параллельно (детекция и сетка – C++ без GIL): у каждого потока свои
@@ -163,6 +170,12 @@ class EmotionPipeline:
                 else:
                     pose = head_pose(face.landmarks) if face.landmarks is not None else None
                 best = int(smoothed.argmax())
+                probs_by_label = dict(zip(labels, (float(p) for p in smoothed), strict=True))
+                groups: dict[str, float] = {
+                    group: round(min(1.0, sum(probs_by_label[e] for e in members)), 4)
+                    for group, members in EMOTION_GROUPS.items()
+                }
+                glasses = attributes is not None and attributes.glasses
                 results[participant_id] = FaceResult(
                     participant_id=participant_id,
                     state="analyzing",
@@ -173,6 +186,9 @@ class EmotionPipeline:
                     face_box_area=round(area, 4),
                     attention=self.attention.update(participant_id, pose, now),
                     attributes=attributes,
+                    groups=groups,
+                    dominant_group=max(groups, key=lambda g: groups[g]),
+                    behavior=self.behavior.update(participant_id, mesh, now, glasses=glasses),
                     face=face,
                     crop=crop,
                     mesh=mesh,

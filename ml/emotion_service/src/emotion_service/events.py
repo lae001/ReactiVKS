@@ -14,9 +14,11 @@ from typing import Literal
 
 from vks_contracts.envelope import EventEnvelope, EventPayload, envelope_for
 from vks_contracts.ml_events import Attention as AttentionModel
-from vks_contracts.ml_events import EmotionProbabilities, EmotionSample, MlStatus
+from vks_contracts.ml_events import Behavior as BehaviorModel
+from vks_contracts.ml_events import EmotionGroupProbabilities, EmotionProbabilities, EmotionSample, MlStatus
 
 from emotion_service.attention import Attention
+from emotion_service.behavior import Behavior
 from emotion_service.pipeline import FaceResult
 
 PRODUCER = "emotion-ml-service"
@@ -84,6 +86,21 @@ def emotion_sample(
         face_box_area=result.face_box_area if analyzing and result else None,
         model_version=model_version,
         attention=attention_model(result.attention) if result is not None and result.attention else None,
+        groups=EmotionGroupProbabilities(**result.groups) if analyzing and result and result.groups else None,
+        dominant_group=result.dominant_group if analyzing and result else None,  # type: ignore[arg-type]
+        behavior=behavior_model(result.behavior) if analyzing and result and result.behavior else None,
+    )
+
+
+def behavior_model(behavior: Behavior) -> BehaviorModel:
+    return BehaviorModel(
+        agreement=behavior.agreement,
+        nod_score=behavior.nod_score,
+        shake_score=behavior.shake_score,
+        fatigue=behavior.fatigue,
+        fatigue_score=behavior.fatigue_score,
+        perclos=behavior.perclos,
+        yawns_per_min=behavior.yawns_per_min,
     )
 
 
