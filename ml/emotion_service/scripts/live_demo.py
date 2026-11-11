@@ -122,7 +122,7 @@ def encode_png(image: np.ndarray) -> str:
 
 
 async def index(request: web.Request) -> web.FileResponse:
-    return web.FileResponse(HERE / "live_demo.html")
+    return web.FileResponse(HERE / "live_demo.html", headers={"Cache-Control": "no-store"})
 
 
 async def info(request: web.Request) -> web.Response:

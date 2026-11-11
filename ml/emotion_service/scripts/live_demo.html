@@ -24,6 +24,7 @@
   main { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: 16px; padding: 16px 20px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  details.card summary { cursor: pointer; }
   .card h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 10px; text-transform: uppercase; letter-spacing: .04em; }
   .stage { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; }
   .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
@@ -73,13 +74,50 @@
       <div class="placeholder" id="placeholder">Нажмите «Включить камеру». Кадры обрабатываются на этом компьютере и не сохраняются.</div>
     </div>
     <div class="card">
-      <h2>Динамика за последнюю минуту: эмоции (заливка) и заинтересованность (пунктир)</h2>
+      <h2>Динамика за последнюю минуту: 5 групп эмоций (заливка) и заинтересованность (пунктир)</h2>
       <canvas id="timeline"></canvas>
       <div class="legend" id="legend"></div>
     </div>
   </div>
 
   <div class="col">
+    <div class="card">
+      <h2>Сейчас</h2>
+      <div class="dominant">
+        <div class="swatch" id="swatch"></div>
+        <div><div class="big" id="dominant">—</div><div id="confidence" class="num" style="text-align:left;color:var(--muted)">—</div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+        <span id="now-gesture" class="chip">жест: —</span>
+        <span id="now-fatigue" class="chip">усталость: копим данные</span>
+      </div>
+      <div class="crop">
+        <img id="crop" alt="">
+        <div style="color:var(--muted);font-size:12px">Что видит модель: кроп лица 48×48 в оттенках серого – так же выглядят обучающие изображения FER-2013.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Эмоции (5 групп – так видит организатор)</h2>
+      <div class="dominant" style="margin-bottom:10px">
+        <div class="swatch" id="grp-swatch"></div>
+        <div><div class="big" id="grp-dominant">—</div><div style="color:var(--muted)">преобладающая группа</div></div>
+      </div>
+      <div class="bars" id="groups"></div>
+      <div class="note">Недовольство = гнев + отвращение, напряжение = грусть + страх: эти классы модель путает между собой, а на встрече они значат одно и то же (точность 5 групп на тесте – 75 % против 70 % у 7 классов).</div>
+    </div>
+    <div class="card">
+      <h2>Согласие и усталость</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <span id="agree-chip" class="chip">жест: —</span>
+        <span id="fatigue-chip" class="chip">усталость: копим данные</span>
+      </div>
+      <div class="bars">
+        <div class="bar"><span>Кивок (да)</span><div class="track"><div class="fill" id="nod-bar" style="background:#1f9d55"></div></div><span class="num" id="nod-n">—</span></div>
+        <div class="bar"><span>Покачивание (нет)</span><div class="track"><div class="fill" id="shake-bar" style="background:#c2410c"></div></div><span class="num" id="shake-n">—</span></div>
+        <div class="bar"><span>Усталость</span><div class="track"><div class="fill" id="fat-bar" style="background:#7c3aed"></div></div><span class="num" id="fat-n">—</span></div>
+      </div>
+      <div class="note" id="fat-note">Согласие – кивки, несогласие – покачивания головой за последние 2 с (лучше при 5 кадр/с). Усталость – доля времени с прикрытыми глазами (PERCLOS), зевки и опущенная голова за 30 с; первая оценка – через 10 с.</div>
+    </div>
     <div class="card">
       <h2>Калибровка под вас</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -111,39 +149,6 @@
       <div class="note" id="rec-count">Изобразите выбранную эмоцию и нажмите «Записать». Сохраняются только кроп лица 48×48 и коэффициенты мимики – локально, в ml/training/data/own.</div>
     </div>
     <div class="card">
-      <h2>Сейчас</h2>
-      <div class="dominant">
-        <div class="swatch" id="swatch"></div>
-        <div><div class="big" id="dominant">—</div><div id="confidence" class="num" style="text-align:left;color:var(--muted)">—</div></div>
-      </div>
-      <div class="crop">
-        <img id="crop" alt="">
-        <div style="color:var(--muted);font-size:12px">Что видит модель: кроп лица 48×48 в оттенках серого – так же выглядят обучающие изображения FER-2013.</div>
-      </div>
-    </div>
-    <div class="card">
-      <h2>Эмоции (5 групп – так видит организатор)</h2>
-      <div class="dominant" style="margin-bottom:10px">
-        <div class="swatch" id="grp-swatch"></div>
-        <div><div class="big" id="grp-dominant">—</div><div style="color:var(--muted)">преобладающая группа</div></div>
-      </div>
-      <div class="bars" id="groups"></div>
-      <div class="note">Недовольство = гнев + отвращение, напряжение = грусть + страх: эти классы модель путает между собой, а на встрече они значат одно и то же (точность 5 групп на тесте – 75 % против 70 % у 7 классов).</div>
-    </div>
-    <div class="card">
-      <h2>Согласие и усталость</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <span id="agree-chip" class="chip">жест: —</span>
-        <span id="fatigue-chip" class="chip">усталость: копим данные</span>
-      </div>
-      <div class="bars">
-        <div class="bar"><span>Кивок (да)</span><div class="track"><div class="fill" id="nod-bar" style="background:#1f9d55"></div></div><span class="num" id="nod-n">—</span></div>
-        <div class="bar"><span>Покачивание (нет)</span><div class="track"><div class="fill" id="shake-bar" style="background:#c2410c"></div></div><span class="num" id="shake-n">—</span></div>
-        <div class="bar"><span>Усталость</span><div class="track"><div class="fill" id="fat-bar" style="background:#7c3aed"></div></div><span class="num" id="fat-n">—</span></div>
-      </div>
-      <div class="note" id="fat-note">Согласие – кивки, несогласие – покачивания головой за последние 2 с (лучше при 5 кадр/с). Усталость – доля времени с прикрытыми глазами (PERCLOS), зевки и опущенная голова за 30 с; первая оценка – через 10 с.</div>
-    </div>
-    <div class="card">
       <h2>Внимание</h2>
       <div class="dominant" style="margin-bottom:10px">
         <div class="swatch" id="att-swatch"></div>
@@ -160,12 +165,12 @@
       <div class="bars" id="expr"><div style="color:var(--muted)">сетка лица не построена</div></div>
       <div class="note">Коэффициенты MediaPipe 0–1. Удивление – брови вверх + глаза широко + рот открыт; радость – улыбка и прищур; гнев – брови сведены.</div>
     </div>
-    <div class="card">
-      <h2>Подробно: 7 классов модели</h2>
-      <div class="bars" id="bars"></div>
+    <details class="card">
+      <summary><h2 style="display:inline">Подробно: 7 классов модели (для разработчика)</h2></summary>
+      <div class="bars" id="bars" style="margin-top:10px"></div>
       <div class="note">Полоса – сглаженное значение (EMA, его видит организатор), риска – ответ на текущем кадре (CNN по пикселям, смешанная с оценкой по мимике).</div>
       <div class="note" id="sources"></div>
-    </div>
+    </details>
     <div class="card">
       <h2>Конвейер</h2>
       <dl class="stats">
@@ -196,7 +201,6 @@ for (const l of LABELS) {
   row.innerHTML = `<span>${TITLES[l]}</span><div class="track"><div class="fill" style="background:${color(l)}"></div><div class="raw"></div></div><span class="num">—</span>`;
   $("bars").append(row);
   bars[l] = { fill: row.querySelector(".fill"), raw: row.querySelector(".raw"), num: row.querySelector(".num") };
-  $("legend").insertAdjacentHTML("beforeend", `<span><i style="background:${color(l)}"></i>${TITLES[l]}</span>`);
 }
 
 fetch("/info").then((r) => r.json()).then((i) => {
@@ -314,6 +318,10 @@ function renderCalibration(c) {
 
 const GROUPS = { joy: ["Радость", "--emotion-happy"], surprise: ["Удивление", "--emotion-surprise"], neutral: ["Нейтрально", "--emotion-neutral"],
   discontent: ["Недовольство", "--emotion-angry"], tension: ["Напряжение", "--emotion-sad"] };
+const groupColor = (g) => css.getPropertyValue(GROUPS[g][1]).trim();
+for (const [key, [title]] of Object.entries(GROUPS))
+  $("legend").insertAdjacentHTML("beforeend", `<span><i style="background:${groupColor(key)}"></i>${title}</span>`);
+const GESTURE = { agree: ["кивает – согласие", "on"], disagree: ["качает головой – несогласие", "warn"], none: ["жеста нет", ""] };
 const groupBars = {};
 for (const [key, [title, cssVar]] of Object.entries(GROUPS)) {
   const row = document.createElement("div");
@@ -335,14 +343,14 @@ function renderGroups(r) {
 }
 
 function renderBehavior(b) {
-  if (!b) { $("agree-chip").textContent = "жест: нужна сетка лица"; return; }
-  const gesture = { agree: ["кивает – согласие", "on"], disagree: ["качает головой – несогласие", "warn"], none: ["жеста нет", ""] }[b.agreement];
-  $("agree-chip").textContent = gesture[0]; $("agree-chip").className = "chip " + gesture[1];
+  if (!b) { for (const id of ["agree-chip", "now-gesture"]) $(id).textContent = "жест: нужна сетка лица"; return; }
+  const gesture = GESTURE[b.agreement];
+  for (const id of ["agree-chip", "now-gesture"]) { $(id).textContent = gesture[0]; $(id).className = "chip " + gesture[1]; }
   $("nod-bar").style.width = (b.nod_score * 100).toFixed(0) + "%"; $("nod-n").textContent = (b.nod_score * 100).toFixed(0) + " %";
   $("shake-bar").style.width = (b.shake_score * 100).toFixed(0) + "%"; $("shake-n").textContent = (b.shake_score * 100).toFixed(0) + " %";
-  if (b.fatigue == null) { $("fatigue-chip").textContent = "усталость: копим данные"; $("fatigue-chip").className = "chip"; return; }
-  $("fatigue-chip").textContent = b.fatigue === "tired" ? "усталость: устал" : "усталость: бодр";
-  $("fatigue-chip").className = "chip " + (b.fatigue === "tired" ? "warn" : "on");
+  const fatigue = b.fatigue == null ? ["усталость: копим данные", ""] : b.fatigue === "tired" ? ["усталость: устал", "warn"] : ["усталость: бодр", "on"];
+  for (const id of ["fatigue-chip", "now-fatigue"]) { $(id).textContent = fatigue[0]; $(id).className = "chip " + fatigue[1]; }
+  if (b.fatigue == null) return;
   $("fat-bar").style.width = (b.fatigue_score * 100).toFixed(0) + "%"; $("fat-n").textContent = (b.fatigue_score * 100).toFixed(0) + " %";
   $("fat-note").textContent = `Глаза прикрыты ${(b.perclos * 100).toFixed(0)} % времени за 30 с (порог усталости – 15 %), зевков в минуту: ${b.yawns_per_min}.`;
 }
@@ -374,7 +382,7 @@ function render(r) {
   renderExtras(r);
   renderCalibration(r.calibration);
   renderAttention(r.attention);
-  history.push({ t: performance.now(), probs: r.probs || null, interest: r.attention ? r.attention.interest : null });
+  history.push({ t: performance.now(), groups: r.groups || null, interest: r.attention ? r.attention.interest : null });
   while (history.length && history[0].t < performance.now() - 60000) history.shift();
 
   $("s-frame").textContent = `${r.frame[0]}×${r.frame[1]}`;
@@ -391,9 +399,9 @@ function render(r) {
     drawOverlay(null);
   } else {
     setStatus("идет анализ", "on");
-    $("dominant").textContent = TITLES[r.dominant];
-    $("confidence").textContent = `уверенность ${(r.confidence * 100).toFixed(0)} % · сырой ответ: ${TITLES[r.raw_dominant]}`;
-    $("swatch").style.background = color(r.dominant);
+    $("dominant").textContent = GROUPS[r.dominant_group][0];
+    $("confidence").textContent = `уверенность ${(r.groups[r.dominant_group] * 100).toFixed(0)} % · класс модели: ${TITLES[r.dominant]}`;
+    $("swatch").style.background = groupColor(r.dominant_group);
     $("crop").src = r.crop;
     $("s-score").textContent = r.score.toFixed(2);
     $("s-area").textContent = (r.face_box_area * 100).toFixed(1) + " %";
@@ -426,7 +434,7 @@ function drawOverlay(r) {
   if (!r) return;
   const k = 1 / r.scale;
   const [x, y, w, h] = r.box.map((v) => v * k);
-  const c = color(r.dominant);
+  const c = groupColor(r.dominant_group);
   ctx.lineWidth = Math.max(2, overlay.width / 320);
   ctx.strokeStyle = c;
   ctx.strokeRect(x, y, w, h);
@@ -448,7 +456,7 @@ function drawOverlay(r) {
     for (const [px, py] of r.landmarks) { ctx.beginPath(); ctx.arc(px * k, py * k, ctx.lineWidth * 1.5, 0, 7); ctx.fill(); }
   }
   // Подпись рисуется в зеркальной системе координат, чтобы читалась после scaleX(-1) у холста.
-  const label = `${TITLES[r.dominant]} ${(r.confidence * 100).toFixed(0)} %`;
+  const label = `${GROUPS[r.dominant_group][0]} ${(r.groups[r.dominant_group] * 100).toFixed(0)} %`;
   const size = Math.max(14, overlay.width / 40);
   ctx.save();
   ctx.scale(-1, 1);
@@ -458,6 +466,16 @@ function drawOverlay(r) {
   ctx.fillRect(-(x + w), y - size * 1.6, tw, size * 1.6);
   ctx.fillStyle = "#fff";
   ctx.fillText(label, -(x + w) + size / 2, y - size * 0.45);
+  // Жест – плашкой под рамкой лица, пока держится сигнал (≈ 1,5 с после кивка / покачивания).
+  const b = r.behavior;
+  if (b && b.agreement !== "none") {
+    const text = b.agreement === "agree" ? "✓ Согласие (кивает)" : "✗ Несогласие (качает головой)";
+    const bw = ctx.measureText(text).width + size;
+    ctx.fillStyle = b.agreement === "agree" ? "#1f9d55" : "#c2410c";
+    ctx.fillRect(-(x + w), y + h, bw, size * 1.6);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(text, -(x + w) + size / 2, y + h + size * 1.15);
+  }
   ctx.restore();
 }
 
@@ -471,11 +489,11 @@ function drawTimeline() {
   const xOf = (t) => W - ((now - t) / 60000) * W;
   for (let i = 0; i < history.length - 1; i++) {
     const a = history[i], b = history[i + 1];
-    if (!a.probs) { ctx.fillStyle = css.getPropertyValue("--line"); ctx.fillRect(xOf(a.t), 0, xOf(b.t) - xOf(a.t), H); continue; }
+    if (!a.groups) { ctx.fillStyle = css.getPropertyValue("--line"); ctx.fillRect(xOf(a.t), 0, xOf(b.t) - xOf(a.t), H); continue; }
     let acc = 0;
-    for (const l of LABELS) {
-      const v = a.probs[l];
-      ctx.fillStyle = color(l);
+    for (const g of Object.keys(GROUPS)) {
+      const v = a.groups[g];
+      ctx.fillStyle = groupColor(g);
       ctx.fillRect(xOf(a.t), H - (acc + v) * H, Math.max(1, xOf(b.t) - xOf(a.t)), v * H);
       acc += v;
     }
