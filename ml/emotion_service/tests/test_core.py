@@ -408,19 +408,34 @@ def test_nod_means_agree_and_shake_means_disagree(fps: float) -> None:
     assert shake[-1].agreement == "disagree" and shake[-1].shake_score > 0
 
 
-def test_no_gesture_for_still_jitter_or_single_glance() -> None:
+@pytest.mark.parametrize("fps", [3.0, 5.0])
+def test_single_ordinary_nod_or_shake_is_enough(fps: float) -> None:
+    def bump(t: float) -> float:  # одно движение на 8° туда и обратно за 0,6 с
+        return float(8 * np.sin(np.pi * (t - 1.5) / 0.6)) if 1.5 <= t <= 2.1 else 0.0
+
+    nod = _run(fps, 3.5, lambda t: {"pitch": 5 + bump(t + 0.1)})
+    shake = _run(fps, 3.5, lambda t: {"yaw": 1.2 * bump(t + 0.1)})
+    assert any(b.agreement == "agree" for b in nod) and all(b.agreement != "disagree" for b in nod)
+    assert any(b.agreement == "disagree" for b in shake) and all(b.agreement != "agree" for b in shake)
+
+
+def test_no_gesture_for_still_jitter_or_long_glance() -> None:
     rng = np.random.default_rng(0)
-    still = _run(5.0, 3.0, lambda t: {"pitch": 5 + rng.normal(0, 1.5), "yaw": rng.normal(0, 1.5)})
-    glance = _run(5.0, 3.0, lambda t: {"pitch": 5 + (18 if 1.0 < t < 1.8 else 0)})  # посмотрел вниз и вернулся
-    assert still[-1].agreement == "none" and all(b.agreement == "none" for b in glance)
+    still = _run(5.0, 10.0, lambda t: {"pitch": 5 + rng.normal(0, 1.0), "yaw": rng.normal(0, 1.0)})
+    glance = _run(5.0, 6.0, lambda t: {"pitch": 5 + (18 if 1.0 < t < 3.0 else 0)})  # посмотрел вниз на 2 с
+    away = _run(5.0, 6.0, lambda t: {"yaw": 30 if 1.0 < t < 3.0 else 0})  # отвернулся на 2 с
+    stays = _run(5.0, 6.0, lambda t: {"pitch": 5 + (18 if t > 1.0 else 0)})  # опустил голову и оставил
+    for run in (still, glance, away, stays):
+        assert all(b.agreement == "none" for b in run)
 
 
-def test_swings_counts_reversals() -> None:
-    from emotion_service.behavior import swings
+def test_back_and_forth_needs_return_to_start() -> None:
+    from emotion_service.behavior import back_and_forth
 
-    assert swings(np.array([0, -10, 0, -10, 0]), 6) == 3
-    assert swings(np.array([0, 2, -1, 3, 0]), 6) == 0
-    assert swings(np.array([0, -10, -12, 0]), 6) == 1
+    t = np.array([0.0, 0.33, 0.67, 1.0])
+    assert back_and_forth(t, np.array([0, 8, 1, 0]), 1.0, 5) == 8  # туда и обратно
+    assert back_and_forth(t, np.array([0, 8, 9, 9]), 1.0, 5) == 0  # ушла и осталась
+    assert back_and_forth(t, np.array([0, 2, -1, 1]), 1.0, 5) == 0  # дрожание
 
 
 def test_fatigue_from_closed_eyes_and_yawns() -> None:

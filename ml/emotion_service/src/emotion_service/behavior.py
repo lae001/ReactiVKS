@@ -3,11 +3,12 @@
 Это не эмоции и не результат модели эмоций: правила по 3D-позе головы и мимическим коэффициентам MediaPipe за
 скользящее окно (решение – docs/adr/ADR-013-emotion-groups-and-behavior.md).
 
-**Кивок / покачивание.** За последние NOD_WINDOW_S секунд берется размах наклона (pitch) и поворота (yaw) головы
-и число смен направления движения. Кивок – наклон меняется на ≥ MIN_SWING_DEG хотя бы дважды в разные стороны
-(вниз-вверх) при почти неподвижном повороте; покачивание – то же по повороту. Такт анализа 2–5 кадров/с
-меньше частоты кивка (1–3 Гц), поэтому форма движения не восстанавливается, но размах и смены направления
-сохраняются: при 3 кадр/с кивок из 2–3 движений дает 2 и более смены. Надежнее при 5 кадр/с (ML_TARGET_FPS).
+**Кивок / покачивание.** Кивок – за последние MOVE_WINDOW_S секунд наклон головы (pitch) отошел от начального
+положения на ≥ NOD_DEG и вернулся к нему; покачивание – то же по повороту (yaw, ≥ SHAKE_DEG). Хватает одного
+обычного кивка; серия «да-да» дает несколько срабатываний подряд. Голова должна начать и закончить движение в
+покое, поэтому взгляд вниз или в сторону с возвратом через 1,5 с и больше, медленное покачивание при разговоре
+и дрожание точек кивком не считаются. Такт 2–5 кадр/с: кивок длится 0,4–1 с, при 5 кадр/с в окно попадает
+больше кадров движения и распознавание надежнее (симуляция – docs/adr/ADR-013).
 
 **Усталость.** PERCLOS – доля времени за FATIGUE_WINDOW_S с прикрытыми глазами (eyeBlink ≥ 0,5) – общепринятая
 метрика сонливости (≥ 0,15 – признак усталости); зевки – рот открыт (jawOpen ≥ 0,55) непрерывно ≥ 1,2 с;
@@ -28,10 +29,11 @@ from emotion_service.landmarks import FaceMesh
 
 Agreement = Literal["agree", "disagree", "none"]
 
-NOD_WINDOW_S = 2.0
-MIN_SWING_DEG = 6.0  # минимальное движение головы между точками разворота
+MOVE_WINDOW_S = 1.5  # кивок туда и обратно укладывается в это время
+NOD_DEG = 5.0  # отклонение наклона для кивка
+SHAKE_DEG = 7.0  # отклонение поворота для покачивания (поворот головы шире и шумнее)
 CALM_AXIS_DEG = 8.0  # размах по другой оси, при котором движение еще считается чистым кивком / покачиванием
-HOLD_S = 1.5  # сколько держится сигнал после последнего кивка / покачивания
+HOLD_S = 2.5  # сколько держится сигнал после последнего кивка / покачивания
 
 FATIGUE_WINDOW_S = 30.0
 EYES_CLOSED = 0.5
@@ -43,28 +45,26 @@ HEAD_DOWN_DEG = 15.0
 TIRED_AT = 0.5
 
 
-def swings(values: np.ndarray, min_swing: float) -> int:
-    """Число разворотов движения с амплитудой ≥ min_swing (зигзаг): вниз-вверх – 1, вниз-вверх-вниз – 2.
+def back_and_forth(times: np.ndarray, values: np.ndarray, now: float, min_deg: float) -> float:
+    """Наибольшее отклонение (градусы) движения «туда и обратно» за последние MOVE_WINDOW_S; 0 – движения нет.
 
-    Колебания меньше порога (шум позы, дрожание точек) не считаются.
+    Движение – участок окна, где значение отошло от начала участка на ≥ min_deg и к концу участка вернулось
+    (разница не больше половины отклонения): голова начала и закончила движение в одном положении. Участок ищется
+    любой, поэтому серия «да-да» без пауз тоже находится. При частоте от 4 кадр/с соседние кадры усредняются
+    попарно – дрожание точек вдвое меньше, а кивок (0,4–1 с) занимает несколько кадров и сохраняется.
     """
-    count, direction, extreme = 0, 0, float(values[0]) if len(values) else 0.0
-    for raw in values[1:]:
-        value = float(raw)
-        if direction == 0:
-            if abs(value - extreme) >= min_swing:
-                direction, extreme = (1 if value > extreme else -1), value
-        elif direction > 0:
-            if value > extreme:
-                extreme = value
-            elif extreme - value >= min_swing:
-                count, direction, extreme = count + 1, -1, value
-        else:
-            if value < extreme:
-                extreme = value
-            elif value - extreme >= min_swing:
-                count, direction, extreme = count + 1, 1, value
-    return count
+    mask = times >= now - MOVE_WINDOW_S
+    window, stamps = values[mask], times[mask]
+    if len(window) >= 4 and float(np.median(np.diff(stamps))) <= 0.25:
+        window = (window[1:] + window[:-1]) / 2
+        min_deg *= 0.8  # усреднение снижает и шум, и пик кивка
+    best = 0.0
+    for a in range(len(window) - 2):
+        for b in range(a + 2, len(window)):
+            swing = float(np.max(np.abs(window[a + 1 : b] - window[a])))
+            if swing >= min_deg and abs(float(window[b] - window[a])) <= 0.5 * swing:
+                best = max(best, swing)
+    return best
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +115,7 @@ class BehaviorTracker:
             return None
         track = self._track(key)
         track.pose.append((now, mesh.yaw_deg, mesh.pitch_deg))
-        while track.pose and now - track.pose[0][0] > NOD_WINDOW_S:
+        while track.pose and now - track.pose[0][0] > MOVE_WINDOW_S:
             track.pose.popleft()
         self._gestures(track, now)
 
@@ -145,18 +145,20 @@ class BehaviorTracker:
         )
 
     def _gestures(self, track: _Track, now: float) -> None:
-        if len(track.pose) < 4:
+        if len(track.pose) < 3:
             return
-        data = np.array([(y, p) for _, y, p in track.pose])
-        yaw, pitch = data[:, 0], data[:, 1]
-        yaw_range, pitch_range = float(np.ptp(yaw)), float(np.ptp(pitch))
-        nod_turns, shake_turns = swings(pitch, MIN_SWING_DEG), swings(yaw, MIN_SWING_DEG)
-        if nod_turns >= 2 and yaw_range <= max(CALM_AXIS_DEG, 0.6 * pitch_range):
+        data = np.array(track.pose)
+        times, yaw, pitch = data[:, 0], data[:, 1], data[:, 2]
+        recent = times >= now - MOVE_WINDOW_S
+        yaw_range, pitch_range = float(np.ptp(yaw[recent])), float(np.ptp(pitch[recent]))
+        nod = back_and_forth(times, pitch, now, NOD_DEG)
+        shake = back_and_forth(times, yaw, now, SHAKE_DEG)
+        if nod and yaw_range <= max(CALM_AXIS_DEG, 0.6 * pitch_range):
             track.last_nod = now
-            track.nod_score = min(1.0, pitch_range / 25.0 * min(1.0, nod_turns / 3))
-        if shake_turns >= 2 and pitch_range <= max(CALM_AXIS_DEG, 0.6 * yaw_range):
+            track.nod_score = min(1.0, nod / 12.0)
+        if shake and pitch_range <= max(CALM_AXIS_DEG, 0.6 * yaw_range):
             track.last_shake = now
-            track.shake_score = min(1.0, yaw_range / 30.0 * min(1.0, shake_turns / 3))
+            track.shake_score = min(1.0, shake / 18.0)
 
     def _yawn(self, track: _Track, jaw_open: float, now: float) -> None:
         if jaw_open >= YAWN_JAW:
