@@ -44,6 +44,13 @@
   .raw { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: .55; left: 0; transition: left .25s; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .stats { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+  .mon { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .mon th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  .mon td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .mon td.v { text-align: right; white-space: nowrap; font-weight: 600; }
+  .mon tr.sec td { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding-top: 10px; border-bottom: none; }
+  .mon .st { display: inline-block; min-width: 92px; padding: 1px 8px; border-radius: 999px; font-size: 12px; text-align: center; }
+  .mon .ok { background: #1f9d5522; color: #1f9d55; } .mon .idle { background: var(--line); color: var(--muted); } .mon .bad { background: #c2410c22; color: #c2410c; }
   .stats dt { color: var(--muted); } .stats dd { margin: 0; text-align: right; }
   .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; color: var(--muted); font-size: 12px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
@@ -77,6 +84,15 @@
       <h2>Динамика за последнюю минуту: 5 групп эмоций (заливка) и заинтересованность (пунктир)</h2>
       <canvas id="timeline"></canvas>
       <div class="legend" id="legend"></div>
+    </div>
+    <div class="card">
+      <h2>Мониторинг в цифрах: что работает и как</h2>
+      <table class="mon">
+        <thead><tr><th>Модуль / показатель</th><th>Состояние</th><th style="text-align:right">Сейчас</th><th style="text-align:right">За минуту</th></tr></thead>
+        <tbody id="mon"></tbody>
+      </table>
+      <div class="note">«Сейчас» – значение на последнем кадре; «за минуту» – среднее или доля кадров за последние 60 с.
+        Зеленый – модуль работает и выдает данные, серый – данных пока нет (например, усталость копится 10 с), оранжевый – модуль не сработал на последнем кадре.</div>
     </div>
   </div>
 
@@ -382,7 +398,12 @@ function render(r) {
   renderExtras(r);
   renderCalibration(r.calibration);
   renderAttention(r.attention);
-  history.push({ t: performance.now(), groups: r.groups || null, interest: r.attention ? r.attention.interest : null });
+  history.push({
+    t: performance.now(), groups: r.groups || null, interest: r.attention ? r.attention.interest : null,
+    face: r.state === "analyzing", mesh: !!r.mesh, looking: r.attention ? r.attention.looking : null,
+    dominant_group: r.dominant_group || null, agreement: r.behavior ? r.behavior.agreement : null,
+    pipeline: r.timing_ms.pipeline, rtt: r.rtt,
+  });
   while (history.length && history[0].t < performance.now() - 60000) history.shift();
 
   $("s-frame").textContent = `${r.frame[0]}×${r.frame[1]}`;
@@ -418,6 +439,80 @@ function render(r) {
       ` · сглажено: ${TITLES[r.dominant]}`;
   }
   drawTimeline();
+  renderMonitor(r);
+}
+
+const pct = (v, d = 0) => (v == null || Number.isNaN(v) ? "—" : (v * 100).toFixed(d) + " %");
+const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+function renderMonitor(r) {
+  const h = history, n = h.length;
+  const faced = h.filter((p) => p.face);
+  const share = (pred, list = h) => (list.length ? list.filter(pred).length / list.length : null);
+  // Число жестов за минуту: переходы «нет жеста» → «согласие» / «несогласие».
+  let nods = 0, shakes = 0;
+  for (let i = 1; i < n; i++) {
+    if (h[i].agreement === "agree" && h[i - 1].agreement !== "agree") nods++;
+    if (h[i].agreement === "disagree" && h[i - 1].agreement !== "disagree") shakes++;
+  }
+  const b = r.behavior, a = r.attention, at = r.attributes, cal = r.calibration;
+  const st = (cls, text) => `<span class="st ${cls}">${text}</span>`;
+  const rows = [];
+  const sec = (title) => rows.push(`<tr class="sec"><td colspan="4">${title}</td></tr>`);
+  const row = (name, state, now, minute) => rows.push(`<tr><td>${name}</td><td>${state}</td><td class="v">${now}</td><td class="v">${minute}</td></tr>`);
+  const analyzing = r.state === "analyzing";
+
+  sec("Захват лица");
+  row("Детектор лица (YuNet)", analyzing ? st("ok", "работает") : st("bad", "нет лица"),
+      analyzing ? `уверенн. ${pct(r.score)}` : "—", `лицо в ${pct(share((p) => p.face))} кадров`);
+  row("Сетка лица (478 точек)", r.mesh ? st("ok", "работает") : st(analyzing ? "bad" : "idle", analyzing ? "не построена" : "нет лица"),
+      r.mesh ? `${r.mesh.points.length} точек` : "—", `в ${pct(share((p) => p.mesh, faced))} кадров с лицом`);
+  row("Калибровка нейтрального лица", cal && cal.state === "ready" ? st("ok", "готова") : cal && cal.state === "collecting" ? st("idle", "идет") : st("idle", "не сделана"),
+      cal ? pct(cal.progress) : "—", "—");
+
+  sec("Эмоции – 5 групп");
+  for (const [key, [title]] of Object.entries(GROUPS)) {
+    const now = analyzing && r.groups ? r.groups[key] : null;
+    const avg = mean(faced.filter((p) => p.groups).map((p) => p.groups[key]));
+    const lead = share((p) => p.dominant_group === key, faced);
+    row(title, analyzing && r.dominant_group === key ? st("ok", "преобладает") : st("idle", "—"),
+        pct(now, 1), `ср. ${pct(avg)} · главная ${pct(lead)}`);
+  }
+
+  sec("Внимание");
+  row("Заинтересованность", a ? st(a.state === "distracted" ? "bad" : "ok", ATT[a.state][0].replace("Внимание: ", "")) : st("idle", "нет данных"),
+      a ? pct(a.interest) : "—", `ср. ${pct(mean(h.filter((p) => p.interest != null).map((p) => p.interest)))}`);
+  row("Смотрит в камеру", a ? st(a.looking ? "ok" : "bad", a.looking ? "да" : "нет") : st("idle", "—"),
+      a && a.yaw_deg != null ? `поворот ${Math.abs(a.yaw_deg).toFixed(0)}°` : "—", `${pct(share((p) => p.looking === true))} времени`);
+
+  sec("Согласие / несогласие");
+  const gestureState = !b ? st("idle", "нужна сетка") : b.agreement === "agree" ? st("ok", "кивает") : b.agreement === "disagree" ? st("bad", "качает головой") : st("idle", "жеста нет");
+  row("Кивок – согласие", gestureState, b ? pct(b.nod_score) : "—", `кивков: ${nods}`);
+  row("Покачивание – несогласие", b ? (b.agreement === "disagree" ? st("bad", "качает головой") : st("idle", "—")) : st("idle", "нужна сетка"),
+      b ? pct(b.shake_score) : "—", `покачиваний: ${shakes}`);
+
+  sec("Усталость (окно 30 с)");
+  const fatigueReady = b && b.fatigue != null;
+  row("Балл усталости", !b ? st("idle", "нужна сетка") : !fatigueReady ? st("idle", "копим данные") : b.fatigue === "tired" ? st("bad", "устал") : st("ok", "бодр"),
+      fatigueReady ? pct(b.fatigue_score) : "—", "порог 50 %");
+  row("Глаза прикрыты (PERCLOS)", fatigueReady ? st(b.perclos >= 0.15 ? "bad" : "ok", b.perclos >= 0.15 ? "выше нормы" : "норма") : st("idle", "—"),
+      fatigueReady ? pct(b.perclos) : "—", "порог 15 %");
+  row("Зевки", fatigueReady ? st(b.yawns_per_min >= 1 ? "bad" : "ok", b.yawns_per_min >= 1 ? "есть" : "нет") : st("idle", "—"),
+      fatigueReady ? `${b.yawns_per_min} в мин` : "—", "—");
+
+  sec("Внешние признаки");
+  row("Очки", at ? st(at.glasses ? "ok" : "idle", at.glasses ? "найдены" : "нет") : st("idle", "проверяется"), at ? pct(at.glasses_prob) : "—", "порог 50 %");
+  row("Борода / усы", at ? st(at.beard ? "ok" : "idle", at.beard ? "найдены" : "нет") : st("idle", "проверяется"), at ? pct(at.beard_prob) : "—", "порог 50 %");
+
+  sec("Производительность");
+  const fps = sentTimes.length / 3, target = Number($("fps").value) || null;
+  row("Частота анализа", st(fps >= 2 ? "ok" : "bad", fps >= 2 ? "в норме (2–5)" : "ниже 2 кадр/с"),
+      `${fps.toFixed(1)} кадр/с`, target ? `цель ${target} кадр/с` : "максимум");
+  row("Обработка кадра на сервере", st(r.timing_ms.pipeline <= 200 ? "ok" : "bad", r.timing_ms.pipeline <= 200 ? "быстро" : "медленно"),
+      `${r.timing_ms.pipeline.toFixed(0)} мс`, `ср. ${(mean(h.map((p) => p.pipeline)) || 0).toFixed(0)} мс`);
+  row("Полный цикл (кадр → ответ)", st(r.rtt <= 500 ? "ok" : "bad", r.rtt <= 500 ? "в норме" : "долго"),
+      `${r.rtt.toFixed(0)} мс`, `ср. ${(mean(h.map((p) => p.rtt)) || 0).toFixed(0)} мс`);
+  $("mon").innerHTML = rows.join("");
 }
 
 function renderMesh(r) {
