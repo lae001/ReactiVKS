@@ -4,6 +4,7 @@ requires-python = "==3.12.*"
 
 [manifest]
 members = [
+    "analytics-service",
     "auth-service",
     "meeting-service",
     "realtime-service",
@@ -107,6 +108,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/49/cc/aca263693b2ece99fa99a09b6d092acb89973eb2bb575faef1777e04f8b4/alembic-1.18.1.tar.gz", hash = "sha256:83ac6b81359596816fb3b893099841a0862f2117b2963258e965d70dc62fb866", size = 2044319, upload-time = "2026-01-14T18:53:14.907Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/36/cd9cb6101e81e39076b2fbe303bfa3c85ca34e55142b0324fcbf22c5c6e2/alembic-1.18.1-py3-none-any.whl", hash = "sha256:f1c3b0920b87134e851c25f1f7f236d8a332c34b75416802d06971df5d1b7810", size = 260973, upload-time = "2026-01-14T18:53:17.533Z" },
+]
+
+[[package]]
+name = "analytics-service"
+version = "0.1.0"
+source = { editable = "services/analytics_service" }
+dependencies = [
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "vks-common" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "uvicorn", extras = ["standard"], specifier = "==0.52.4" },
+    { name = "vks-common", editable = "libs/vks_common" },
 ]
 
 [[package]]
@@ -1403,6 +1419,7 @@ name = "vks-backend"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "analytics-service" },
     { name = "auth-service" },
     { name = "meeting-service" },
     { name = "realtime-service" },
@@ -1424,6 +1441,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "analytics-service", editable = "services/analytics_service" },
     { name = "auth-service", editable = "services/auth_service" },
     { name = "meeting-service", editable = "services/meeting_service" },
     { name = "realtime-service", editable = "services/realtime_service" },
