@@ -4,6 +4,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from analytics_service.repositories.projections import Projections
+from analytics_service.repositories.reports import ReportRepository
+from vks_common.clock import Clock
 from vks_common.db import transaction
 from vks_common.kafka.consumer import TemporaryFailure
 from vks_contracts import ParsedEvent
@@ -21,8 +23,9 @@ from vks_contracts.user_events import UserDeleted
 
 
 class ProjectEvents:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession], clock: Clock) -> None:
         self._sessions = session_factory
+        self._clock = clock
 
     async def execute(self, event: ParsedEvent) -> None:
         payload = event.payload
@@ -45,6 +48,7 @@ class ProjectEvents:
                     )
                 elif isinstance(payload, MeetingEnded):
                     await projections.update_meeting(payload.meeting_id, at, status="ended", ended_at=payload.ended_at)
+                    await ReportRepository(session).enqueue(payload.meeting_id, self._clock.now())
                 elif isinstance(payload, MeetingCancelled):
                     await projections.update_meeting(payload.meeting_id, at, status="cancelled")
                 elif isinstance(payload, ParticipantRegistered):

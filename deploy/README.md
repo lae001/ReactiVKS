@@ -3,7 +3,7 @@
 | Файл | Назначение |
 |---|---|
 | `docker-compose.dev.yml` | Инфраструктура для локальной разработки: PostgreSQL 16, Redis 7, Kafka (KRaft), kafka-ui, LiveKit |
-| `docker-compose.yml` | Система целиком: nginx со статикой SPA, auth-, meeting- и realtime-service, миграции, инфраструктура |
+| `docker-compose.yml` | Система целиком: nginx со статикой SPA, auth-, meeting-, realtime- и analytics-service, миграции, инфраструктура |
 | `nginx/` | Образ nginx: сборка фронтенда и маршрутизация `/api/v1/*` и `/ws` по сервисам |
 | `postgres/init/` | Роли и схемы сервисов при создании тома ([database.md](../docs/backend/database.md#инициализация-бд)) |
 | `kafka/` | Топики ([events.md](../docs/api/events.md#топики)) и скрипт их создания для контейнера `kafka-init` |
@@ -24,7 +24,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec auth-ser
 ```
 
 Открыть <http://localhost> (порт – `NGINX_HTTP_PORT`). Порядок старта: `postgres` → `migrate-auth`, `migrate-meeting`
-(миграции ролями сервисов) → `auth-service` → `meeting-service` → `realtime-service` → `nginx`; `kafka` → `kafka-init` (топики).
+(миграции ролями сервисов) → `auth-service` → `meeting-service` → `realtime-service` → `nginx`. Analytics-service запускается после своих миграций, auth-service и Kafka; `kafka` → `kafka-init` (топики).
 Образы Python-сервисов собираются одним `backend/Dockerfile` с аргументом `PACKAGE`.
 
 | Путь | Куда |

@@ -91,7 +91,7 @@ LiveKit работает в `network_mode: host`: для медиатрафик�
 Суммарные лимиты ≈ 11,5 ГБ ОЗУ – остается запас для ОС и кеша страниц (важен для Kafka).
 
 В `deploy/docker-compose.yml` Nginx раздает SPA и направляет `/api/v1/*` и `/ws` в сервисы.
-Compose запускает auth-service, meeting-service, realtime-service (EMO-85), миграции, PostgreSQL, Redis,
+Compose запускает auth-service, meeting-service, realtime-service, analytics-service, миграции, PostgreSQL, Redis,
 Kafka и LiveKit. Образы Python-сервисов собирает `backend/Dockerfile` с аргументом `PACKAGE`.
 Запуск – [deploy/README.md](../../deploy/README.md).
 

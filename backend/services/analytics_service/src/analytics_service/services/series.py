@@ -35,18 +35,18 @@ class FlushSamples:
             if samples:
                 ids = {sample.meeting_id for sample in samples}
                 meetings = await repository.lock_meetings(ids)
-                deleted = await repository.deleted(ids - meetings.keys())
+                ignored = await repository.deleted(ids - meetings.keys()) | await repository.sealed(ids)
                 consents = await repository.read_consents(
                     {sample.participant_id for sample in samples}, min(sample.ts for sample in samples)
                 )
             else:
-                meetings, deleted, consents = {}, set(), {}
+                meetings, ignored, consents = {}, set(), {}
 
             accepted: list[Sample] = []
             consumed = 0
             for record in records:
                 sample = record.sample
-                if record.offset >= offset and sample is not None and sample.meeting_id not in deleted:
+                if record.offset >= offset and sample is not None and sample.meeting_id not in ignored:
                     meeting = meetings.get(sample.meeting_id)
                     participant = consents.get(sample.participant_id)
                     if meeting is None or participant is None:
