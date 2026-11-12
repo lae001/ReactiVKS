@@ -52,7 +52,7 @@ export function useConsentToggle({
       setNotice(null);
       setAnnouncement(
         decision === 'granted'
-          ? 'Анализ ваших эмоций включен.'
+          ? 'Согласие на анализ ваших эмоций выдано.'
           : 'Анализ ваших эмоций отключен. Уже накопленные данные остаются в отчете организатора.',
       );
     } catch (e) {
