@@ -1,6 +1,12 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
-import { expectRemoteAudio, expectRemoteVideo, TRACK_PEER_CONNECTIONS } from './media-helpers';
+import {
+  expectRemoteAudio,
+  expectRemoteVideo,
+  measureRemoteVideo,
+  inboundAudioBytes,
+  TRACK_PEER_CONNECTIONS,
+} from './media-helpers';
 
 // Те же шаги, что в room.room.ts, но против НАСТОЯЩИХ auth-service (8001) и meeting-service (8002) и LiveKit
 // с вебхуками: никакой подмены /api/v1/auth, организатор входит через форму /login.
@@ -40,14 +46,14 @@ async function newPage(context: BrowserContext) {
 
 test('настоящий бэкенд: организатор создает и начинает встречу, гость входит по /j/<код>', async ({
   browser,
-}) => {
+}, testInfo) => {
   const options = { permissions: ['camera', 'microphone'], locale: 'ru-RU' };
   const orgContext = await browser.newContext(options);
   const guestContext = await browser.newContext(options);
   const org = await newPage(orgContext);
   const guest = await newPage(guestContext);
 
-  // запросы meeting-service, которые дошли до dev-api через прокси Vite (auth-service не запущен)
+  // Успешные запросы настоящего meeting-service через отдельный прокси Vite.
   const served: string[] = [];
   org.on('response', (r) => {
     const url = new URL(r.url());
@@ -61,7 +67,7 @@ test('настоящий бэкенд: организатор создает и 
   const ACCESS_TOKEN = await apiToken(org);
   await expect(org.getByRole('heading', { level: 1, name: 'Встречи' })).toBeVisible();
   await expect(org.getByRole('region', { name: 'Ближайшие' })).toBeVisible();
-  expect(served).toContain('/api/v1/meetings');
+  await expect.poll(() => served).toContain('/api/v1/meetings');
 
   // 2. создание встречи: настройки по умолчанию из GET /settings
   await org.goto('/meetings/new');
@@ -83,7 +89,7 @@ test('настоящий бэкенд: организатор создает и 
   await guest.getByRole('button', { name: 'Войти во встречу' }).click();
   await expect(guest.getByText('Встреча еще не началась')).toBeVisible();
 
-  // 4. организатор начинает встречу: POST /meetings/{id}/join (dev-api создает комнату LiveKit)
+  // 4. организатор начинает встречу: POST /meetings/{id}/join (meeting-service создает комнату LiveKit)
   await org.getByRole('link', { name: 'Открыть карточку' }).click();
   await org.getByRole('button', { name: 'Начать встречу' }).click();
   await expect(org).toHaveURL(/\/room\/[0-9a-f-]{36}$/);
@@ -99,17 +105,20 @@ test('настоящий бэкенд: организатор создает и 
   const token = await guest.evaluate(() => sessionStorage.getItem('vks_participant_token'));
   expect(token).toMatch(/^pt_/);
 
-  // 6. организатор видит гостя в REST-списке участников (из dev-api)
+  // 6. организатор видит гостя в REST-списке участников (из meeting-service)
   const participants = await org.request.get(`/api/v1/meetings/${meetingId}/participants`, {
     headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
   });
-  const items = ((await participants.json()) as { items: { display_name: string; role: string }[] })
-    .items;
+  const items = (
+    (await participants.json()) as {
+      items: { id: string; online: boolean; display_name: string; role: string }[];
+    }
+  ).items;
   expect(items.map((p) => p.display_name)).toEqual(
     expect.arrayContaining([ORGANIZER_NAME, 'Анна Гостева']),
   );
 
-  // 7. оба в комнате LiveKit по токенам dev-api: соединение установлено, две плитки у каждого
+  // 7. оба в комнате LiveKit по токенам meeting-service: соединение установлено, две плитки у каждого
   for (const page of [org, guest]) {
     await expect(page.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
     await expect(page.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '2');
@@ -120,6 +129,32 @@ test('настоящий бэкенд: организатор создает и 
   await expectRemoteVideo(guest, ORGANIZER_NAME);
   await expectRemoteAudio(org, 'Анна Гостева');
   await expectRemoteAudio(guest, ORGANIZER_NAME);
+
+  const orgIdentity = `p_${items.find((p) => p.role === 'organizer')!.id}`;
+  const guestIdentity = `p_${items.find((p) => p.role === 'guest')!.id}`;
+  const evidence = {
+    organizerToGuest: await measureRemoteVideo(guest, orgIdentity),
+    guestToOrganizer: await measureRemoteVideo(org, guestIdentity),
+    audioBefore: { organizer: await inboundAudioBytes(org), guest: await inboundAudioBytes(guest) },
+  };
+  await expectRemoteAudio(org, 'гость');
+  await expectRemoteAudio(guest, 'организатор');
+  const audioAfter = {
+    organizer: await inboundAudioBytes(org),
+    guest: await inboundAudioBytes(guest),
+  };
+  await expect
+    .poll(async () => {
+      const r = await org.request.get(`/api/v1/meetings/${meetingId}/participants`, {
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+      });
+      return (await r.json()).items.filter((p: { online: boolean }) => p.online).length;
+    })
+    .toBe(2);
+  await testInfo.attach('media-evidence', {
+    body: JSON.stringify({ ...evidence, audioAfter }),
+    contentType: 'application/json',
+  });
 
   // 9. состав и роли берутся из LiveKit (имя в токене, атрибуты vks.*), панель управления по-русски
   const controls = guest.getByRole('contentinfo', { name: 'Управление встречей' });
@@ -136,10 +171,10 @@ test('настоящий бэкенд: организатор создает и 
   // 10. чат на LiveKit (lk.chat): сообщения доходят в обе стороны
   await guest.getByRole('button', { name: 'Чат' }).click();
   await org.getByRole('button', { name: 'Чат' }).click();
-  await guest.getByLabel('Сообщение').fill('Привет от гостя');
+  await guest.getByLabel('Сообщение', { exact: true }).fill('Привет от гостя');
   await guest.getByRole('button', { name: 'Отправить' }).click();
   await expect(org.getByRole('list').getByText('Привет от гостя')).toBeVisible();
-  await org.getByLabel('Сообщение').fill('Ответ организатора');
+  await org.getByLabel('Сообщение', { exact: true }).fill('Ответ организатора');
   await org.getByRole('button', { name: 'Отправить' }).click();
   await expect(guest.getByRole('list').getByText('Ответ организатора')).toBeVisible();
   await expect(guest.getByRole('list').getByText(/^Вы ·/)).toBeVisible();
@@ -159,7 +194,7 @@ test('настоящий бэкенд: организатор создает и 
   await expect(org.getByRole('alert')).toContainText(unsupported);
   // панель эмоций – на моке, и это сказано в интерфейсе
   await org.getByRole('button', { name: 'Эмоции' }).click();
-  await expect(org.getByRole('note')).toContainText('Демонстрационные данные');
+  await expect(org.getByRole('tabpanel')).toContainText('Данных участников пока нет.');
 
   // 12. модерация: выключить микрофон и камеру гостя (REST → LiveKit), каждое с подтверждением
   await org.getByRole('tab', { name: /Участники/ }).click();
@@ -182,6 +217,63 @@ test('настоящий бэкенд: организатор создает и 
     'false',
   );
 
+  await expect(org.locator(`[data-participant-identity="${guestIdentity}"]`)).toHaveAttribute(
+    'data-lk-video-muted',
+    'true',
+  );
+  await guest.getByRole('button', { name: 'Камера', exact: true }).click();
+  await guest.getByRole('button', { name: 'Микрофон', exact: true }).click();
+  const resumed = await measureRemoteVideo(org, guestIdentity);
+  await expectRemoteAudio(org, 'гость после включения');
+  await testInfo.attach('camera-resumed', {
+    body: JSON.stringify(resumed),
+    contentType: 'application/json',
+  });
+
+  // Обновление вкладки сохраняет выключенную камеру и identity.
+  await guest.getByRole('button', { name: 'Камера', exact: true }).click();
+  await guest.reload();
+  await expect(guest.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
+  await expect(guest.getByRole('button', { name: 'Камера', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await expect(org.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '2');
+  await guest.getByRole('button', { name: 'Камера', exact: true }).click();
+  await measureRemoteVideo(org, guestIdentity);
+  // Камера организатора тоже возобновляет передачу после выключения.
+  await org.getByRole('button', { name: 'Камера', exact: true }).click();
+  await expect(guest.locator(`[data-participant-identity="${orgIdentity}"]`)).toHaveAttribute(
+    'data-lk-video-muted',
+    'true',
+  );
+  await org.getByRole('button', { name: 'Камера', exact: true }).click();
+  await testInfo.attach('organizer-camera-resumed', {
+    body: JSON.stringify(await measureRemoteVideo(guest, orgIdentity)),
+    contentType: 'application/json',
+  });
+
+  // Отказ устройства моделируется на границе getUserMedia, транспорт и серверы настоящие.
+  await guest.getByRole('button', { name: 'Камера', exact: true }).click();
+  await guest.evaluate(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (constraints) =>
+      constraints?.video
+        ? Promise.reject(new DOMException('Камера запрещена тестом', 'NotAllowedError'))
+        : original(constraints);
+  });
+  await guest.getByRole('button', { name: 'Камера', exact: true }).click();
+  await expect(guest.getByRole('alert')).toBeVisible();
+  await expect(guest.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
+  await expect(guest.getByRole('heading', { name: 'Соединение потеряно' })).toHaveCount(0);
+  await expectRemoteAudio(org, 'гость без камеры');
+  await guest.getByRole('button', { name: 'Чат', exact: true }).click();
+  await org.getByRole('button', { name: 'Чат', exact: true }).click();
+  await guest.getByLabel('Сообщение', { exact: true }).fill('Камера запрещена, чат работает');
+  await guest.getByRole('button', { name: 'Отправить', exact: true }).click();
+  await expect(org.getByRole('list').getByText('Камера запрещена, чат работает')).toBeVisible();
+  await org.getByRole('tab', { name: /Участники/ }).click();
+
   // 13. удаление: гость видит «Вас удалили из встречи», перезагрузкой вернуться нельзя
   await org.getByRole('button', { name: 'Удалить из встречи: Анна Гостева' }).click();
   await confirmIn(org, 'Удалить из встречи').click();
@@ -192,23 +284,26 @@ test('настоящий бэкенд: организатор создает и 
   await guest.reload();
   await expect(guest.getByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
 
-  // 14. по ссылке-приглашению гость входит заново как новый участник
+  // Удалённый токен не позволяет повторно войти.
+  const rejected = await guest.request.post('/api/v1/participants/me/rejoin', {
+    headers: { Authorization: `Participant ${token}` },
+  });
+  expect(rejected.status()).toBe(409);
+  expect(await rejected.json()).toMatchObject({ code: 'participant_removed' });
+
+  // Новый анонимный вход с очищенным хранилищем — известное ограничение гостевой модели.
+  await guest.evaluate(() => sessionStorage.clear());
   await guest.goto(`/j/${code}`);
-  await guest.getByLabel('Как вас представить').fill('Анна Гостева');
+  await guest.getByLabel('Как вас представить').fill('Гость после удаления');
   await guest.getByRole('radio', { name: /Разрешаю анализ/ }).check();
   await guest.getByRole('button', { name: 'Войти во встречу' }).click();
   await expect(guest.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
-  await expect(org.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '2', {
-    timeout: 20_000,
-  });
 
   // 15. завершение встречи организатором: подтверждение, карточка у него, экран у гостя
   await org.getByRole('button', { name: 'Завершить встречу' }).click();
   await confirmIn(org, 'Завершить встречу').click();
   await expect(org).toHaveURL(new RegExp(`/meetings/${meetingId}$`));
-  await expect(guest.getByRole('heading', { name: 'Встреча завершена' })).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(guest.getByRole('heading', { name: 'Встреча завершена' })).toBeVisible();
   const ended = await org.request.get(`/api/v1/meetings/${meetingId}`, {
     headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
   });
