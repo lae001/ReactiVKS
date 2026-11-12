@@ -30,6 +30,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         // Один origin для SPA и API: так работает cookie vks_refresh (SameSite=Strict, Path=/api/v1/auth)
+        '/api/v1/reports': { target: 'http://127.0.0.1:8003', changeOrigin: true },
         '/api': { target: apiTarget, changeOrigin: true },
         '/ws': { target: 'ws://localhost:8080', ws: true },
       },

@@ -6,7 +6,7 @@ UV ?= uv
 PACKAGES := $(wildcard libs/*) $(wildcard services/*)
 
 .PHONY: help sync lint format type imports test test-unit cov check migrate migrate-auth migrate-meeting jwt-key run-auth \
-	run-meeting run-realtime contracts-snapshot
+	run-meeting run-realtime run-analytics migrate-analytics contracts-snapshot
 
 help: ## Список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -53,7 +53,7 @@ contracts-snapshot: ## Обновить снимок JSON Schema событий 
 AUTH_DATABASE_URL ?= postgresql+asyncpg://auth_svc:auth-dev-password@localhost:5432/vks
 MEETING_DATABASE_URL ?= postgresql+asyncpg://meeting_svc:meeting-dev-password@localhost:5432/vks
 
-migrate: migrate-auth migrate-meeting ## Применить миграции всех сервисов к локальной БД
+migrate: migrate-auth migrate-meeting migrate-analytics ## Применить миграции всех сервисов к локальной БД
 
 migrate-auth: ## Миграции auth-service (роль auth_svc)
 	DATABASE_URL=$(AUTH_DATABASE_URL) $(UV) run alembic -c services/auth_service/alembic.ini upgrade head
@@ -87,3 +87,14 @@ run-realtime: ## realtime-service на http://127.0.0.1:$(REALTIME_PORT) (нуж
 	@test -f $(REALTIME_ENV_FILE) || { echo "нет $(REALTIME_ENV_FILE): cp services/realtime_service/.env.example $(REALTIME_ENV_FILE)"; exit 1; }
 	$(UV) run --env-file $(REALTIME_ENV_FILE) uvicorn realtime_service.main:create_application --factory \
 		--host 127.0.0.1 --port $(REALTIME_PORT) --ws-max-size 8192
+
+ANALYTICS_ENV_FILE ?= services/analytics_service/.env
+ANALYTICS_DATABASE_URL ?= postgresql+asyncpg://analytics_svc:analytics-dev-password@localhost:5432/vks
+
+migrate-analytics: ## Миграции analytics-service (роль analytics_svc)
+	DATABASE_URL=$(ANALYTICS_DATABASE_URL) $(UV) run alembic -c services/analytics_service/alembic.ini upgrade head
+
+run-analytics: ## analytics-service на http://127.0.0.1:8003 (нужны migrate-analytics, auth-service и Kafka)
+	@test -f $(ANALYTICS_ENV_FILE) || { echo "нет $(ANALYTICS_ENV_FILE): cp services/analytics_service/.env.example $(ANALYTICS_ENV_FILE)"; exit 1; }
+	$(UV) run --env-file $(ANALYTICS_ENV_FILE) uvicorn analytics_service.main:create_application --factory \
+		--host 127.0.0.1 --port 8003
