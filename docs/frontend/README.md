@@ -76,8 +76,10 @@ flowchart TB
 | `mock` (по умолчанию) | данные в памяти вкладки, те же проверки и коды ошибок (`meeting_not_started`, `meeting_ended`, `meeting_cancelled`, `meeting_full`, `consent_required`, `notice_outdated`, `analysis_disabled`, `participant_removed`, `meeting_not_editable`, `idempotency_key_reused`) |
 | `http` | `fetch`-клиент (`apiFetch`): Bearer организатора, `Authorization: Participant <токен>` для гостя, `Idempotency-Key` при создании встречи. Отвечает настоящий meeting-service (`make run-meeting`, порт 8002); для слабой машины остается облегченный `frontend/dev-api` (`pnpm dev:api`, без проверки JWT; [README](../../frontend/dev-api/README.md)) |
 
-Типы написаны вручную и заменяются на `gen:api`, когда будет решено перейти на OpenAPI meeting-service. **Остаются на
-тестовых данных** (`src/shared/mocks/`): отчет (analytics-service, спринт 5) и панель эмоций (realtime-сервис).
+Типы написаны вручную и заменяются на `gen:api`, когда будет решено перейти на OpenAPI meeting-service.
+В режиме `http` панель получает `vks.v1` через `/ws`, отчёт и отметки — через `/api/v1/reports`.
+Прокси задаются `VITE_DEV_REALTIME_TARGET` и `VITE_DEV_ANALYTICS_API_TARGET`. При недоступности
+сервисов интерфейс показывает ошибку; демонстрационные значения доступны только в `mock`.
 
 ## Работа с аутентификацией
 
@@ -125,7 +127,7 @@ flowchart TB
 | `/admin`: активные встречи, состояние сервисов | **Заглушки «Скоро»**: `GET /admin/meetings` и `/admin/health` в meeting-service не реализованы | – |
 | Встречи, лобби, комната, настройки анализа, модерация | meeting-service (или `dev-api`) | Мок слоя API |
 | Переключатель «Анализ моих эмоций» (`PUT /participants/me/consent`) | В meeting-service эндпоинта пока нет (404/405): переключатель остается на месте, сообщение «Пока недоступно: сервер ещё не поддерживает эту функцию» | Работает на моке |
-| Панель эмоций, сводка, отчет | Тестовые данные с пометкой «Демонстрационные данные» (realtime- и analytics-сервисы) | То же |
+| Панель эмоций и отчет | WebSocket vks.v1 и REST analytics; при отсутствии сервиса — недоступность без подмены | Демонстрационные данные |
 | Восстановление пароля | Не реализовано ни на бэкенде, ни на фронтенде | – |
 
 Открытые вопросы к бэкенду – [testing/backend-questions.md](../testing/backend-questions.md).
@@ -177,8 +179,10 @@ flowchart TB
   «Выйти», «Завершить встречу».
 - Модерация организатора (микрофон, камера, удалить, завершить) → REST meeting-service, каждое действие с
   подтверждением. Удаленному гостю повторный вход блокирует `rejoin` (`participant_removed`).
-- **Остается на моке:** панель эмоций, сводка и отчет (до realtime- и analytics-сервисов) – с пометкой
-  «Демонстрационные данные» в интерфейсе.
+- В режиме `http` `useEmotions` подключает канал организатора, обновляет токен, восстанавливает подписку
+  и догружает ряды после разрыва. Гость канал не открывает. `LiveEmotionPanel` отправляет отметки в analytics;
+  `RemoteReport` опрашивает pending раз в 3 с и показывает отдельные ряды участников.
+  Контрактные и реальные результаты разделены в [отчёте проверки](../testing/sprint45-session.md).
 
 ## Счетчики участников
 
@@ -190,7 +194,7 @@ flowchart TB
 | «Участники · N» и список в комнате | LiveKit `useParticipants` | Люди в комнате сейчас, по `identity`; **служебные участники (агент, egress, ingress, SIP – `participant.kind` не `STANDARD`, `vks.kind = agent`) не входят**; плитки служебных участников в галерее не показываются |
 | «Участников: N» в карточке встречи | `participants_count` из `GET /meetings/{id}` | Записи `participant` встречи, включая вышедших и удаленных |
 | Число в строке списка встреч | `participants_count` из `GET /meetings` | То же |
-| Участники в отчете | `ReportSummary.participants` (тестовые данные до analytics-service) | По записям встречи |
+| Участники в отчете | `ReportSummary.participants` (HTTP в режиме http; тестовые данные только в mock) | По записям встречи |
 
 Что не создает новую запись: обновление страницы гостя (`rejoin` по токену участника), возврат на ссылку-приглашение в
 той же вкладке (лобби находит запись о входе в `sessionStorage` и делает `rejoin`, имя и согласие остаются прежними;
