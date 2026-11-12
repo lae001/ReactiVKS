@@ -110,7 +110,7 @@ export function useEmotions(meetingId: string, enabled: boolean) {
       socket.onclose = async (event) => {
         clearTimeout(watchdog);
         if (disposed || forbidden) return;
-        data = emptyEmotions();
+        data = { ...emptyEmotions(), history: data.history };
         show('Поток эмоций недоступен. Видеосвязь продолжается.');
         if (event.code === 4403 || event.code === 4400) {
           stop();

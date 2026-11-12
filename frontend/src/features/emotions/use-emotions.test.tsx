@@ -1,7 +1,10 @@
+import { apiFetch } from '@/shared/api/client';
 import { act, renderHook } from '@testing-library/react';
 import { useSessionStore } from '@/shared/api/session';
 import { useEmotions } from './use-emotions';
 import { EMOTION_LABELS } from '@/shared/config/emotions';
+
+vi.mock('@/shared/api/client', () => ({ apiFetch: vi.fn() }));
 
 class Socket {
   static OPEN = 1;
@@ -81,4 +84,55 @@ it('смена встречи сразу скрывает предыдущие �
   });
   act(() => vi.advanceTimersByTime(600));
   expect(Socket.instances).toHaveLength(3);
+});
+
+it('после reconnect сохраняет предыдущую историю и запрашивает пропуск через since', async () => {
+  vi.mocked(apiFetch).mockResolvedValue({ labels: EMOTION_LABELS, series: [], resolution: '1s' });
+  const { result } = renderHook(() => useEmotions('m', true));
+  const snapshot = {
+    type: 'subscribed',
+    meeting_id: 'm',
+    snapshot: {
+      labels: EMOTION_LABELS,
+      analysis: { state: 'active' },
+      participants: [
+        {
+          participant_id: 'p',
+          display_name: 'Гость',
+          role: 'guest',
+          state: 'analyzing',
+          last: null,
+        },
+      ],
+    },
+  };
+  const ts = new Date().toISOString();
+  act(() => {
+    Socket.instances[0]!.receive(snapshot);
+    Socket.instances[0]!.receive({
+      type: 'emotion.update',
+      meeting_id: 'm',
+      items: [
+        {
+          participant_id: 'p',
+          state: 'analyzing',
+          ts,
+          dominant: 'happy',
+          confidence: 0.7,
+          p: [0, 0, 0, 0.7, 0, 0, 0.3],
+        },
+      ],
+    });
+  });
+  expect(result.current.data.history.p).toHaveLength(1);
+  act(() => {
+    void Socket.instances[0]!.onclose?.({ code: 1012 });
+  });
+  act(() => vi.advanceTimersByTime(600));
+  await act(async () => Socket.instances[1]!.receive(snapshot));
+  expect(result.current.data.history.p).toHaveLength(1);
+  expect(apiFetch).toHaveBeenCalledWith(
+    '/api/v1/reports/m/series',
+    expect.objectContaining({ query: { since: ts, resolution: '1s' } }),
+  );
 });
