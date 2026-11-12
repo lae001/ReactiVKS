@@ -7,17 +7,19 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import Depends, Security
+from fastapi import Depends, Query, Security
 from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 from meeting_service.domain.errors import ParticipantTokenInvalid
-from meeting_service.domain.identifiers import UserId
+from meeting_service.domain.identifiers import MeetingId, UserId
 from meeting_service.domain.livekit import LiveKitGateway, WebhookVerifier
 from meeting_service.domain.meetings import Organizer
 from meeting_service.domain.participants import PARTICIPANT_TOKEN_PREFIX
+from meeting_service.services.consent import ChangeConsent, OrganizerConsent
 from meeting_service.services.joining import (
     GetJoinInfo,
     JoinAsGuest,
@@ -38,8 +40,10 @@ from meeting_service.services.organizer_settings import GetOrganizerSettings, Sa
 from meeting_service.services.webhooks import HandleLiveKitWebhook
 from meeting_service.settings import MeetingSettings
 from vks_common.auth import CurrentUser
+from vks_common.auth.dependencies import BearerCredentials, require_user
 from vks_common.clock import Clock
 from vks_common.db import get_session
+from vks_common.errors import ValidationFailed
 
 __all__ = [
     "CallingOrganizer",
@@ -226,3 +230,25 @@ def build_remove_participant(session: Session, clock: CurrentClock, livekit: Liv
 ListParticipantsScenario = Annotated[ListParticipants, Depends(build_list_participants)]
 MuteParticipantScenario = Annotated[MuteParticipant, Depends(build_mute_participant)]
 RemoveParticipantScenario = Annotated[RemoveParticipant, Depends(build_remove_participant)]
+
+
+async def get_consent_caller(
+    request: Request,
+    credentials: BearerCredentials,
+    header: Annotated[str | None, Security(_participant_header)],
+    meeting_id: Annotated[UUID | None, Query()] = None,
+) -> OrganizerConsent | str:
+    if credentials is None:
+        return get_guest_token(header)
+    caller = await require_user(request, credentials)
+    if meeting_id is None:
+        raise ValidationFailed("meeting_id is required for organizer consent")
+    return OrganizerConsent(user_id=UserId(caller.user_id), meeting_id=MeetingId(meeting_id))
+
+
+def build_change_consent(session: Session, clock: CurrentClock, livekit: LiveKit) -> ChangeConsent:
+    return ChangeConsent(session=session, clock=clock, livekit=livekit)
+
+
+ConsentCaller = Annotated[OrganizerConsent | str, Depends(get_consent_caller)]
+ChangeConsentScenario = Annotated[ChangeConsent, Depends(build_change_consent)]

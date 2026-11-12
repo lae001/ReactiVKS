@@ -42,6 +42,7 @@ from meeting_service.domain.participants import (
 )
 from meeting_service.repositories.blocked_users import BlockedUsers
 from meeting_service.repositories.consents import ConsentLog
+from meeting_service.repositories.livekit_sync import LiveKitSyncQueue
 from meeting_service.repositories.meetings import MeetingRepository
 from meeting_service.repositories.outbox import EventOutbox
 from meeting_service.repositories.participants import ParticipantRepository
@@ -106,7 +107,7 @@ class JoinInfo:
     consent_notice: ConsentNotice | None
 
 
-class _ConsentJournal:
+class ConsentJournal:
     """Запись решения в журнал – общая часть входа организатора и гостя."""
 
     def __init__(self, session: AsyncSession, notice: ConsentNotice) -> None:
@@ -154,7 +155,7 @@ class JoinAsOrganizer:
         self._meetings = MeetingRepository(session)
         self._participants = ParticipantRepository(session)
         self._blocked = BlockedUsers(session)
-        self._journal = _ConsentJournal(session, notice)
+        self._journal = ConsentJournal(session, notice)
         self._events = EventOutbox(session)
         self._notice = notice
         self._clock = clock
@@ -180,7 +181,9 @@ class JoinAsOrganizer:
         meeting.started(self._clock.now())
         consent_state = decide_consent(analysis_enabled=meeting.analysis_enabled, decision=consent)
 
-        await self._livekit.ensure_room(room_name(meeting))
+        await self._livekit.ensure_room(
+            room_name(meeting), analysis_fps=meeting.analysis_fps if meeting.analysis_enabled else None
+        )
 
         now = self._clock.now()
         async with transaction(self._session):
@@ -208,6 +211,7 @@ class JoinAsOrganizer:
                 # Организатор вошел снова и решил иначе – новое решение тоже в журнал и в событие.
                 participant = participant.with_consent(consent_state)
                 await self._participants.save_consent(participant.id, consent_state, now=now)
+                await LiveKitSyncQueue(self._session).enqueue(participant, room_access(started, participant), now=now)
                 await self._journal.record(started, participant, origin, decided_at=now)
                 await self._events.add(
                     consent_changed(participant, notice_version=self._notice.version, decided_at=now),
@@ -269,7 +273,7 @@ class JoinAsGuest:
         self._session = session
         self._meetings = MeetingRepository(session)
         self._participants = ParticipantRepository(session)
-        self._journal = _ConsentJournal(session, notice)
+        self._journal = ConsentJournal(session, notice)
         self._events = EventOutbox(session)
         self._notice = notice
         self._clock = clock
@@ -294,7 +298,9 @@ class JoinAsGuest:
             check_notice_version(notice_version, notice=self._notice)
 
         # Комнату создал вход организатора, но LiveKit мог закрыть ее, пока в ней никого не было.
-        await self._livekit.ensure_room(room_name(meeting))
+        await self._livekit.ensure_room(
+            room_name(meeting), analysis_fps=meeting.analysis_fps if meeting.analysis_enabled else None
+        )
 
         participant_token = PARTICIPANT_TOKEN_PREFIX + self._token_factory()
         participant = Participant(
@@ -352,7 +358,9 @@ class RejoinAsGuest:
         meeting.ensure_open_for_guests()
         ensure_seat_available(online_others)
 
-        await self._livekit.ensure_room(room_name(meeting))
+        await self._livekit.ensure_room(
+            room_name(meeting), analysis_fps=meeting.analysis_fps if meeting.analysis_enabled else None
+        )
         return JoinResult(
             meeting=meeting,
             participant=participant,

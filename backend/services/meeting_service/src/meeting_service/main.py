@@ -21,6 +21,7 @@ from meeting_service.api.v1 import join, meetings, moderation, organizer_setting
 from meeting_service.consumers.user_events import UserEventsHandler
 from meeting_service.models import OUTBOX
 from meeting_service.settings import ALEMBIC_INI, MeetingSettings
+from meeting_service.workers.livekit_sync import run_livekit_sync
 from vks_common.app import HealthRegistry, create_app, use_database
 from vks_common.auth import JwksKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
@@ -83,7 +84,9 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
         health.register("livekit", livekit.check, critical=False)
 
         producer: EventProducer | None = None
-        tasks: list[asyncio.Task[None]] = []
+        tasks = [
+            asyncio.create_task(run_livekit_sync(database.session_factory, clock, livekit), name="livekit-sync"),
+        ]
         if resolved.kafka_bootstrap_servers:
             producer = EventProducer(
                 bootstrap_servers=resolved.kafka_bootstrap_servers, client_id=resolved.service_name
@@ -108,14 +111,16 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
                 clock=clock,
                 auto_offset_reset="earliest",
             )
-            tasks = [
-                asyncio.create_task(run_outbox_relay(producer, relay), name="outbox-relay"),
-                asyncio.create_task(run_consumer(consumer), name="user-events-consumer"),
-            ]
-            for task in tasks:
-                task.add_done_callback(log_unexpected_stop)
+            tasks.extend(
+                [
+                    asyncio.create_task(run_outbox_relay(producer, relay), name="outbox-relay"),
+                    asyncio.create_task(run_consumer(consumer), name="user-events-consumer"),
+                ]
+            )
         else:
             _logger.warning("kafka is not configured: events stay in outbox")
+        for task in tasks:
+            task.add_done_callback(log_unexpected_stop)
         try:
             yield
         finally:

@@ -8,7 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from meeting_service.domain.participants import Participant
+from meeting_service.domain.consent import ConsentChange
+from meeting_service.domain.participants import ConsentState, Participant
 
 __all__ = ["MuteRequest", "ParticipantListResponse", "ParticipantResponse"]
 
@@ -45,3 +46,13 @@ class ParticipantListResponse(BaseModel):
 
 class MuteRequest(BaseModel):
     kind: Literal["audio", "video"]
+
+
+class ChangeConsentRequest(BaseModel):
+    decision: ConsentChange
+    notice_version: str | None = None
+
+
+class ConsentResponse(BaseModel):
+    consent_state: ConsentState
+    synced: bool

@@ -7,7 +7,7 @@
 import base64
 import hashlib
 import itertools
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -83,12 +83,18 @@ class FakeLiveKitGateway:
         self.deleted: list[str] = []
         self.issued: list[RoomAccess] = []
         self.muted: list[tuple[str, str, MediaKind]] = []
+        self.updated: list[tuple[str, str, dict[str, str]]] = []
         self.removed: list[tuple[str, str]] = []
 
-    async def ensure_room(self, room: str) -> None:
+    async def ensure_room(self, room: str, *, analysis_fps: int | None = None) -> None:
         if not self.available:
             raise LiveKitUnavailable()
         self.rooms.add(room)
+
+    async def update_attributes(self, room: str, identity: str, attributes: Mapping[str, str]) -> None:
+        if not self.available:
+            raise LiveKitUnavailable()
+        self.updated.append((room, identity, dict(attributes)))
 
     async def delete_room(self, room: str) -> None:
         if not self.available:
