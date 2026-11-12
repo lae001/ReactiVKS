@@ -1,3 +1,5 @@
+import { useEmotions } from '@/features/emotions/use-emotions';
+import { LiveEmotionPanel } from '@/features/emotions/LiveEmotionPanel';
 import {
   RoomAudioRenderer,
   useChat,
@@ -116,6 +118,8 @@ export function RoomShell({
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [chatError, setChatError] = useState(false);
   const isOrganizer = entry.role === 'organizer';
+  const realEmotions = import.meta.env.VITE_API_MODE === 'http';
+  const emotions = useEmotions(meeting.id, realEmotions && isOrganizer && meeting.analysis_enabled);
 
   // Время встречи – от ее начала (а не от открытия страницы): переживает обновление
   const elapsed = useMeetingElapsed(
@@ -243,7 +247,7 @@ export function RoomShell({
       )}
 
       <div className="relative flex min-h-0 flex-1">
-        <RoomGallery />
+        <RoomGallery emotions={isOrganizer && realEmotions ? emotions.data.participants : []} />
         <ReactionsOverlay items={reactions.floating} onExpire={reactions.expire} />
         <ChatToasts
           toasts={notifications.toasts}
@@ -319,17 +323,20 @@ export function RoomShell({
                   }
                 />
               )}
-              {panel === 'emotions' && (
-                <div className="flex flex-col gap-4">
-                  <p
-                    role="note"
-                    className="rounded-md border border-signal/50 bg-signal/10 px-3 py-2 text-xs"
-                  >
-                    {EMOTIONS_MOCK_NOTICE}
-                  </p>
-                  <EmotionPanel participants={mockEmotionSnapshot(people)} elapsed={elapsed} />
-                </div>
-              )}
+              {panel === 'emotions' &&
+                (realEmotions ? (
+                  <LiveEmotionPanel key={meeting.id} {...emotions} />
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <p
+                      role="note"
+                      className="rounded-md border border-signal/50 bg-signal/10 px-3 py-2 text-xs"
+                    >
+                      {EMOTIONS_MOCK_NOTICE}
+                    </p>
+                    <EmotionPanel participants={mockEmotionSnapshot(people)} elapsed={elapsed} />
+                  </div>
+                ))}
               {panel === 'chat' && (
                 <ChatPanel
                   messages={roomChat.messages.map((m) => ({
