@@ -7,6 +7,7 @@ import { meetingErrorMessage } from '@/features/meetings/errors';
 import { MeetingEditForm } from '@/features/meetings/MeetingEditForm';
 import { useDeleteMeeting, useEndMeeting, useMeeting } from '@/features/meetings/queries';
 import { StartMeetingButton } from '@/features/meetings/StartMeetingButton';
+import { RemoteReport } from '@/features/reports/RemoteReport';
 import { MeetingReport } from '@/features/reports/MeetingReport';
 import type { Meeting } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
@@ -86,7 +87,10 @@ function MeetingDetails({ meeting }: { meeting: Meeting }) {
   const remove = useDeleteMeeting(meeting.id);
   const open = meeting.status === 'active' || meeting.status === 'scheduled';
 
-  const data = meeting.status === 'ended' ? getMockReport(meeting.id) : undefined;
+  const data =
+    import.meta.env.VITE_API_MODE !== 'http' && meeting.status === 'ended'
+      ? getMockReport(meeting.id)
+      : undefined;
   const duration =
     meeting.started_at && meeting.ended_at
       ? (Date.parse(meeting.ended_at) - Date.parse(meeting.started_at)) / 1000
@@ -212,7 +216,9 @@ function MeetingDetails({ meeting }: { meeting: Meeting }) {
       </section>
 
       {meeting.status === 'ended' &&
-        (data ? (
+        (import.meta.env.VITE_API_MODE === 'http' && meeting.analysis_enabled ? (
+          <RemoteReport key={meeting.id} meetingId={meeting.id} />
+        ) : data ? (
           <MeetingReport report={data.report} series={data.series} />
         ) : (
           <p className="max-w-prose rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
