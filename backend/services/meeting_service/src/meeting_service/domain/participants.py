@@ -58,6 +58,7 @@ class Participant:
     first_joined_at: datetime | None = None
     last_joined_at: datetime | None = None
     last_left_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @property
     def is_online(self) -> bool:

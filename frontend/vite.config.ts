@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
         '^/api/v1/reports': {
           target:
             loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_ANALYTICS_API_TARGET ||
-            'http://127.0.0.1:8004',
+            'http://127.0.0.1:8003',
           changeOrigin: true,
         },
         // Один origin для SPA и API: так работает cookie vks_refresh (SameSite=Strict, Path=/api/v1/auth)
@@ -40,7 +40,7 @@ export default defineConfig(({ mode }) => {
         '/ws': {
           target:
             loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_REALTIME_TARGET ||
-            'ws://127.0.0.1:8003',
+            'ws://127.0.0.1:8080',
           ws: true,
         },
       },

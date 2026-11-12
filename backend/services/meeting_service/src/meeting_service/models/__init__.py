@@ -2,6 +2,7 @@
 
 from meeting_service.models.base import Base
 from meeting_service.models.consent import ConsentRow
+from meeting_service.models.livekit_sync import LiveKitSyncRow
 from meeting_service.models.meeting import MeetingRow
 from meeting_service.models.organizer_settings import OrganizerSettingsRow
 from meeting_service.models.outbox import OUTBOX
@@ -13,6 +14,7 @@ __all__ = [
     "Base",
     "BlockedUserRow",
     "ConsentRow",
+    "LiveKitSyncRow",
     "MeetingRow",
     "OrganizerSettingsRow",
     "ParticipantRow",
