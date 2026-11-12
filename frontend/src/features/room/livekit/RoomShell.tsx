@@ -128,8 +128,11 @@ export function RoomShell({
     humans.map((p) => p.joinedAt),
   );
   const people = roomParticipants(live);
-  // Индикатор виден всем, пока в комнате есть ML-агент (vks.kind = agent)
-  const analysisRunning = live.some(isAgent);
+  // Организатор знает состояние обработки по heartbeat realtime; гостю доступен только факт присутствия агента.
+  const analysisRunning =
+    realEmotions && isOrganizer
+      ? emotions.data.analysis === 'active' || emotions.data.analysis === 'degraded'
+      : live.some(isAgent);
   const self = people.find((p) => p.isSelf);
   const consent = useConsentToggle({ meeting, entry, current: self?.consent ?? 'not_required' });
   const analysisOn = meeting.analysis_enabled && !consent.disabled;
@@ -208,7 +211,9 @@ export function RoomShell({
         {analysisRunning && (
           <Badge variant="signal">
             <span className="size-1.5 rounded-full bg-signal-foreground" aria-hidden />
-            Идет анализ эмоций
+            {realEmotions && !isOrganizer
+              ? 'К встрече подключён анализ эмоций'
+              : 'Идет анализ эмоций'}
           </Badge>
         )}
         {isOrganizer && meeting.invite_url && (

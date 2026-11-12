@@ -173,6 +173,7 @@ test('контракт UC-4–UC-5: эмоции, отметка, reconnect, о�
     'aria-pressed',
     'true',
   );
+  await expect(page.getByText('Идет анализ эмоций', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Эмоции', exact: true }).click();
   const panel = page.getByRole('tabpanel');
   const ts = new Date().toISOString();
@@ -221,6 +222,7 @@ test('контракт UC-4–UC-5: эмоции, отметка, reconnect, о�
     JSON.stringify({ type: 'analysis.status', meeting_id: meetingId, state: 'unavailable' }),
   );
   await expect(panel).toContainText('Анализ недоступен');
+  await expect(page.getByText('Идет анализ эмоций', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
   await page.getByRole('button', { name: 'Завершить встречу' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Завершить встречу' }).click();
