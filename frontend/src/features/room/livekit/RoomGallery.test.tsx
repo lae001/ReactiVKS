@@ -18,7 +18,9 @@ vi.mock('@livekit/components-react', async (importOriginal) => {
         {tracks.map((t) => (
           <li key={t.participant.identity} data-testid="tile">
             {t.participant.identity}
-            {children}
+            <actual.TrackRefContext.Provider value={t as never}>
+              {children}
+            </actual.TrackRefContext.Provider>
           </li>
         ))}
       </ul>
