@@ -16,7 +16,7 @@ from sqlalchemy import (
     false,
     func,
 )
-from sqlalchemy.dialects.postgresql import REAL
+from sqlalchemy.dialects.postgresql import JSONB, REAL
 
 from vks_common.db import create_metadata
 from vks_common.kafka import outbox_table
@@ -92,3 +92,41 @@ sample_offsets = Table(
 )
 deleted_meetings = Table("deleted_meetings", metadata, Column("meeting_id", Uuid, primary_key=True))
 deleted_owners = Table("deleted_owners", metadata, Column("owner_id", Uuid, primary_key=True))
+
+reports = Table(
+    "reports",
+    metadata,
+    Column("meeting_id", Uuid, ForeignKey(meetings.c.meeting_id, ondelete="CASCADE"), primary_key=True),
+    Column("status", Text, nullable=False, server_default="pending"),
+    Column("summary", JSONB),
+    Column("model_version", Text),
+    Column("error", Text),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column("generated_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("target_partition", Integer),
+    Column("target_offset", BigInteger),
+    Column("locked_until", DateTime(timezone=True)),
+    Column("sealed_at", DateTime(timezone=True)),
+    CheckConstraint("status IN ('pending','ready','failed')", name="status"),
+    CheckConstraint("status <> 'ready' OR (summary IS NOT NULL AND generated_at IS NOT NULL)", name="ready"),
+)
+Index("reports_pending_idx", reports.c.updated_at, postgresql_where=reports.c.status == "pending")
+
+markers = Table(
+    "markers",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("meeting_id", Uuid, ForeignKey(meetings.c.meeting_id, ondelete="CASCADE"), nullable=False),
+    Column("ts", DateTime(timezone=True), nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("participant_id", Uuid),
+    Column("label", Text, nullable=False),
+    Column("details", JSONB, nullable=False, server_default="{}"),
+    Column("created_by", Uuid),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("kind IN ('auto_shift','manual')", name="kind"),
+    CheckConstraint("char_length(label) BETWEEN 1 AND 200", name="label"),
+    CheckConstraint("(kind = 'manual') = (created_by IS NOT NULL)", name="author"),
+)
+Index("markers_meeting_ts_idx", markers.c.meeting_id, markers.c.ts)

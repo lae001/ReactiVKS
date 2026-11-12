@@ -6,8 +6,10 @@ from uuid import UUID
 
 from aiokafka import AIOKafkaConsumer, ConsumerRebalanceListener, ConsumerRecord, TopicPartition
 from aiokafka.errors import KafkaError
+from aiokafka.partitioner import DefaultPartitioner
 from sqlalchemy.exc import SQLAlchemyError
 
+from analytics_service.domain.report_jobs import SampleWatermark
 from analytics_service.domain.series import BufferedSample, Sample
 from analytics_service.services.series import FlushSamples
 from vks_common.clock import Clock
@@ -64,6 +66,22 @@ class SampleConsumer(ConsumerRebalanceListener):  # type: ignore[misc]  # у aio
                 await consumer.stop()
                 self._pending.clear()
             await asyncio.sleep(1)
+
+    async def watermark(self, meeting_id: UUID) -> SampleWatermark | None:
+        consumer = self._consumer
+        if consumer is None:
+            return None
+        partitions = consumer.partitions_for_topic(Topic.EMOTION_SAMPLES)
+        if not partitions:
+            return None
+        partition = DefaultPartitioner()(str(meeting_id).encode(), sorted(partitions), sorted(partitions))
+        topic_partition = TopicPartition(Topic.EMOTION_SAMPLES, partition)
+        try:
+            async with asyncio.timeout(2):
+                ends = await consumer.end_offsets([topic_partition])
+        except (KafkaError, TimeoutError):
+            return None
+        return partition, ends[topic_partition]
 
     async def on_partitions_assigned(self, assigned: Collection[TopicPartition]) -> None:
         """Позиции восстанавливаются из Kafka и транзакционной границы в PostgreSQL."""

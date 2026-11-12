@@ -262,8 +262,8 @@ CREATE INDEX livekit_sync_queue_next_attempt_at_idx ON meeting.livekit_sync_queu
 
 ## Схема `analytics`
 
-Схема и роль `analytics_svc` создаются init-скриптом; таблицы – миграциями analytics-service, вместе с задачами,
-которые их используют (проекции и агрегация – EMO-86, отчеты – EMO-87). DDL ниже – целевое состояние.
+Схема и роль `analytics_svc` создаются init-скриптом. Таблицы создают миграции analytics-service
+(проекции и агрегация – EMO-86, отчеты – EMO-87).
 
 ```sql
 -- Схема analytics (владелец analytics_svc). Начальная миграция Alembic analytics-service.
@@ -294,6 +294,21 @@ CREATE TABLE analytics.participant_projection (
 );
 CREATE INDEX participant_projection_meeting_idx ON analytics.participant_projection (meeting_id);
 
+CREATE TABLE analytics.consent_history (
+    participant_id  uuid        NOT NULL REFERENCES analytics.participant_projection (participant_id) ON DELETE CASCADE,
+    decided_at      timestamptz NOT NULL,
+    is_granted      boolean     NOT NULL,
+    PRIMARY KEY (participant_id, decided_at)
+);
+
+CREATE TABLE analytics.sample_offsets (
+    partition       int         PRIMARY KEY,
+    next_offset     bigint      NOT NULL
+);
+
+CREATE TABLE analytics.deleted_meetings (meeting_id uuid PRIMARY KEY);
+CREATE TABLE analytics.deleted_owners (owner_id uuid PRIMARY KEY);
+
 -- Посекундные агрегаты. FK на проекцию намеренно нет: отсчеты и события встреч идут разными потоками
 -- и могут прийти в любом порядке. Удаление – явным DELETE по meeting_id (префикс PK).
 CREATE TABLE analytics.emotion_series (
@@ -309,6 +324,7 @@ CREATE TABLE analytics.emotion_series (
     p_sad           real,
     p_surprise      real,
     p_neutral       real,
+    model_version   text        NOT NULL,
     PRIMARY KEY (meeting_id, participant_id, ts),
     CONSTRAINT emotion_series_samples_ck CHECK (samples > 0 AND face_samples BETWEEN 0 AND samples),
     CONSTRAINT emotion_series_probs_ck CHECK (
@@ -347,6 +363,10 @@ CREATE TABLE analytics.reports (
     attempts       int         NOT NULL DEFAULT 0,
     generated_at   timestamptz,
     updated_at     timestamptz NOT NULL DEFAULT now(),
+    target_partition int,
+    target_offset  bigint,
+    locked_until   timestamptz,
+    sealed_at      timestamptz,
     CONSTRAINT reports_status_ck CHECK (status IN ('pending', 'ready', 'failed')),
     CONSTRAINT reports_ready_ck  CHECK (status <> 'ready' OR (summary IS NOT NULL AND generated_at IS NOT NULL))
 );

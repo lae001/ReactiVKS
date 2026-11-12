@@ -11,8 +11,10 @@ from analytics_service.api.reports import router
 from analytics_service.consumers.samples import SampleConsumer
 from analytics_service.models import OUTBOX
 from analytics_service.services.projections import ProjectEvents
+from analytics_service.services.reports import BuildReports
 from analytics_service.services.series import FlushSamples
 from analytics_service.settings import ALEMBIC_INI, AnalyticsSettings
+from analytics_service.workers.reports import run_reports
 from vks_common.app import HealthRegistry, create_app, use_database
 from vks_common.auth import JwksKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
@@ -55,7 +57,7 @@ def create_application(settings: AnalyticsSettings | None = None) -> FastAPI:
             topics=[Topic.MEETING_EVENTS, Topic.USER_EVENTS],
             group_id="analytics-projections",
             client_id=resolved.service_name,
-            handler=ProjectEvents(database.session_factory).execute,
+            handler=ProjectEvents(database.session_factory, clock).execute,
             dead_letters=producer,
             clock=clock,
         )
@@ -64,7 +66,11 @@ def create_application(settings: AnalyticsSettings | None = None) -> FastAPI:
             flush=FlushSamples(database.session_factory),
             clock=clock,
         )
+        reports = BuildReports(
+            database.session_factory, clock, samples.watermark, shift_threshold=resolved.report_shift_threshold
+        )
         tasks = [
+            asyncio.create_task(run_reports(reports), name="analytics-reports"),
             asyncio.create_task(run_outbox_relay(producer, relay), name="analytics-outbox"),
             asyncio.create_task(run_consumer(projections), name="analytics-projections"),
             asyncio.create_task(samples.run(), name="analytics-samples"),

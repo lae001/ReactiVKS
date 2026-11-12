@@ -16,6 +16,7 @@ from analytics_service.models import (
     deleted_meetings,
     meetings,
     participants,
+    reports,
     sample_offsets,
     series,
 )
@@ -44,6 +45,13 @@ class SeriesRepository:
             select(meetings).where(meetings.c.meeting_id.in_(ids)).order_by(meetings.c.meeting_id).with_for_update()
         )
         return {row.meeting_id: row for row in rows.mappings()}
+
+    async def sealed(self, ids: set[UUID]) -> set[UUID]:
+        return set(
+            await self.session.scalars(
+                select(reports.c.meeting_id).where(reports.c.meeting_id.in_(ids), reports.c.sealed_at.is_not(None))
+            )
+        )
 
     async def deleted(self, ids: set[UUID]) -> set[UUID]:
         return set(

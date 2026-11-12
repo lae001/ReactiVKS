@@ -13,6 +13,7 @@ from analytics_service.services.projections import ProjectEvents
 from analytics_service.services.series import FlushSamples
 from analytics_service.settings import AnalyticsSettings
 from vks_common.auth import use_authentication
+from vks_common.clock import FixedClock
 from vks_common.db import get_session
 from vks_common.testing import TokenFactory, app_client
 from vks_contracts import EventPayload, parse_event
@@ -24,7 +25,7 @@ pytestmark = pytest.mark.integration
 
 async def project(sessions: async_sessionmaker[AsyncSession], payload: EventPayload, at: datetime) -> None:
     envelope = envelope_for(payload, event_id=uuid4(), occurred_at=at, producer="test")
-    await ProjectEvents(sessions).execute(parse_event(envelope.model_dump_json()))
+    await ProjectEvents(sessions, FixedClock(at)).execute(parse_event(envelope.model_dump_json()))
 
 
 async def test_contiguous_offset_and_weighted_series(
