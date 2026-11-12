@@ -57,11 +57,45 @@
   #timeline { width: 100%; height: 160px; display: block; }
   .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
   .col { display: grid; gap: 16px; align-content: start; }
+  /* Режимы: организатор видит итог, разработчик – все модули. */
+  .seg { display: inline-flex; }
+  .seg button { border-radius: 0; margin-left: -1px; }
+  .seg button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+  .seg button:last-child { border-radius: 0 8px 8px 0; }
+  .seg button.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+  body:not(.dev) .dev-only { display: none; }
+  body.idle .needs-data { display: none; }
+  .summary { font-size: 22px; font-weight: 650; line-height: 1.3; }
+  .summary-sub { color: var(--muted); margin-top: 6px; }
+  .ind { display: grid; grid-template-columns: 120px 1fr; gap: 10px 12px; align-items: center; }
+  .ind .k { color: var(--muted); }
+  .ind .v { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .ind .v small { font-weight: 400; color: var(--muted); }
+  .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+  .feed { max-height: 260px; overflow: auto; font-size: 13px; }
+  .feed div { padding: 5px 0; border-bottom: 1px solid var(--line); display: flex; gap: 10px; }
+  .feed time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+  .feed .empty { color: var(--muted); border: none; }
+  .step { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .step:last-child { border-bottom: none; }
+  .step > b { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--line); color: var(--muted); }
+  .step.cur > b { background: var(--accent); color: #fff; }
+  .step.cur { font-weight: 600; }
+  .step.done > b { background: #1f9d55; color: #fff; }
+  .step.done { color: var(--muted); }
+  .step .note { margin-top: 2px; font-weight: 400; }
+  .step.done .note, .step.done .track { display: none; }
+  .step .track { height: 6px; margin-top: 6px; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent); } }
+  .step.cur button { animation: pulse 1.4s infinite; }
 </style>
 </head>
-<body>
+<body class="idle">
 <header>
   <h1>ReactiVKS · распознавание эмоций вживую</h1>
+  <span class="seg" title="Организатор – итог простыми словами; разработчик – все модули и сырые значения">
+    <button data-mode="org" class="sel">Организатор</button><button data-mode="dev">Разработчик</button>
+  </span>
   <button id="start" class="primary">Включить камеру</button>
   <select id="camera" title="Камера"></select>
   <label>Частота <select id="fps">
@@ -79,14 +113,31 @@
     <div class="stage">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
-      <div class="placeholder" id="placeholder">Нажмите «Включить камеру». Кадры обрабатываются на этом компьютере и не сохраняются.</div>
+      <div class="placeholder" id="placeholder">Шаг 1: нажмите «Включить камеру» – ниже или в шапке.<br>Кадры обрабатываются на этом компьютере и не сохраняются.</div>
     </div>
-    <div class="card">
+    <div class="card" id="steps">
+      <h2 id="steps-title">Как начать – 3 шага</h2>
+      <div class="step" id="step1"><b>1</b>
+        <div>Включите камеру<div class="note">Кадры обрабатываются на этом компьютере и не сохраняются.</div></div>
+        <button class="primary" id="step1-btn">Включить камеру</button></div>
+      <div class="step" id="step2"><b>2</b>
+        <div>Откалибруйте нейтральное лицо<div class="note">Нажмите и 3 секунды спокойно смотрите в камеру – эмоции будут считаться относительно вашего обычного лица.</div>
+          <div class="track"><div class="fill" id="step2-progress" style="background:var(--accent)"></div></div></div>
+        <button id="step2-btn">Откалибровать</button></div>
+      <div class="step" id="step3"><b>3</b>
+        <div>Поставьте 5 кадр/с<div class="note">Кивки, покачивания и речь ловятся надежнее.</div></div>
+        <button id="step3-btn">5 кадр/с</button></div>
+    </div>
+    <div class="card needs-data">
+      <h2>Лента событий</h2>
+      <div class="feed" id="feed"><div class="empty">Здесь появятся кивки, покачивания головой, начало и конец речи, отвлечения – с временем.</div></div>
+    </div>
+    <div class="card needs-data">
       <h2>Динамика за последнюю минуту: 5 групп эмоций (заливка) и заинтересованность (пунктир)</h2>
       <canvas id="timeline"></canvas>
       <div class="legend" id="legend"></div>
     </div>
-    <div class="card">
+    <div class="card needs-data">
       <h2>Мониторинг в цифрах: что работает и как</h2>
       <table class="mon">
         <thead><tr><th>Модуль / показатель</th><th>Состояние</th><th style="text-align:right">Сейчас</th><th style="text-align:right">За минуту</th></tr></thead>
@@ -98,7 +149,22 @@
   </div>
 
   <div class="col">
-    <div class="card">
+    <div class="card needs-data">
+      <h2>Итог</h2>
+      <div class="summary" id="summary">—</div>
+      <div class="summary-sub" id="summary-sub">за последнюю минуту</div>
+    </div>
+    <div class="card needs-data">
+      <h2>Состояние участника</h2>
+      <div class="ind">
+        <span class="k">Эмоция</span><span class="v"><i class="dot" id="i-emo-dot"></i><span id="i-emo">—</span></span>
+        <span class="k">Внимание</span><span class="v"><i class="dot" id="i-att-dot"></i><span id="i-att">—</span></span>
+        <span class="k">Согласие</span><span class="v"><i class="dot" id="i-gest-dot"></i><span id="i-gest">жестов пока не было</span></span>
+        <span class="k">Речь</span><span class="v"><i class="dot" id="i-speech-dot"></i><span id="i-speech">—</span></span>
+        <span class="k">Усталость</span><span class="v"><i class="dot" id="i-fat-dot"></i><span id="i-fat">—</span></span>
+      </div>
+    </div>
+    <div class="card dev-only">
       <h2>Сейчас</h2>
       <div class="dominant">
         <div class="swatch" id="swatch"></div>
@@ -114,16 +180,16 @@
         <div style="color:var(--muted);font-size:12px">Что видит модель: кроп лица 48×48 в оттенках серого – так же выглядят обучающие изображения FER-2013.</div>
       </div>
     </div>
-    <div class="card">
+    <div class="card needs-data">
       <h2>Эмоции (5 групп – так видит организатор)</h2>
-      <div class="dominant" style="margin-bottom:10px">
+      <div class="dominant dev-only" style="margin-bottom:10px">
         <div class="swatch" id="grp-swatch"></div>
         <div><div class="big" id="grp-dominant">—</div><div style="color:var(--muted)">преобладающая группа</div></div>
       </div>
       <div class="bars" id="groups"></div>
       <div class="note">Недовольство = гнев + отвращение, напряжение = грусть + страх: эти классы модель путает между собой, а на встрече они значат одно и то же (точность 5 групп на тесте – 75 % против 70 % у 7 классов).</div>
     </div>
-    <div class="card">
+    <div class="card dev-only">
       <h2>Согласие, усталость, речь</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <span id="agree-chip" class="chip">жест: —</span>
@@ -137,7 +203,7 @@
       </div>
       <div class="note" id="fat-note">Согласие – обычный кивок, несогласие – покачивание головой: достаточно одного движения туда и обратно (≈ 5–10°), сигнал держится 2,5 с; при 5 кадр/с ловится надежнее. Усталость – доля времени с прикрытыми глазами (PERCLOS), зевки и опущенная голова за 30 с; первая оценка – через 10 с. Речь – по движению губ и уголков рта за 2 с (с 40 % – «говорит») и состоянию микрофона (кнопка в шапке): говорит / молчит / разговаривает в комнате при выключенном микрофоне.</div>
     </div>
-    <div class="card">
+    <div class="card dev-only">
       <h2>Калибровка под вас</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button id="calibrate" class="primary">Откалибровать нейтральное лицо</button>
@@ -147,7 +213,7 @@
       <div class="track" style="margin-top:10px"><div class="fill" id="cal-progress" style="background:var(--accent)"></div></div>
       <div class="note">Нажмите и 3 секунды смотрите в камеру со спокойным лицом. Дальше эмоции считаются относительно вашего нейтрального выражения: свет, ракурс и индивидуальные черты лица перестают сдвигать ответ в сторону «Грусти».</div>
     </div>
-    <div class="card">
+    <div class="card dev-only">
       <h2>Внешние признаки</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <span id="attr-glasses" class="chip">очки: —</span>
@@ -155,7 +221,7 @@
       </div>
       <div class="note" id="attr-note">Очки закрывают глаза и брови, борода – рот и подбородок. Мимика закрытых зон в оценке не участвует, вес оценки по мимике подобран отдельно для каждого случая.</div>
     </div>
-    <div class="card">
+    <div class="card dev-only">
       <h2>Сбор выборки (оценка на своих лицах)</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <select id="rec-label">
@@ -167,7 +233,7 @@
       </div>
       <div class="note" id="rec-count">Изобразите выбранную эмоцию и нажмите «Записать». Сохраняются только кроп лица 48×48 и коэффициенты мимики – локально, в ml/training/data/own.</div>
     </div>
-    <div class="card">
+    <div class="card dev-only">
       <h2>Внимание</h2>
       <div class="dominant" style="margin-bottom:10px">
         <div class="swatch" id="att-swatch"></div>
@@ -179,18 +245,18 @@
       </div>
       <div class="note">По позе головы (3D-модель сетки лица), положению зрачков и времени: «Заинтересован» – смотрит в камеру ≈ 5 с, «Отвлечен» – отвернулся, отвел взгляд или вышел из кадра ≈ 2,5 с.</div>
     </div>
-    <div class="card">
+    <div class="card dev-only">
       <h2>Мимика (сетка 478 точек)</h2>
       <div class="bars" id="expr"><div style="color:var(--muted)">сетка лица не построена</div></div>
       <div class="note">Коэффициенты MediaPipe 0–1. Удивление – брови вверх + глаза широко + рот открыт; радость – улыбка и прищур; гнев – брови сведены.</div>
     </div>
-    <details class="card">
+    <details class="card dev-only">
       <summary><h2 style="display:inline">Подробно: 7 классов модели (для разработчика)</h2></summary>
       <div class="bars" id="bars" style="margin-top:10px"></div>
       <div class="note">Полоса – сглаженное значение (EMA, его видит организатор), риска – ответ на текущем кадре (CNN по пикселям, смешанная с оценкой по мимике).</div>
       <div class="note" id="sources"></div>
     </details>
-    <div class="card">
+    <div class="card dev-only">
       <h2>Конвейер</h2>
       <dl class="stats">
         <dt>Модель</dt><dd id="s-model">—</dd>
@@ -254,6 +320,7 @@ async function startCamera() {
   const track = stream.getVideoTracks()[0];
   $("camera").value = track.getSettings().deviceId || "";
   $("start").textContent = "Выключить камеру";
+  updateSteps();
   connect();
 }
 
@@ -263,6 +330,7 @@ function stopCamera() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = null;
   $("start").textContent = "Включить камеру";
+  if (typeof updateSteps === "function") updateSteps();
   setStatus("камера выключена", "");
   overlay.getContext("2d").clearRect(0, 0, overlay.width, overlay.height);
 }
@@ -411,10 +479,141 @@ function renderExtras(r) {
   }
 }
 
+// ---------- Режим организатора: итог словами, индикаторы, лента событий, шаги ----------
+const plural = (n, one, few, many) => {
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+};
+const times = (n) => `${n} ${plural(n, "раз", "раза", "раз")}`;
+const clock = () => new Date().toLocaleTimeString("ru-RU");
+const ago = (t) => { const s = Math.round((performance.now() - t) / 1000); return s < 2 ? "только что" : `${s} с назад`; };
+const DOT = { ok: "#1f9d55", bad: "#c2410c", warn: "#c27c0e", talk: "#0e7490", idle: "var(--line)" };
+
+function countGestures() {
+  let nods = 0, shakes = 0;
+  for (let i = 1; i < history.length; i++) {
+    if (history[i].agreement === "agree" && history[i - 1].agreement !== "agree") nods++;
+    if (history[i].agreement === "disagree" && history[i - 1].agreement !== "disagree") shakes++;
+  }
+  return { nods, shakes };
+}
+
+const events = [];
+const prevEv = { face: null, agreement: "none", speech: null, att: null, fatigue: null, group: null, cand: null, candN: 0, cal: null };
+let lastGesture = null, faceSince = null;
+
+function logEvent(icon, text) {
+  events.unshift({ time: clock(), icon, text });
+  if (events.length > 60) events.pop();
+  $("feed").innerHTML = events.map((e) => `<div><time>${e.time}</time><span>${e.icon} ${e.text}</span></div>`).join("");
+}
+
+function detectEvents(r) {
+  const face = r.state === "analyzing", b = r.behavior, a = r.attention, p = prevEv;
+  if (face !== p.face) {
+    if (face) logEvent("🙂", "лицо в кадре"); else if (p.face !== null) logEvent("⚠", "лицо пропало из кадра");
+    p.face = face;
+  }
+  if (!face) return;
+  if (b) {
+    if (b.agreement !== p.agreement && b.agreement !== "none") {
+      logEvent(b.agreement === "agree" ? "✓" : "✗", b.agreement === "agree" ? "кивнул – согласие" : "покачал головой – несогласие");
+      lastGesture = { kind: b.agreement, t: performance.now() };
+    }
+    p.agreement = b.agreement;
+    if (b.speech != null && b.speech !== p.speech) {
+      if (b.speech === "speaking") logEvent("🗣", "начал говорить (микрофон включен)");
+      else if (b.speech === "side_talk") logEvent("🗣", "разговаривает в комнате (микрофон выключен)");
+      else if (p.speech) logEvent("🤐", "замолчал");
+      p.speech = b.speech;
+    }
+    if (b.fatigue != null && b.fatigue !== p.fatigue) {
+      if (b.fatigue === "tired") logEvent("😴", "признаки усталости"); else if (p.fatigue) logEvent("☀", "снова бодр");
+      p.fatigue = b.fatigue;
+    }
+  }
+  if (a && a.state !== p.att) {
+    if (a.state === "distracted") logEvent("👀", "отвлекся");
+    else if (a.state === "engaged") logEvent("🎯", "заинтересован – смотрит в камеру");
+    p.att = a.state;
+  }
+  // Смена эмоции – только если новая группа держится 3 кадра подряд, иначе лента мерцает.
+  if (r.dominant_group === p.cand) p.candN++; else { p.cand = r.dominant_group; p.candN = 1; }
+  if (p.candN >= 3 && p.cand !== p.group) {
+    logEvent("●", `эмоция: ${GROUPS[p.cand][0]}`);
+    p.group = p.cand;
+  }
+  const cal = r.calibration && r.calibration.state;
+  if (cal === "ready" && p.cal !== "ready") logEvent("⚙", "калибровка готова");
+  p.cal = cal;
+}
+
+function setInd(id, text, dot) { $(id).innerHTML = text; $(id + "-dot").style.background = DOT[dot] || dot; }
+
+function renderOrganizer(r) {
+  detectEvents(r);
+  const face = r.state === "analyzing", b = r.behavior, a = r.attention;
+  if (face) faceSince = faceSince || performance.now(); else faceSince = null;
+  const { nods, shakes } = countGestures();
+
+  // Индикаторы – словами и цветом.
+  if (!face) {
+    for (const id of ["i-emo", "i-att", "i-speech", "i-fat"]) setInd(id, "лица нет в кадре", "idle");
+  } else {
+    setInd("i-emo", `${GROUPS[r.dominant_group][0]} <small>${(r.groups[r.dominant_group] * 100).toFixed(0)} %</small>`, groupColor(r.dominant_group));
+    if (a) setInd("i-att", a.state === "engaged" ? "Заинтересован" : a.state === "distracted" ? "Отвлекся" : a.looking ? "Смотрит в камеру" : "Смотрит в сторону",
+      a.state === "engaged" ? "ok" : a.state === "distracted" ? "bad" : "idle");
+    if (!b) { setInd("i-speech", "нужна сетка лица", "idle"); setInd("i-fat", "нужна сетка лица", "idle"); }
+    else {
+      setInd("i-speech", b.speech == null ? "оцениваем…" : b.speech === "speaking" ? "Говорит" : b.speech === "side_talk" ? "Разговаривает в комнате <small>микрофон выключен</small>" : "Молчит",
+        b.speech === "speaking" ? "talk" : b.speech === "side_talk" ? "warn" : "idle");
+      const wait = faceSince ? Math.max(0, 10 - Math.round((performance.now() - faceSince) / 1000)) : 10;
+      setInd("i-fat", b.fatigue == null ? `оценка через ${wait} с` : b.fatigue === "tired" ? "Устал" : "Бодр", b.fatigue === "tired" ? "bad" : b.fatigue ? "ok" : "idle");
+    }
+  }
+  const active = b && b.agreement !== "none";
+  if (active) setInd("i-gest", b.agreement === "agree" ? "✓ Да – кивает" : "✗ Нет – качает головой", b.agreement === "agree" ? "ok" : "bad");
+  else if (lastGesture) setInd("i-gest", `жеста нет <small>последний: ${lastGesture.kind === "agree" ? "✓ да" : "✗ нет"}, ${ago(lastGesture.t)}</small>`, "idle");
+  else setInd("i-gest", "жестов пока не было", "idle");
+
+  // Итог одной фразой.
+  if (!face) { $("summary").textContent = "Лица нет в кадре"; }
+  else {
+    const parts = [GROUPS[r.dominant_group][0]];
+    if (a) parts.push(a.state === "engaged" ? "заинтересован" : a.state === "distracted" ? "отвлекся" : a.looking ? "смотрит в камеру" : "смотрит в сторону");
+    if (nods) parts.push(`кивнул ${times(nods)}`);
+    if (shakes) parts.push(`покачал головой ${times(shakes)}`);
+    if (b && b.speech) parts.push(b.speech === "speaking" ? "говорит" : b.speech === "side_talk" ? "разговаривает в комнате" : "молчит");
+    if (b && b.fatigue === "tired") parts.push("устал");
+    $("summary").textContent = parts.join(" · ");
+  }
+  const talk = history.filter((p) => p.speech === "speaking" || p.speech === "side_talk").length / Math.max(1, history.filter((p) => p.face).length);
+  $("summary-sub").textContent = `за последнюю минуту: кивков ${nods}, покачиваний ${shakes}, говорил ${(talk * 100).toFixed(0)} % времени`;
+}
+
+let calState = "none";
+function updateSteps() {
+  const fps = Number($("fps").value);
+  const done = [!!stream, calState === "ready", fps >= 5 || fps === 0];
+  const cur = done.indexOf(false);
+  done.forEach((d, i) => {
+    const el = $("step" + (i + 1));
+    el.className = "step" + (d ? " done" : "") + (i === cur ? " cur" : "");
+    el.querySelector("b").textContent = d ? "✓" : i + 1;
+  });
+  $("step1-btn").style.display = done[0] ? "none" : "";
+  $("step2-btn").textContent = calState === "collecting" ? "Калибровка…" : done[1] ? "Перекалибровать" : "Откалибровать";
+  $("step2-btn").disabled = !done[0] || calState === "collecting";
+  $("step3-btn").style.display = done[2] ? "none" : "";
+  $("steps-title").textContent = cur === -1 ? "Готово к работе ✓" : `Как начать – шаг ${cur + 1} из 3`;
+}
+
 function render(r) {
   last = r;
+  document.body.classList.remove("idle");
   renderExtras(r);
   renderCalibration(r.calibration);
+  if (r.calibration) { calState = r.calibration.state; $("step2-progress").style.width = (r.calibration.progress * 100).toFixed(0) + "%"; updateSteps(); }
   renderAttention(r.attention);
   history.push({
     t: performance.now(), groups: r.groups || null, interest: r.attention ? r.attention.interest : null,
@@ -459,21 +658,17 @@ function render(r) {
   }
   drawTimeline();
   renderMonitor(r);
+  renderOrganizer(r);
 }
 
 const pct = (v, d = 0) => (v == null || Number.isNaN(v) ? "—" : (v * 100).toFixed(d) + " %");
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 function renderMonitor(r) {
-  const h = history, n = h.length;
+  const h = history;
   const faced = h.filter((p) => p.face);
   const share = (pred, list = h) => (list.length ? list.filter(pred).length / list.length : null);
-  // Число жестов за минуту: переходы «нет жеста» → «согласие» / «несогласие».
-  let nods = 0, shakes = 0;
-  for (let i = 1; i < n; i++) {
-    if (h[i].agreement === "agree" && h[i - 1].agreement !== "agree") nods++;
-    if (h[i].agreement === "disagree" && h[i - 1].agreement !== "disagree") shakes++;
-  }
+  const { nods, shakes } = countGestures();  // переходы «нет жеста» → «согласие» / «несогласие» за минуту
   const b = r.behavior, a = r.attention, at = r.attributes, cal = r.calibration;
   const st = (cls, text) => `<span class="st ${cls}">${text}</span>`;
   const rows = [];
@@ -655,6 +850,21 @@ $("mic").onclick = () => {
   sendMic();
 };
 $("reset-cal").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "reset_calibration" }));
+// Шаги «Как начать» и режимы.
+$("step1-btn").onclick = () => startCamera().catch((e) => setStatus("нет доступа к камере: " + e.message, "warn"));
+$("step2-btn").onclick = () => $("calibrate").onclick();
+$("step3-btn").onclick = () => { $("fps").value = "5"; updateSteps(); };
+$("fps").addEventListener("change", updateSteps);
+function setMode(mode) {
+  document.body.classList.toggle("dev", mode === "dev");
+  document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("sel", b.dataset.mode === mode));
+  try { localStorage.setItem("demo-mode", mode); } catch (e) { /* без сохранения режима */ }
+}
+document.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+let savedMode = "org";
+try { savedMode = localStorage.getItem("demo-mode") || "org"; } catch (e) { /* по умолчанию – организатор */ }
+setMode(savedMode);
+updateSteps();
 listCameras().catch(() => {});
 </script>
 </body>
