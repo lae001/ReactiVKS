@@ -233,12 +233,12 @@ CREATE INDEX processed_webhooks_received_at_idx ON meeting.processed_webhooks (r
 CREATE TABLE meeting.livekit_sync_queue (
     id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     meeting_id      uuid        NOT NULL,
-    participant_id  uuid        NOT NULL,
+    participant_id  uuid        NOT NULL UNIQUE,
     attributes      jsonb       NOT NULL,
+    revision        bigint      NOT NULL DEFAULT 1,
     attempts        int         NOT NULL DEFAULT 0,
-    next_attempt_at timestamptz NOT NULL DEFAULT now(),
-    last_error      text,
-    created_at      timestamptz NOT NULL DEFAULT now()
+    locked_until    timestamptz,
+    next_attempt_at timestamptz NOT NULL
 );
 CREATE INDEX livekit_sync_queue_next_attempt_at_idx ON meeting.livekit_sync_queue (next_attempt_at);
 

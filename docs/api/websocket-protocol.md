@@ -25,7 +25,7 @@
 
 | type | Поля | Когда |
 |---|---|---|
-| `welcome` | `user_id`, `server_time` | После успешного `auth` |
+| `welcome` | `user_id`, `server_time` | После успешного `auth` или `auth.refresh` |
 | `subscribed` | `meeting_id`, `snapshot` | После `subscribe` |
 | `emotion.update` | `meeting_id`, `items[]` | Пакет обновлений (не чаще 4/с) |
 | `participant.status` | `meeting_id`, `participant_id`, `display_name`, `state` | Вход/выход, изменение согласия |
@@ -78,8 +78,9 @@
 | 4400 | Некорректное сообщение |
 | 4401 | Нет или истек токен |
 | 4403 | Нет доступа к встрече |
-| 4408 | Не выполнены `auth`/`subscribe` в течение 10 с |
+| 4408 | Не выполнены `auth`/`subscribe` в течение 10 с или не было `ping` 60 с |
 | 1012 | Перезапуск сервиса (клиент переподключается) |
+| 1013 | Клиент слишком медленно читает обновления |
 
 ## Переподключение
 

@@ -18,7 +18,10 @@ from meeting_service.domain.livekit import (
     WebhookVerifier,
     meeting_id_of_room,
     participant_id_of_identity,
+    room_access,
 )
+from meeting_service.domain.meetings import MeetingStatus
+from meeting_service.repositories.livekit_sync import LiveKitSyncQueue
 from meeting_service.repositories.meetings import MeetingRepository
 from meeting_service.repositories.outbox import EventOutbox
 from meeting_service.repositories.participants import ParticipantRepository
@@ -40,6 +43,7 @@ class HandleLiveKitWebhook:
         self._session = session
         self._meetings = MeetingRepository(session)
         self._participants = ParticipantRepository(session)
+        self._sync_queue = LiveKitSyncQueue(session)
         self._webhooks = ProcessedWebhooks(session)
         self._events = EventOutbox(session)
         self._clock = clock
@@ -78,12 +82,18 @@ class HandleLiveKitWebhook:
         participant_id = participant_id_of_identity(event.identity)
         if event.is_agent or participant_id is None:
             return
+        # Блокировка сериализует чтение согласия и запись в очередь с запросом смены согласия.
+        meeting = await self._meetings.lock(meeting_id) if event.kind is RoomEventKind.PARTICIPANT_JOINED else None
         participant = await self._participants.get(participant_id, meeting_id)
         if participant is None:
             _logger.warning("webhook for unknown participant", participant_id=str(participant_id))
             return
         at = event.occurred_at or now
         if event.kind is RoomEventKind.PARTICIPANT_JOINED:
+            if meeting is not None and meeting.status is MeetingStatus.ACTIVE and meeting.analysis_enabled:
+                if not participant.is_removed:
+                    # Токен LiveKit мог быть выдан до последнего решения о согласии.
+                    await self._sync_queue.enqueue(participant, room_access(meeting, participant), now=now)
             await self._participants.mark_joined(participant.id, at=at, now=now)
             await self._events.add(participant_joined(participant, joined_at=at), occurred_at=at)
         else:

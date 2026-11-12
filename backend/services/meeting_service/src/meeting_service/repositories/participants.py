@@ -130,4 +130,5 @@ def _to_domain(row: ParticipantRow) -> Participant:
         first_joined_at=row.first_joined_at,
         last_joined_at=row.last_joined_at,
         last_left_at=row.last_left_at,
+        updated_at=row.updated_at,
     )

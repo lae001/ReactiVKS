@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import functools
-from collections.abc import Awaitable, Callable, Sequence
+import json
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import timedelta
 from typing import TypeVar
 
@@ -59,6 +60,7 @@ class LiveKitServerGateway:
         self._api_key = api_key
         self._api_secret = api_secret
         self._token_ttl = token_ttl
+        self._timeout_seconds = timeout_seconds
         self._retry_delays = tuple(retry_delays)
         # failover – переключение между регионами LiveKit Cloud; у собственного сервера регион один, а повторы
         # делаются здесь по правилам проекта.
@@ -74,14 +76,30 @@ class LiveKitServerGateway:
     def public_url(self) -> str:
         return self._public_url
 
-    async def ensure_room(self, room: str) -> None:
+    async def ensure_room(self, room: str, *, analysis_fps: int | None = None) -> None:
+        agents = []
+        if analysis_fps is not None:
+            agents.append(api.RoomAgentDispatch(agent_name="emotion-agent", metadata=json.dumps({"fps": analysis_fps})))
         request = api.CreateRoomRequest(
+            agents=agents,
             name=room,
             empty_timeout=ROOM_EMPTY_TIMEOUT_SECONDS,
             departure_timeout=ROOM_DEPARTURE_TIMEOUT_SECONDS,
             max_participants=MAX_ROOM_PARTICIPANTS,
         )
         await self._call("CreateRoom", lambda: self._api.room.create_room(request))
+
+    async def update_attributes(self, room: str, identity: str, attributes: Mapping[str, str]) -> None:
+        request = api.UpdateParticipantRequest(room=room, identity=identity, attributes=dict(attributes))
+        try:
+            # Повтор берет актуальное решение из очереди.
+            async with asyncio.timeout(min(self._timeout_seconds, 3)):
+                await self._api.room.update_participant(request)
+        except api.TwirpError as error:
+            if error.code != api.TwirpErrorCode.NOT_FOUND:
+                raise LiveKitUnavailable() from error
+        except (aiohttp.ClientError, TimeoutError) as error:
+            raise LiveKitUnavailable() from error
 
     async def delete_room(self, room: str) -> None:
         try:

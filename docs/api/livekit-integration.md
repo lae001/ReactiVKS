@@ -44,7 +44,7 @@ emotion-ml-service. Клиентская часть использует офи�
 | Операция | Когда |
 |---|---|
 | `CreateRoom(name, empty_timeout=300, departure_timeout=20, max_participants=11)` | Первый вход организатора |
-| `CreateDispatch(room, agent_name="emotion-agent", metadata={"fps": 3})` | После создания комнаты, если анализ включен |
+| `CreateRoom(agents=[{agent_name: "emotion-agent", metadata: "{\"fps\": 3}"}])` | Диспетчеризация при создании комнаты с анализом. В `fps` передается настройка встречи |
 | `UpdateParticipant(room, identity, attributes)` | Изменение согласия |
 | `GetParticipant(room, identity)`, `MutePublishedTrack(room, identity, track_sid, muted=true)` | Модерация (выключить микрофон/камеру): все невыключенные треки вида `audio` или `video` |
 | `RemoveParticipant(room, identity)` | Модерация (удалить); повторный вход того же участника блокируется флагом в БД |

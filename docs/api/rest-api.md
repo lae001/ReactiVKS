@@ -289,8 +289,11 @@ cookie очищается. Выданный access-токен действует
 ### `PUT /participants/me/consent`
 
 Аутентификация – `Participant <token>` либо `Bearer` + параметр `?meeting_id=` (организатор). Запрос
-`{"decision": "granted" | "revoked"}`. Ответы: `200 ConsentResult` (LiveKit синхронизирован) или
-`202 ConsentResult` (`synced = false`, синхронизация в очереди); `401`; `409 analysis_disabled` | `meeting_ended`.
+`{"decision": "granted" | "revoked", "notice_version"?: string}`. Если при выдаче согласия указана версия уведомления,
+она должна совпасть с текущей. Ответ `ConsentResult`: `{"consent_state": "granted" | "revoked", "synced": boolean}`.
+`200` — состояние применено в LiveKit либо участник отключен и получит актуальное состояние при входе.
+`202` — доставка в очереди. Ошибки: `401`; `404`; `409 analysis_disabled` | `meeting_ended` | `meeting_cancelled` |
+`meeting_not_started` | `participant_removed` | `notice_outdated`; `422`.
 
 ### `POST /participants/me/rejoin`
 
@@ -322,9 +325,12 @@ cookie очищается. Выданный access-токен действует
 
 ### Внутренний API
 
+Оба запроса требуют заголовок `X-Service-Token` со значением `SERVICE_TOKEN`.
+
 - `GET /internal/meetings/{meeting_id}/access?user_id=` →
-  `200 {"allowed": true, "meeting_status": "active", "analysis_enabled": true}`.
+  `200 {"allowed": true, "meeting_status": "active", "analysis_enabled": true}`. При отказе `allowed = false`.
 - `GET /internal/meetings/{meeting_id}` → `200 Meeting + {"owner_id", "participants": Participant[]}`; `404`.
+  У участников дополнительно передаются `last_joined_at` и `updated_at`.
 
 ## 4. analytics-service
 

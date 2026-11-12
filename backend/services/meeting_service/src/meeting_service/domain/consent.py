@@ -12,6 +12,7 @@ from meeting_service.domain.participants import ConsentState
 
 __all__ = [
     "CURRENT_NOTICE",
+    "ConsentChange",
     "ConsentDecision",
     "ConsentNotice",
     "ConsentRecord",
@@ -25,6 +26,13 @@ class ConsentDecision(StrEnum):
 
     GRANTED = "granted"
     DENIED = "denied"
+
+
+class ConsentChange(StrEnum):
+    """Решение участника во время встречи."""
+
+    GRANTED = "granted"
+    REVOKED = "revoked"
 
 
 @dataclass(frozen=True, slots=True)
