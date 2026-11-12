@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// Вход, лобби и комната против НАСТОЯЩИХ auth-service (8001), meeting-service (8002) и LiveKit с вебхуками
+// Вход, лобби и комната против НАСТОЯЩИХ auth-service (8001), meeting-service (8012) и LiveKit с вебхуками
 // (VITE_API_MODE=http): один Chromium с фейковыми камерой и микрофоном, два контекста (организатор и гость).
 // Сервисы поднимаются вручную (docs/testing/sprint4-frontend-status.md); Vite поднимает сам Playwright.
 export default defineConfig({

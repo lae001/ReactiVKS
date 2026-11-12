@@ -4,37 +4,37 @@
       "width": 640,
       "height": 480,
       "presentedFrames": 5,
-      "framesDecodedBefore": 7,
-      "framesDecodedAfter": 14
+      "framesDecodedBefore": 12,
+      "framesDecodedAfter": 19
     },
     "guestToOrganizer": {
       "width": 640,
       "height": 480,
       "presentedFrames": 5,
-      "framesDecodedBefore": 13,
-      "framesDecodedAfter": 18
+      "framesDecodedBefore": 18,
+      "framesDecodedAfter": 25
     },
     "audioBefore": {
-      "organizer": 4422,
-      "guest": 9665
+      "organizer": 7159,
+      "guest": 12937
     },
     "audioAfter": {
-      "organizer": 6279,
-      "guest": 12308
+      "organizer": 8433,
+      "guest": 14414
     }
   },
   "camera-resumed": {
     "width": 640,
     "height": 480,
     "presentedFrames": 5,
-    "framesDecodedBefore": 39,
-    "framesDecodedAfter": 45
+    "framesDecodedBefore": 45,
+    "framesDecodedAfter": 51
   },
   "organizer-camera-resumed": {
     "width": 640,
     "height": 480,
-    "presentedFrames": 5,
-    "framesDecodedBefore": 16,
-    "framesDecodedAfter": 22
+    "presentedFrames": 6,
+    "framesDecodedBefore": 20,
+    "framesDecodedAfter": 28
   }
 }

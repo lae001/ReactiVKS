@@ -8,7 +8,7 @@ import {
   TRACK_PEER_CONNECTIONS,
 } from './media-helpers';
 
-// Те же шаги, что в room.room.ts, но против НАСТОЯЩИХ auth-service (8001) и meeting-service (8002) и LiveKit
+// Те же шаги, что в room.room.ts, но против НАСТОЯЩИХ auth-service (8001) и meeting-service (8012) и LiveKit
 // с вебхуками: никакой подмены /api/v1/auth, организатор входит через форму /login.
 // Учетные данные тестового организатора передаются переменными окружения и в репозиторий не попадают:
 //   E2E_REAL_EMAIL, E2E_REAL_PASSWORD (пользователь должен существовать: POST /api/v1/auth/register).
@@ -192,7 +192,7 @@ test('настоящий бэкенд: организатор создает и 
   await expect(guestRow).toContainText('Анализ разрешен');
   await consentToggle(org).click();
   await expect(org.getByRole('alert')).toContainText(unsupported);
-  // панель эмоций – на моке, и это сказано в интерфейсе
+  // Отсутствующий realtime-сервис не подменяется демонстрационными эмоциями.
   await org.getByRole('button', { name: 'Эмоции' }).click();
   await expect(org.getByRole('tabpanel')).toContainText('Данных участников пока нет.');
 
@@ -252,6 +252,35 @@ test('настоящий бэкенд: организатор создает и 
     body: JSON.stringify(await measureRemoteVideo(guest, orgIdentity)),
     contentType: 'application/json',
   });
+
+  // Повторный вход в той же вкладке сохраняет участника, не увеличивая счётчик.
+  await guest.getByRole('button', { name: 'Выйти', exact: true }).click();
+  await guest.getByRole('button', { name: 'Вернуться во встречу' }).click();
+  await expect(guest.getByTestId('lk-state')).toHaveAttribute('data-state', 'connected');
+  await expect(org.getByTestId('lk-gallery')).toHaveAttribute('data-tiles', '2');
+  await measureRemoteVideo(org, guestIdentity);
+  // Реальная комната на узком экране: документы не прокручиваются, завершение доступно.
+  await org.setViewportSize({ width: 390, height: 844 });
+  const endButton = org.getByRole('button', { name: 'Завершить встречу', exact: true });
+  await expect(endButton).toBeVisible();
+  await expect
+    .poll(() =>
+      org.evaluate(
+        () =>
+          document.documentElement.scrollWidth <= innerWidth &&
+          document.documentElement.scrollHeight <= innerHeight,
+      ),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      endButton.evaluate((element) => {
+        const r = element.getBoundingClientRect();
+        return element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+      }),
+    )
+    .toBe(true);
+  await org.setViewportSize({ width: 1280, height: 720 });
 
   // Отказ устройства моделируется на границе getUserMedia, транспорт и серверы настоящие.
   await guest.getByRole('button', { name: 'Камера', exact: true }).click();
