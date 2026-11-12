@@ -69,7 +69,7 @@ export function MeetingReport({ report, series }: { report: Report; series: Seri
         <CardHeader>
           <CardTitle>Эмоции по ходу встречи</CardTitle>
           <CardDescription>
-            Доли вероятностей всех участников, давших согласие. Цифры у линий — отметки моментов.
+            Вероятности эмоций выбранного ряда. Цифры у линий — отметки моментов.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

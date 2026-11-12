@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/shared/api/client';
 import type { Report, SeriesPoint } from '@/shared/api/types';
@@ -13,6 +14,7 @@ export interface ReportSeries {
 
 /** Ряды участников сохраняются отдельно: усреднение без количества samples исказило бы результат. */
 export function RemoteReport({ meetingId }: { meetingId: string }) {
+  const [selectedId, setSelectedId] = useState('');
   const report = useQuery({
     queryKey: ['report', meetingId],
     queryFn: ({ signal }) => apiFetch<Report>(`/api/v1/reports/${meetingId}`, { signal }),
@@ -48,24 +50,30 @@ export function RemoteReport({ meetingId }: { meetingId: string }) {
   if (!series.data) return <p role="status">Загружаем графики…</p>;
   if (series.data.labels.join() !== EMOTION_LABELS.join())
     return <p role="alert">Формат классов эмоций несовместим.</p>;
+  const selected =
+    series.data.series.find((row) => row.participant_id === selectedId) ?? series.data.series[0];
   return (
     <div className="flex flex-col gap-6">
-      {series.data.series.length === 0 ? (
-        <p>Временных рядов нет.</p>
-      ) : (
-        series.data.series.map((row) => (
-          <section key={row.participant_id}>
-            <h2>
+      <label className="flex flex-col gap-2">
+        Ряд участника
+        <select
+          className="rounded-md border bg-background p-2"
+          value={selected?.participant_id ?? ''}
+          onChange={(event) => setSelectedId(event.target.value)}
+        >
+          {series.data.series.map((row) => (
+            <option key={row.participant_id} value={row.participant_id}>
               {report.data.summary.participants.find((p) => p.participant_id === row.participant_id)
                 ?.display_name ?? 'Участник'}
-            </h2>
-            <MeetingReport
-              report={report.data}
-              series={{ resolution: series.data.resolution, points: row.points }}
-            />
-          </section>
-        ))
-      )}
+            </option>
+          ))}
+        </select>
+      </label>
+      {!selected && <p>Временных рядов нет.</p>}
+      <MeetingReport
+        report={report.data}
+        series={{ resolution: series.data.resolution, points: selected?.points ?? [] }}
+      />
     </div>
   );
 }

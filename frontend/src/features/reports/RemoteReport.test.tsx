@@ -26,7 +26,7 @@ it('ошибка сервиса не подменяется демонстрац
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
 });
-it('pending показывает подготовку, failed — ошибку', async () => {
+it('failed показывает ошибку подготовки', async () => {
   vi.mocked(apiFetch).mockResolvedValue({ status: 'failed' });
   show();
   expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось сформировать');
@@ -57,4 +57,24 @@ it('готовый контракт отображает реальные пол
   expect(await screen.findByRole('heading', { name: 'Отчет по эмоциям' })).toBeInTheDocument();
   expect(screen.getByRole('img', { name: /График вероятностей/ })).toBeInTheDocument();
   expect(screen.getByText('Вопрос о сроках')).toBeInTheDocument();
+});
+
+it('несколько рядов не дублируют сводку отчёта', async () => {
+  const fixture = getMockReport('m-ended')!;
+  vi.mocked(apiFetch).mockImplementation(async (path) =>
+    path.endsWith('/series')
+      ? {
+          resolution: '5s',
+          labels: EMOTION_LABELS,
+          series: fixture.report.summary.participants.slice(0, 2).map((participant) => ({
+            participant_id: participant.participant_id,
+            points: fixture.series.points,
+          })),
+        }
+      : fixture.report,
+  );
+  show();
+  await screen.findByRole('combobox', { name: 'Ряд участника' });
+  expect(screen.getAllByRole('heading', { name: 'Отчет по эмоциям' })).toHaveLength(1);
+  expect(screen.getAllByRole('option')).toHaveLength(2);
 });
