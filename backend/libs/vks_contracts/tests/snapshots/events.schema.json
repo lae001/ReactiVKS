@@ -239,6 +239,34 @@
                 "default": null,
                 "title": "Fatigue Score"
               },
+              "mic_on": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Микрофон включен (LiveKit); None – неизвестно",
+                "title": "Mic On"
+              },
+              "mouth_activity": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Активность рта за 2 с",
+                "title": "Mouth Activity"
+              },
               "nod_score": {
                 "maximum": 1,
                 "minimum": 0,
@@ -265,6 +293,24 @@
                 "minimum": 0,
                 "title": "Shake Score",
                 "type": "number"
+              },
+              "speech": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "speaking",
+                      "silent",
+                      "side_talk"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "По движению губ и уголков рта (звук не анализируется): speaking – говорит при включенном микрофоне, side_talk – говорит при выключенном микрофоне (с кем-то в комнате), silent – молчит; None – мало кадров",
+                "title": "Speech"
               },
               "yawns_per_min": {
                 "anyOf": [

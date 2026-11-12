@@ -81,6 +81,9 @@ class EmotionPipeline:
         self.calibrator = calibrator or NeutralCalibrator()
         self.attribute_detector = attribute_detector
         self.behavior = behavior or BehaviorTracker()
+        # Микрофон участника (LiveKit: дорожка микрофона опубликована и не выключена) – для «говорит / разговаривает
+        # в комнате»; заполняет RoomAnalyzer или демонстрация, звук не анализируется.
+        self.mic: dict[str, bool] = {}
         self.max_side = max_side
         self.min_face_px = min_face_px
         # Лица участников обрабатываются параллельно (детекция и сетка – C++ без GIL): у каждого потока свои
@@ -188,7 +191,9 @@ class EmotionPipeline:
                     attributes=attributes,
                     groups=groups,
                     dominant_group=max(groups, key=lambda g: groups[g]),
-                    behavior=self.behavior.update(participant_id, mesh, now, glasses=glasses),
+                    behavior=self.behavior.update(
+                        participant_id, mesh, now, glasses=glasses, mic_on=self.mic.get(participant_id)
+                    ),
                     face=face,
                     crop=crop,
                     mesh=mesh,

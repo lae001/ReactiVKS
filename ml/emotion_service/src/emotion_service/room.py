@@ -45,6 +45,14 @@ def is_camera(publication: rtc.TrackPublication) -> bool:
     return publication.kind == rtc.TrackKind.KIND_VIDEO and publication.source == rtc.TrackSource.SOURCE_CAMERA
 
 
+def mic_on(participant: rtc.RemoteParticipant) -> bool:
+    """Микрофон включен: дорожка микрофона опубликована и не выключена (звук не читается)."""
+    return any(
+        pub.source == rtc.TrackSource.SOURCE_MICROPHONE and not pub.muted
+        for pub in participant.track_publications.values()
+    )
+
+
 def frame_to_rgb(frame: rtc.VideoFrame) -> np.ndarray:
     if frame.type != rtc.VideoBufferType.RGB24:
         frame = frame.convert(rtc.VideoBufferType.RGB24)
@@ -181,6 +189,7 @@ class RoomAnalyzer:
         if samples:
             now_mono, now_wall = time.monotonic(), datetime.now(UTC)
             frames = [(s.participant_id, frame_to_rgb(s.frame)) for s in samples]
+            self.pipeline.mic = {participant_id(p): mic_on(p) for p in self.room.remote_participants.values()}
             results = await asyncio.to_thread(self.pipeline.process, frames, now_mono)
             for sample, result in zip(samples, results, strict=True):
                 if not self._throttle.should_publish(result.participant_id, result.state, now_mono):

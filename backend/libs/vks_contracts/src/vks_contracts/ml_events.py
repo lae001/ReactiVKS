@@ -100,6 +100,15 @@ class Behavior(BaseModel):
     fatigue_score: float | None = Field(default=None, ge=0, le=1)
     perclos: float | None = Field(default=None, ge=0, le=1, description="Доля времени с прикрытыми глазами за 30 с")
     yawns_per_min: float | None = Field(default=None, ge=0)
+    speech: Literal["speaking", "silent", "side_talk"] | None = Field(
+        default=None,
+        description=(
+            "По движению губ и уголков рта (звук не анализируется): speaking – говорит при включенном микрофоне, "
+            "side_talk – говорит при выключенном микрофоне (с кем-то в комнате), silent – молчит; None – мало кадров"
+        ),
+    )
+    mouth_activity: float | None = Field(default=None, ge=0, le=1, description="Активность рта за 2 с")
+    mic_on: bool | None = Field(default=None, description="Микрофон включен (LiveKit); None – неизвестно")
 
 
 class Attention(BaseModel):

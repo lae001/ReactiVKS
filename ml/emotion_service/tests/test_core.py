@@ -413,10 +413,25 @@ def test_single_ordinary_nod_or_shake_is_enough(fps: float) -> None:
     def bump(t: float) -> float:  # одно движение на 8° туда и обратно за 0,6 с
         return float(8 * np.sin(np.pi * (t - 1.5) / 0.6)) if 1.5 <= t <= 2.1 else 0.0
 
+    def shake_once(t: float) -> float:  # «нет»: влево на 8° и вправо на 8° за 1 с
+        return float(8 * np.sin(2 * np.pi * (t - 1.5))) if 1.5 <= t <= 2.5 else 0.0
+
     nod = _run(fps, 3.5, lambda t: {"pitch": 5 + bump(t + 0.1)})
-    shake = _run(fps, 3.5, lambda t: {"yaw": 1.2 * bump(t + 0.1)})
+    shake = _run(fps, 4.0, lambda t: {"yaw": shake_once(t + 0.1)})
     assert any(b.agreement == "agree" for b in nod) and all(b.agreement != "disagree" for b in nod)
     assert any(b.agreement == "disagree" for b in shake) and all(b.agreement != "agree" for b in shake)
+
+
+@pytest.mark.parametrize("fps", [3.0, 5.0])
+@pytest.mark.parametrize("degrees", [12.0, 25.0, 45.0])
+def test_turning_to_one_side_and_back_is_not_disagreement(fps: float, degrees: float) -> None:
+    def turn(t: float) -> float:  # отвел голову вправо и вернул за 0,8 с
+        return float(degrees * np.sin(np.pi * (t - 1.5) / 0.8)) if 1.5 <= t <= 2.3 else 0.0
+
+    rng = np.random.default_rng(int(degrees))
+    for sign in (1, -1):
+        run = _run(fps, 4.0, lambda t, s=sign: {"yaw": s * turn(t) + rng.normal(0, 1.0)})
+        assert all(b.agreement != "disagree" for b in run)
 
 
 def test_no_gesture_for_still_jitter_or_long_glance() -> None:
@@ -436,6 +451,53 @@ def test_back_and_forth_needs_return_to_start() -> None:
     assert back_and_forth(t, np.array([0, 8, 1, 0]), 1.0, 5) == 8  # туда и обратно
     assert back_and_forth(t, np.array([0, 8, 9, 9]), 1.0, 5) == 0  # ушла и осталась
     assert back_and_forth(t, np.array([0, 2, -1, 1]), 1.0, 5) == 0  # дрожание
+
+
+def _mouth_mesh(gap: float, width: float = 0.55, jaw: float = 0.0):  # type: ignore[no-untyped-def]
+    """Сетка, где важны только глаза (33, 263) и рот (13, 14, 61, 291); размеры – в долях межглазного расстояния."""
+    from emotion_service.landmarks import FaceMesh
+
+    points = np.zeros((478, 3), np.float32)
+    eye = 100.0
+    points[33, :2], points[263, :2] = (150, 200), (150 + eye, 200)
+    points[13, :2], points[14, :2] = (200, 300), (200, 300 + gap * eye)
+    points[61, :2], points[291, :2] = (200 - width * eye / 2, 305), (200 + width * eye / 2, 305)
+    return FaceMesh(points, {"jawOpen": jaw}, 0.0, 5.0, 0.0, 0.0, 0.0)
+
+
+def _speech_run(fps: float, seconds: float, mouth, mic_on: bool | None):  # type: ignore[no-untyped-def]
+    from emotion_service.behavior import BehaviorTracker
+
+    tracker, out = BehaviorTracker(), []
+    for k in range(int(fps * seconds)):
+        t = k / fps
+        out.append(tracker.update("p", _mouth_mesh(**mouth(t)), t, mic_on=mic_on))
+    return out
+
+
+@pytest.mark.parametrize("fps", [3.0, 5.0])
+def test_speech_by_mouth_movement_and_microphone(fps: float) -> None:
+    rng = np.random.default_rng(1)
+
+    def talking(t: float) -> dict[str, float]:  # слоги: рот открывается на 0–0,25, уголки двигаются
+        return {"gap": float(abs(rng.normal(0.1, 0.07))), "width": 0.55 + float(rng.normal(0, 0.03))}
+
+    def silent(t: float) -> dict[str, float]:
+        return {"gap": 0.01 + float(rng.normal(0, 0.003)), "width": 0.55 + float(rng.normal(0, 0.003))}
+
+    assert _speech_run(fps, 4.0, talking, mic_on=True)[-1].speech == "speaking"
+    assert _speech_run(fps, 4.0, talking, mic_on=False)[-1].speech == "side_talk"
+    quiet = _speech_run(fps, 4.0, silent, mic_on=True)
+    assert quiet[0].speech is None  # мало кадров
+    assert quiet[-1].speech == "silent" and quiet[-1].mouth_activity is not None and quiet[-1].mouth_activity < 0.2
+
+
+def test_smile_open_mouth_or_yawn_is_not_speech() -> None:
+    smile = _speech_run(5.0, 6.0, lambda t: {"gap": 0.01, "width": 0.55 if t < 2 else 0.75}, mic_on=False)
+    open_mouth = _speech_run(5.0, 6.0, lambda t: {"gap": 0.01 if t < 2 else 0.2}, mic_on=False)
+    yawn = _speech_run(5.0, 8.0, lambda t: {"gap": 0.5, "jaw": 0.8} if 2 < t < 4.5 else {"gap": 0.01}, mic_on=False)
+    for run in (smile, open_mouth, yawn):
+        assert all(b.speech != "side_talk" for b in run)
 
 
 def test_fatigue_from_closed_eyes_and_yawns() -> None:

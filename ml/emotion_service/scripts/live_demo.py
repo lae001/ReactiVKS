@@ -154,6 +154,8 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
             elif command == "reset_calibration":
                 pipeline.calibrator.reset("me")
                 pipeline.smoother.reset("me")
+            elif command == "mic":  # только флаг «микрофон включен», звук сюда не передается
+                pipeline.mic["me"] = bool(json.loads(msg.data).get("on"))
             elif command == "record":
                 data = json.loads(msg.data)
                 recorder.start(str(data.get("label")), float(data.get("seconds", 3)))

@@ -69,6 +69,7 @@
     <option value="5">5 кадр/с</option><option value="10">10 кадр/с</option><option value="0">максимум</option>
   </select></label>
   <label><input type="checkbox" id="show-mesh" checked> сетка лица</label>
+  <button id="mic" title="Как микрофон участника во встрече: на сервер уходит только «включен / выключен», звук не записывается и не анализируется">🎤 Микрофон: включен</button>
   <span class="grow"></span>
   <span id="status" class="chip">камера выключена</span>
 </header>
@@ -106,6 +107,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
         <span id="now-gesture" class="chip">жест: —</span>
         <span id="now-fatigue" class="chip">усталость: копим данные</span>
+        <span id="now-speech" class="chip">речь: копим данные</span>
       </div>
       <div class="crop">
         <img id="crop" alt="">
@@ -122,7 +124,7 @@
       <div class="note">Недовольство = гнев + отвращение, напряжение = грусть + страх: эти классы модель путает между собой, а на встрече они значат одно и то же (точность 5 групп на тесте – 75 % против 70 % у 7 классов).</div>
     </div>
     <div class="card">
-      <h2>Согласие и усталость</h2>
+      <h2>Согласие, усталость, речь</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <span id="agree-chip" class="chip">жест: —</span>
         <span id="fatigue-chip" class="chip">усталость: копим данные</span>
@@ -131,8 +133,9 @@
         <div class="bar"><span>Кивок (да)</span><div class="track"><div class="fill" id="nod-bar" style="background:#1f9d55"></div></div><span class="num" id="nod-n">—</span></div>
         <div class="bar"><span>Покачивание (нет)</span><div class="track"><div class="fill" id="shake-bar" style="background:#c2410c"></div></div><span class="num" id="shake-n">—</span></div>
         <div class="bar"><span>Усталость</span><div class="track"><div class="fill" id="fat-bar" style="background:#7c3aed"></div></div><span class="num" id="fat-n">—</span></div>
+        <div class="bar"><span>Движение рта</span><div class="track"><div class="fill" id="mouth-bar" style="background:#0e7490"></div></div><span class="num" id="mouth-n">—</span></div>
       </div>
-      <div class="note" id="fat-note">Согласие – обычный кивок, несогласие – покачивание головой: достаточно одного движения туда и обратно (≈ 5–10°), сигнал держится 2,5 с; при 5 кадр/с ловится надежнее. Усталость – доля времени с прикрытыми глазами (PERCLOS), зевки и опущенная голова за 30 с; первая оценка – через 10 с.</div>
+      <div class="note" id="fat-note">Согласие – обычный кивок, несогласие – покачивание головой: достаточно одного движения туда и обратно (≈ 5–10°), сигнал держится 2,5 с; при 5 кадр/с ловится надежнее. Усталость – доля времени с прикрытыми глазами (PERCLOS), зевки и опущенная голова за 30 с; первая оценка – через 10 с. Речь – по движению губ и уголков рта за 2 с (с 40 % – «говорит») и состоянию микрофона (кнопка в шапке): говорит / молчит / разговаривает в комнате при выключенном микрофоне.</div>
     </div>
     <div class="card">
       <h2>Калибровка под вас</h2>
@@ -269,7 +272,7 @@ function setStatus(text, cls) { $("status").textContent = text; $("status").clas
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => { running = true; loop(); };
+  ws.onopen = () => { running = true; sendMic(); loop(); };
   ws.onclose = () => { running = false; };
 }
 
@@ -358,7 +361,22 @@ function renderGroups(r) {
   $("grp-swatch").style.background = `var(${cssVar})`;
 }
 
+const SPEECH = {
+  speaking: ["речь: говорит (микрофон включен)", "on"],
+  silent: ["речь: молчит", ""],
+  side_talk: ["речь: разговаривает в комнате (микрофон выключен)", "warn"],
+};
+
+function renderSpeech(b) {
+  const [text, cls] = !b ? ["речь: нужна сетка лица", ""] : b.speech == null ? ["речь: копим данные", ""] : SPEECH[b.speech];
+  $("now-speech").textContent = text; $("now-speech").className = "chip " + cls;
+  const v = b && b.mouth_activity != null ? b.mouth_activity : 0;
+  $("mouth-bar").style.width = (v * 100).toFixed(0) + "%";
+  $("mouth-n").textContent = b && b.mouth_activity != null ? (v * 100).toFixed(0) + " %" : "—";
+}
+
 function renderBehavior(b) {
+  renderSpeech(b);
   if (!b) { for (const id of ["agree-chip", "now-gesture"]) $(id).textContent = "жест: нужна сетка лица"; return; }
   const gesture = GESTURE[b.agreement];
   for (const id of ["agree-chip", "now-gesture"]) { $(id).textContent = gesture[0]; $(id).className = "chip " + gesture[1]; }
@@ -402,6 +420,7 @@ function render(r) {
     t: performance.now(), groups: r.groups || null, interest: r.attention ? r.attention.interest : null,
     face: r.state === "analyzing", mesh: !!r.mesh, looking: r.attention ? r.attention.looking : null,
     dominant_group: r.dominant_group || null, agreement: r.behavior ? r.behavior.agreement : null,
+    speech: r.behavior ? r.behavior.speech : null,
     pipeline: r.timing_ms.pipeline, rtt: r.rtt,
   });
   while (history.length && history[0].t < performance.now() - 60000) history.shift();
@@ -500,6 +519,15 @@ function renderMonitor(r) {
   row("Зевки", fatigueReady ? st(b.yawns_per_min >= 1 ? "bad" : "ok", b.yawns_per_min >= 1 ? "есть" : "нет") : st("idle", "—"),
       fatigueReady ? `${b.yawns_per_min} в мин` : "—", "—");
 
+  sec("Речь (по движению рта, звук не анализируется)");
+  const talkShare = share((p) => p.speech === "speaking" || p.speech === "side_talk", faced);
+  row("Движение губ и уголков рта", !b ? st("idle", "нужна сетка") : b.mouth_activity == null ? st("idle", "копим данные") : st(b.mouth_activity >= 0.4 ? "ok" : "idle", b.mouth_activity >= 0.4 ? "двигается" : "спокоен"),
+      b && b.mouth_activity != null ? pct(b.mouth_activity) : "—", "порог 40 %");
+  const mic = b && b.mic_on != null ? b.mic_on : micOn;  // что получил сервис
+  row("Микрофон", st(mic ? "ok" : "idle", mic ? "включен" : "выключен"), "—", "—");
+  row("Итог", !b || b.speech == null ? st("idle", "—") : b.speech === "speaking" ? st("ok", "говорит") : b.speech === "side_talk" ? st("bad", "в комнате") : st("idle", "молчит"),
+      "—", `говорил ${pct(talkShare)} времени · в комнате ${pct(share((p) => p.speech === "side_talk", faced))}`);
+
   sec("Внешние признаки");
   row("Очки", at ? st(at.glasses ? "ok" : "idle", at.glasses ? "найдены" : "нет") : st("idle", "проверяется"), at ? pct(at.glasses_prob) : "—", "порог 50 %");
   row("Борода / усы", at ? st(at.beard ? "ok" : "idle", at.beard ? "найдены" : "нет") : st("idle", "проверяется"), at ? pct(at.beard_prob) : "—", "порог 50 %");
@@ -561,15 +589,25 @@ function drawOverlay(r) {
   ctx.fillRect(-(x + w), y - size * 1.6, tw, size * 1.6);
   ctx.fillStyle = "#fff";
   ctx.fillText(label, -(x + w) + size / 2, y - size * 0.45);
-  // Жест – плашкой под рамкой лица, пока держится сигнал (≈ 1,5 с после кивка / покачивания).
+  // Жест – плашкой под рамкой лица, пока держится сигнал (≈ 2,5 с после кивка / покачивания).
   const b = r.behavior;
+  let below = 0;
+  if (b && (b.speech === "speaking" || b.speech === "side_talk")) {
+    const text = b.speech === "speaking" ? "🗣 Говорит" : "🗣 Разговаривает в комнате (микрофон выкл.)";
+    const bw = ctx.measureText(text).width + size;
+    ctx.fillStyle = b.speech === "speaking" ? "#0e7490" : "#c27c0e";
+    ctx.fillRect(-(x + w), y + h, bw, size * 1.6);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(text, -(x + w) + size / 2, y + h + size * 1.15);
+    below = size * 1.7;
+  }
   if (b && b.agreement !== "none") {
     const text = b.agreement === "agree" ? "✓ Согласие (кивает)" : "✗ Несогласие (качает головой)";
     const bw = ctx.measureText(text).width + size;
     ctx.fillStyle = b.agreement === "agree" ? "#1f9d55" : "#c2410c";
-    ctx.fillRect(-(x + w), y + h, bw, size * 1.6);
+    ctx.fillRect(-(x + w), y + h + below, bw, size * 1.6);
     ctx.fillStyle = "#fff";
-    ctx.fillText(text, -(x + w) + size / 2, y + h + size * 1.15);
+    ctx.fillText(text, -(x + w) + size / 2, y + h + below + size * 1.15);
   }
   ctx.restore();
 }
@@ -609,6 +647,13 @@ $("start").onclick = () => (stream ? stopCamera() : startCamera().catch((e) => s
 $("camera").onchange = () => stream && startCamera();
 $("calibrate").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "calibrate" }));
 $("rec-start").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "record", label: $("rec-label").value, seconds: 3 }));
+let micOn = true;
+const sendMic = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "mic", on: micOn }));
+$("mic").onclick = () => {
+  micOn = !micOn;
+  $("mic").textContent = micOn ? "🎤 Микрофон: включен" : "🔇 Микрофон: выключен";
+  sendMic();
+};
 $("reset-cal").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "reset_calibration" }));
 listCameras().catch(() => {});
 </script>

@@ -101,6 +101,9 @@ def behavior_model(behavior: Behavior) -> BehaviorModel:
         fatigue_score=behavior.fatigue_score,
         perclos=behavior.perclos,
         yawns_per_min=behavior.yawns_per_min,
+        speech=behavior.speech,
+        mouth_activity=behavior.mouth_activity,
+        mic_on=behavior.mic_on,
     )
 
 
