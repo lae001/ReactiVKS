@@ -28,6 +28,18 @@ CROP_SIDE: Final[int] = 96
 # Кроп шире рамки YuNet и сдвинут вниз: борода и усы лежат ниже подбородка рамки, оправа – по бокам лица.
 CROP_SCALE: Final[float] = 1.5
 CROP_SHIFT_DOWN: Final[float] = 0.1
+# Порог включения признака выше порога карточки (гистерезис): борода включается, только когда модель уверена,
+# и выключается по порогу карточки. На тесте CelebA порог карточки 0,44 дает точность 0,79 (каждая пятая «борода»
+# ложная), порог 0,90 – точность 0,90 при полноте 0,69. Проверка по сетке лица (яркость и текстура подбородка и
+# усов относительно щек) AUC почти не меняет (0,9656 → 0,9663) и в конвейер не вошла (experiments.md, §10).
+ON_THRESHOLDS: Final[dict[str, float]] = {"beard": 0.90}
+
+
+def hysteresis(probs: np.ndarray, on: np.ndarray, off: np.ndarray, previous: np.ndarray | None) -> np.ndarray:
+    """Флаги признаков: включение – с порога on, выключение – ниже off; без истории – по on."""
+    if previous is None:
+        return probs >= on
+    return np.where(previous, probs >= off, probs >= on)
 
 
 def attribute_crop(image: np.ndarray, face: FaceBox) -> np.ndarray:
@@ -66,6 +78,9 @@ class AttributeDetector:
             str(card_path.parent / card["onnx"]["file"]), options, providers=["CPUExecutionProvider"]
         )
         self.thresholds = np.array([card["thresholds"][name] for name in ATTRIBUTES], np.float32)
+        self.on_thresholds = np.maximum(
+            self.thresholds, np.array([ON_THRESHOLDS.get(name, 0.0) for name in ATTRIBUTES], np.float32)
+        )
         self.model_version: str = card["model_version"]
         self.alpha = alpha
         # Очки и борода не меняются за секунды: модель вызывается для участника не чаще раза в interval_s
@@ -73,6 +88,7 @@ class AttributeDetector:
         self.interval_s = interval_s
         self._state: dict[str, np.ndarray] = {}
         self._checked: dict[str, float] = {}
+        self._flags: dict[str, np.ndarray] = {}
 
     def predict(self, crops: np.ndarray) -> np.ndarray:
         """(N, 96, 96, 3) uint8 → (N, 2) вероятности очков и бороды."""
@@ -90,7 +106,8 @@ class AttributeDetector:
             self._state[key] = smoothed
             if now is not None:
                 self._checked[key] = now
-        flags = smoothed >= self.thresholds
+        flags = hysteresis(smoothed, self.on_thresholds, self.thresholds, self._flags.get(key))
+        self._flags[key] = flags
         return FaceAttributes(
             bool(flags[0]), bool(flags[1]), round(float(smoothed[0]), 3), round(float(smoothed[1]), 3)
         )
@@ -98,3 +115,4 @@ class AttributeDetector:
     def reset(self, key: str) -> None:
         self._state.pop(key, None)
         self._checked.pop(key, None)
+        self._flags.pop(key, None)

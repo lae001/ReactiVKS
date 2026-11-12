@@ -18,7 +18,7 @@ from vks_contracts.ml_events import EMOTION_GROUPS
 from emotion_service.attention import Attention, AttentionTracker, HeadPose, head_pose, mesh_pose
 from emotion_service.attributes import AttributeDetector, FaceAttributes
 from emotion_service.behavior import Behavior, BehaviorTracker
-from emotion_service.calibration import CalibrationStatus, NeutralCalibrator
+from emotion_service.calibration import CalibrationStatus, NeutralCalibrator, is_calm
 from emotion_service.classifier import EmotionClassifier, RoutedClassifier
 from emotion_service.detection import FaceDetector
 from emotion_service.fusion import BlendshapeHead
@@ -163,7 +163,8 @@ class EmotionPipeline:
                     occluded = attributes.occluded if attributes is not None else ()
                     raw = self.blendshape_head.fuse_with_attributes(cnn, mesh.blendshape_vector(), occluded)
                 uncalibrated = raw
-                raw, calibrated_now = self.calibrator.apply(participant_id, raw, now)
+                calm = mesh is not None and is_calm(mesh.blendshapes, mesh.yaw_deg, mesh.pitch_deg)
+                raw, calibrated_now = self.calibrator.apply(participant_id, raw, now, calm=calm)
                 if calibrated_now:
                     self.smoother.reset(participant_id)  # сглаживание не тянет состояние до калибровки
                 smoothed = self.smoother.update(participant_id, raw, now)

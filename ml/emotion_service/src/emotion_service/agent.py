@@ -69,7 +69,7 @@ async def entrypoint(ctx: JobContext) -> None:
         TemporalSmoother(alpha=settings.ema_alpha),
         mesh=FaceMeshAnalyzer(settings.face_mesh_model) if settings.face_mesh_model else None,
         blendshape_head=ctx.proc.userdata["blendshape_head"],
-        calibrator=NeutralCalibrator(duration_s=settings.auto_neutral_s or 3.0),
+        calibrator=NeutralCalibrator(auto_s=settings.auto_neutral_s or 5.0),
         attribute_detector=AttributeDetector(settings.attributes_card) if settings.attributes_card else None,
         max_side=settings.max_side,
         workers=settings.face_workers,

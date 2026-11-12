@@ -1,7 +1,9 @@
 """Оценка модели на собственной выборке команды (EMO-92): кадры, записанные в живой демонстрации с меткой.
 
-Выборка – ml/training/data/own/<эмоция>/<время>.png (кроп 48×48) + .json (мимика, вероятности очков и бороды);
-собирается кнопкой «Записать 3 с» в scripts/live_demo.py сервиса. Метка – эмоция, которую участник изображал
+Выборка – ml/training/data/own/<эмоция>/<код участника>-<время>.png (кроп 48×48) + .json (мимика, вероятности очков
+и бороды); собирается в живой демонстрации сервиса («Сбор выборки», цель – не меньше 10 человек по 30 кадров каждой
+эмоции). Точность считается и по каждому участнику: при малом числе людей средняя точность – это точность на
+конкретных лицах, а не на «новом участнике встречи». Метка – эмоция, которую участник изображал
 (самоотчет); при нескольких разметчиках метки сводятся заранее большинством голосов (docs/ml/ml-model.md).
 
 Отчет: accuracy, macro-F1, полнота по классам, матрица ошибок – отдельно CNN, CNN + мимика с учетом очков и
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -28,12 +31,17 @@ from emotion_service.landmarks import BLENDSHAPE_NAMES
 from emotion_service.preprocessing import to_model_batch
 from sklearn.metrics import confusion_matrix, f1_score
 
+MIN_PEOPLE = 10
+PERSON = re.compile(r"^([A-Za-z0-9_]{1,16})-")
+
 
 def load(root: Path) -> list[dict[str, object]]:
     samples = []
     for png in sorted(root.glob("*/*.png")):
         meta = json.loads(png.with_suffix(".json").read_text(encoding="utf-8"))
-        samples.append({"crop": cv2.imread(str(png), cv2.IMREAD_GRAYSCALE), "stem": png.stem, **meta})
+        match = PERSON.match(png.stem)
+        person = meta.get("person") or (match.group(1) if match and not match.group(1).isdigit() else "P01")
+        samples.append({"crop": cv2.imread(str(png), cv2.IMREAD_GRAYSCALE), "stem": png.stem, **meta, "person": person})
     return samples
 
 
@@ -75,7 +83,12 @@ def main() -> None:
             vector = np.array([blend.get(n, 0.0) for n in BLENDSHAPE_NAMES], np.float32)
             fused[i] = head.fuse_with_attributes(cnn[i], vector, occluded)
 
-    report: dict[str, object] = {"model_version": classifier.model_version}
+    people = sorted({str(s["person"]) for s in samples})
+    report: dict[str, object] = {"model_version": classifier.model_version, "people": people}
+    if len(people) < MIN_PEOPLE:
+        report["warning"] = (
+            f"Участников {len(people)} из {MIN_PEOPLE}: оценка показывает качество на этих лицах, а не на новых людях"
+        )
     for name, probs in (("cnn", cnn), ("cnn_mimic", fused)):
         preds = probs.argmax(1)
         part: dict[str, object] = {"all": scores(labels, preds)}
@@ -89,6 +102,8 @@ def main() -> None:
         record_labels = np.array([k[0] for k in votes])
         record_preds = np.array([np.bincount(v, minlength=len(LABELS)).argmax() for v in votes.values()])
         part["by_recording"] = scores(record_labels, record_preds)
+        person_of = np.array([str(s["person"]) for s in samples])
+        part["by_person"] = {p: scores(labels[person_of == p], preds[person_of == p]) for p in people}
         part["confusion"] = confusion_matrix(labels, preds, labels=range(len(LABELS))).tolist()
         report[name] = part
     out = Path("results") / f"own_{classifier.model_version.replace('@', '_')}.json"

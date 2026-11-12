@@ -77,7 +77,7 @@ class RoomAnalyzer:
         self.rate = rate
         self.worker_id = worker_id
         self.model_version = model_version
-        # Автокалибровка: начало анализа участника считается его нейтральным лицом (ML_AUTO_NEUTRAL_S).
+        # Автокалибровка по спокойным кадрам начала анализа: ML_AUTO_NEUTRAL_S секунд спокойного лица (0 – выключена).
         self.auto_calibrate = auto_calibrate
         self.sampler: FrameSampler[rtc.VideoFrame] = FrameSampler()
         self._readers: dict[str, asyncio.Task[None]] = {}  # track sid → чтение дорожки
@@ -140,7 +140,7 @@ class RoomAnalyzer:
             log.info("Анализ камеры %s (%s)", participant.identity, publication.sid)
             pid = participant_id(participant)
             if self.auto_calibrate:
-                self.pipeline.calibrator.start(pid)
+                self.pipeline.calibrator.start(pid, auto=True)  # по спокойным кадрам, без кнопки
             self._readers[publication.sid] = asyncio.create_task(self._read(track, pid))
 
     def _on_track_muted(self, participant: rtc.Participant, publication: rtc.TrackPublication) -> None:

@@ -88,6 +88,15 @@
   .step .track { height: 6px; margin-top: 6px; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent); } }
   .step.cur button { animation: pulse 1.4s infinite; }
+  .prompt { position: absolute; left: 0; right: 0; top: 0; padding: 14px 18px; background: rgba(0,0,0,.72); color: #fff;
+    font-size: 22px; font-weight: 650; text-align: center; display: none; }
+  .prompt small { display: block; font-size: 14px; font-weight: 400; opacity: .85; margin-top: 4px; }
+  .grid-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 10px; }
+  .grid-table th, .grid-table td { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: center; }
+  .grid-table th:first-child, .grid-table td:first-child { text-align: left; }
+  .grid-table td.full { color: #1f9d55; font-weight: 600; } .grid-table td.part { color: #c27c0e; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type=text] { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 90px; }
 </style>
 </head>
 <body class="idle">
@@ -113,6 +122,7 @@
     <div class="stage">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
+      <div class="prompt" id="prompt"></div>
       <div class="placeholder" id="placeholder">Шаг 1: нажмите «Включить камеру» – ниже или в шапке.<br>Кадры обрабатываются на этом компьютере и не сохраняются.</div>
     </div>
     <div class="card" id="steps">
@@ -121,7 +131,7 @@
         <div>Включите камеру<div class="note">Кадры обрабатываются на этом компьютере и не сохраняются.</div></div>
         <button class="primary" id="step1-btn">Включить камеру</button></div>
       <div class="step" id="step2"><b>2</b>
-        <div>Откалибруйте нейтральное лицо<div class="note">Нажмите и 3 секунды спокойно смотрите в камеру – эмоции будут считаться относительно вашего обычного лица.</div>
+        <div>Посидите 5 секунд спокойно – калибровка пройдет сама<div class="note" id="step2-note">Смотрите в камеру без улыбки и движения бровей: эти кадры станут вашим нейтральным лицом, эмоции будут считаться относительно него. Кнопка – если хотите откалибровать вручную.</div>
           <div class="track"><div class="fill" id="step2-progress" style="background:var(--accent)"></div></div></div>
         <button id="step2-btn">Откалибровать</button></div>
       <div class="step" id="step3"><b>3</b>
@@ -222,16 +232,36 @@
       <div class="note" id="attr-note">Очки закрывают глаза и брови, борода – рот и подбородок. Мимика закрытых зон в оценке не участвует, вес оценки по мимике подобран отдельно для каждого случая.</div>
     </div>
     <div class="card dev-only">
-      <h2>Сбор выборки (оценка на своих лицах)</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <h2>Сбор выборки: цель – 10 человек × 7 эмоций × 30 кадров</h2>
+      <div class="row">
+        <label>Код участника <input type="text" id="rec-person" placeholder="P02" maxlength="16"></label>
+        <label><input type="checkbox" id="rec-consent"> участник согласен</label>
+        <span id="rec-state" class="chip">не записывается</span>
+      </div>
+      <div class="note">Код – не имя (P02, P03 …). Согласие: сохраняются только кроп лица 48×48 и коэффициенты мимики, локально в
+        ml/training/data/own, для оценки и дообучения модели; по коду данные можно удалить целиком.</div>
+      <div class="row" style="margin-top:10px">
+        <button id="rec-session" class="primary">Записать все 7 эмоций (≈ 1,5 мин)</button>
         <select id="rec-label">
           <option value="neutral">Нейтральное</option><option value="happy">Радость</option><option value="surprise">Удивление</option>
           <option value="sad">Грусть</option><option value="angry">Гнев</option><option value="fear">Страх</option><option value="disgust">Отвращение</option>
         </select>
-        <button id="rec-start">Записать 3 с</button>
-        <span id="rec-state" class="chip">не записывается</span>
+        <button id="rec-start">Записать одну 3 с</button>
+        <button id="rec-delete">Удалить данные участника</button>
       </div>
-      <div class="note" id="rec-count">Изобразите выбранную эмоцию и нажмите «Записать». Сохраняются только кроп лица 48×48 и коэффициенты мимики – локально, в ml/training/data/own.</div>
+      <div class="note" id="rec-count">Сессия: по каждой эмоции подсказка на видео, отсчет 3-2-1 и две записи по 3 с (при 5 кадр/с ≈ 30 кадров).</div>
+      <div id="dataset"></div>
+    </div>
+    <div class="card dev-only">
+      <h2>Проверка порогов речи и жестов</h2>
+      <div class="row">
+        <button id="probe-start" class="primary">Начать проверку (≈ 50 с)</button>
+        <span id="probe-state" class="chip">не запущена</span>
+      </div>
+      <div class="note">Подсказки появятся на видео: молчать, говорить, кивнуть, покачать головой, отвернуться и вернуться,
+        улыбнуться. Программа сравнит, что ожидалось и что распознано, и подскажет порог движения рта. Сохраняются только
+        числа (без изображений) в ml/training/data/probe – по ним пороги подстраиваются.</div>
+      <div id="probe-result"></div>
     </div>
     <div class="card dev-only">
       <h2>Внимание</h2>
@@ -340,12 +370,27 @@ function setStatus(text, cls) { $("status").textContent = text; $("status").clas
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => { running = true; sendMic(); loop(); };
+  ws.onopen = () => { running = true; sendMic(); send({ cmd: "dataset" }); loop(); };
   ws.onclose = () => { running = false; };
 }
 
 function waitReply() {
-  return new Promise((resolve) => { ws.onmessage = (e) => resolve(JSON.parse(e.data)); });
+  return new Promise((resolve) => {
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.reply) handleReply(m); else resolve(m);
+    };
+  });
+}
+
+const send = (obj) => ws && ws.readyState === 1 && ws.send(JSON.stringify(obj));
+
+function handleReply(m) {
+  if (m.dataset) renderDataset(m.dataset);
+  if (m.reply === "consent" && !m.ok) alert("Код участника: латиница, цифры или «_», до 16 символов (например, P02).");
+  if (m.reply === "record" && !m.ok) $("rec-count").textContent = "Запись не началась: укажите код участника и отметьте согласие.";
+  if (m.reply === "deleted") $("rec-count").textContent = `Удалено кадров: ${m.removed}.`;
+  if (m.reply === "probe_saved") $("probe-state").textContent = m.path ? "сохранено: " + m.path.split(/[\\/]/).slice(-2).join("/") : "нет данных";
 }
 
 async function loop() {
@@ -398,7 +443,9 @@ const CAL = { none: ["не откалибровано", ""], collecting: ["ка�
 
 function renderCalibration(c) {
   if (!c) return;
-  const [text, cls] = CAL[c.state];
+  let [text, cls] = CAL[c.state];
+  if (c.auto && c.state === "collecting") text = `автокалибровка: посидите спокойно… ${(c.progress * 5).toFixed(0)} из 5 с`;
+  if (c.auto && c.state === "ready") text = "откалибровано автоматически";
   $("cal-state").textContent = text; $("cal-state").className = "chip " + cls;
   $("cal-progress").style.width = (c.progress * 100).toFixed(0) + "%";
 }
@@ -472,10 +519,10 @@ function renderExtras(r) {
   }
   if (r.recording) {
     const rec = r.recording;
-    $("rec-state").textContent = rec.label ? "запись: " + TITLES[rec.label] : "не записывается";
+    $("rec-state").textContent = rec.label ? "● запись: " + TITLES[rec.label] : "не записывается";
     $("rec-state").className = "chip " + (rec.label ? "on" : "");
     const total = Object.entries(rec.saved).map(([k, v]) => `${TITLES[k]} ${v}`).join(" · ");
-    if (total) $("rec-count").textContent = "Сохранено кадров: " + total;
+    if (total && !session) $("rec-count").textContent = "За это подключение сохранено кадров: " + total;
   }
 }
 
@@ -591,7 +638,7 @@ function renderOrganizer(r) {
   $("summary-sub").textContent = `за последнюю минуту: кивков ${nods}, покачиваний ${shakes}, говорил ${(talk * 100).toFixed(0)} % времени`;
 }
 
-let calState = "none";
+let calState = "none", calAuto = false;
 function updateSteps() {
   const fps = Number($("fps").value);
   const done = [!!stream, calState === "ready", fps >= 5 || fps === 0];
@@ -602,8 +649,8 @@ function updateSteps() {
     el.querySelector("b").textContent = d ? "✓" : i + 1;
   });
   $("step1-btn").style.display = done[0] ? "none" : "";
-  $("step2-btn").textContent = calState === "collecting" ? "Калибровка…" : done[1] ? "Перекалибровать" : "Откалибровать";
-  $("step2-btn").disabled = !done[0] || calState === "collecting";
+  $("step2-btn").textContent = calState === "collecting" && !calAuto ? "Калибровка…" : done[1] ? "Перекалибровать" : "Откалибровать вручную";
+  $("step2-btn").disabled = !done[0] || (calState === "collecting" && !calAuto);
   $("step3-btn").style.display = done[2] ? "none" : "";
   $("steps-title").textContent = cur === -1 ? "Готово к работе ✓" : `Как начать – шаг ${cur + 1} из 3`;
 }
@@ -613,7 +660,7 @@ function render(r) {
   document.body.classList.remove("idle");
   renderExtras(r);
   renderCalibration(r.calibration);
-  if (r.calibration) { calState = r.calibration.state; $("step2-progress").style.width = (r.calibration.progress * 100).toFixed(0) + "%"; updateSteps(); }
+  if (r.calibration) { calState = r.calibration.state; calAuto = !!r.calibration.auto; $("step2-progress").style.width = (r.calibration.progress * 100).toFixed(0) + "%"; updateSteps(); }
   renderAttention(r.attention);
   history.push({
     t: performance.now(), groups: r.groups || null, interest: r.attention ? r.attention.interest : null,
@@ -659,6 +706,7 @@ function render(r) {
   drawTimeline();
   renderMonitor(r);
   renderOrganizer(r);
+  probeCollect(r);
 }
 
 const pct = (v, d = 0) => (v == null || Number.isNaN(v) ? "—" : (v * 100).toFixed(d) + " %");
@@ -841,7 +889,6 @@ function drawTimeline() {
 $("start").onclick = () => (stream ? stopCamera() : startCamera().catch((e) => setStatus("нет доступа к камере: " + e.message, "warn")));
 $("camera").onchange = () => stream && startCamera();
 $("calibrate").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "calibrate" }));
-$("rec-start").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "record", label: $("rec-label").value, seconds: 3 }));
 let micOn = true;
 const sendMic = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "mic", on: micOn }));
 $("mic").onclick = () => {
@@ -850,6 +897,132 @@ $("mic").onclick = () => {
   sendMic();
 };
 $("reset-cal").onclick = () => ws && ws.readyState === 1 && ws.send(JSON.stringify({ cmd: "reset_calibration" }));
+// ---------- Сбор выборки
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let session = false;
+const person = () => $("rec-person").value.trim();
+function prompt(html) { $("prompt").innerHTML = html; $("prompt").style.display = html ? "block" : "none"; }
+
+async function ensureConsent() {
+  if (!stream) { alert("Сначала включите камеру."); return false; }
+  if (!person()) { alert("Укажите код участника (например, P02)."); return false; }
+  if (!$("rec-consent").checked) { alert("Отметьте согласие участника."); return false; }
+  send({ cmd: "consent", person: person() });
+  await sleep(300);
+  return true;
+}
+
+const PROMPTS = { neutral: "спокойное лицо", happy: "улыбнитесь, порадуйтесь", surprise: "удивитесь: брови вверх, рот приоткрыт",
+  sad: "грусть: уголки рта вниз, брови домиком", angry: "гнев: брови сведены, губы сжаты", fear: "страх: глаза широко, брови вверх и вместе",
+  disgust: "отвращение: сморщите нос, верхняя губа вверх" };
+
+async function recordTake(label, take) {
+  for (const n of [3, 2, 1]) { prompt(`${TITLES[label]} – ${n}<small>${PROMPTS[label]} · запись ${take} из 2</small>`); await sleep(1000); }
+  prompt(`● ${TITLES[label]}<small>держите выражение 3 секунды</small>`);
+  send({ cmd: "record", label, seconds: 3, person: person() });
+  await sleep(3300);
+}
+
+$("rec-session").onclick = async () => {
+  if (session || !(await ensureConsent())) return;
+  session = true; $("rec-session").disabled = true;
+  if (Number($("fps").value) < 5 && $("fps").value !== "0") { $("fps").value = "5"; updateSteps(); }
+  try {
+    for (const label of LABELS_ORDER) {
+      for (const take of [1, 2]) await recordTake(label, take);
+      prompt(`Пауза<small>расслабьте лицо</small>`); await sleep(1200);
+    }
+    prompt("Готово, спасибо!<small>данные участника сохранены</small>"); await sleep(1500);
+  } finally {
+    prompt(""); session = false; $("rec-session").disabled = false;
+    send({ cmd: "dataset" });
+  }
+};
+const LABELS_ORDER = ["neutral", "happy", "surprise", "sad", "angry", "fear", "disgust"];
+
+$("rec-start").onclick = async () => {
+  if (!(await ensureConsent())) return;
+  await recordTake($("rec-label").value, 1);
+  prompt(""); send({ cmd: "dataset" });
+};
+$("rec-delete").onclick = () => {
+  if (!person()) { alert("Укажите код участника, чьи данные удалить."); return; }
+  if (confirm(`Удалить все кадры участника ${person()} без возможности восстановления?`)) send({ cmd: "delete_person", person: person() });
+};
+
+function renderDataset(d) {
+  const people = Object.keys(d.people).sort();
+  const cell = (n) => `<td class="${n >= d.target_per_emotion ? "full" : n ? "part" : ""}">${n || "–"}</td>`;
+  const rows = people.map((p) => `<tr><td>${p}${d.complete.includes(p) ? " ✓" : ""}</td>${d.labels.map((l) => cell(d.people[p][l] || 0)).join("")}</tr>`).join("");
+  const done = d.complete.length;
+  $("dataset").innerHTML = `<div style="margin-top:10px;font-weight:600">Собрано полностью: ${done} из ${d.target_people} человек` +
+    (done >= d.target_people ? " – можно дообучать модель ✓" : ` – нужно еще ${d.target_people - done}`) + `</div>` +
+    `<table class="grid-table"><thead><tr><th>Участник</th>${d.labels.map((l) => `<th>${TITLES[l].slice(0, 4)}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="8">записей пока нет</td></tr>`}</tbody></table>` +
+    `<div class="note">Зеленым – ≥ ${d.target_per_emotion} кадров эмоции, оранжевым – меньше.</div>`;
+}
+
+// ---------- Проверка порогов
+const PROBE = [
+  { id: "silent", text: "Сидите спокойно и молчите", sec: 7, expect: "речи нет, жестов нет" },
+  { id: "speak", text: "Говорите вслух: считайте от 1 до 20", sec: 8, expect: "«Говорит»" },
+  { id: "nod", text: "Кивните 3 раза – «да»", sec: 7, expect: "«Согласие»" },
+  { id: "shake", text: "Покачайте головой 3 раза – «нет»", sec: 7, expect: "«Несогласие»" },
+  { id: "turn", text: "Отверните голову вправо, задержитесь и верните; затем влево", sec: 9, expect: "без «Несогласия»" },
+  { id: "smile", text: "Улыбнитесь и молчите", sec: 6, expect: "речи нет" },
+];
+let probeFrames = null;
+const quant = (xs, q) => { if (!xs.length) return null; const a = [...xs].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(q * a.length))]; };
+
+$("probe-start").onclick = async () => {
+  if (!stream) { alert("Сначала включите камеру."); return; }
+  if (probeFrames) return;
+  probeFrames = [];
+  if (Number($("fps").value) < 5 && $("fps").value !== "0") { $("fps").value = "5"; updateSteps(); }
+  $("probe-start").disabled = true; $("probe-state").textContent = "идет";
+  try {
+    for (const [i, step] of PROBE.entries()) {
+      for (const n of [3, 2, 1]) { prompt(`Шаг ${i + 1} из ${PROBE.length}: ${step.text}<small>начинаем через ${n}</small>`); await sleep(1000); }
+      send({ cmd: "probe", step: step.id });
+      probeStep = step.id;
+      const end = performance.now() + step.sec * 1000;
+      while (performance.now() < end) { prompt(`● ${step.text}<small>еще ${Math.ceil((end - performance.now()) / 1000)} с</small>`); await sleep(250); }
+      probeStep = null;
+      send({ cmd: "probe", step: null });
+      prompt("Пауза"); await sleep(800);
+    }
+  } finally {
+    prompt(""); send({ cmd: "probe_save" });
+    renderProbe(probeFrames); probeFrames = null; probeStep = null; $("probe-start").disabled = false;
+  }
+};
+let probeStep = null;
+function probeCollect(r) {
+  if (!probeFrames || !probeStep || r.state !== "analyzing" || !r.behavior) return;
+  probeFrames.push({ step: probeStep, ...r.behavior });
+}
+
+function renderProbe(frames) {
+  const by = (id) => frames.filter((f) => f.step === id);
+  const any = (id, pred) => by(id).some(pred), share = (id, pred) => by(id).length ? by(id).filter(pred).length / by(id).length : null;
+  const talking = (f) => f.speech === "speaking" || f.speech === "side_talk";
+  const checks = {
+    silent: [share("silent", talking) <= 0.1 && !any("silent", (f) => f.agreement !== "none"), `речь в ${pct(share("silent", talking))} кадров, жестов: ${by("silent").filter((f) => f.agreement !== "none").length ? "были" : "нет"}`],
+    speak: [share("speak", talking) >= 0.5, `«говорит» в ${pct(share("speak", talking))} кадров`],
+    nod: [any("nod", (f) => f.agreement === "agree"), any("nod", (f) => f.agreement === "agree") ? "кивок пойман" : "кивок не пойман"],
+    shake: [any("shake", (f) => f.agreement === "disagree"), any("shake", (f) => f.agreement === "disagree") ? "покачивание поймано" : "покачивание не поймано"],
+    turn: [!any("turn", (f) => f.agreement === "disagree"), any("turn", (f) => f.agreement === "disagree") ? "ложное «нет»" : "ложного «нет» не было"],
+    smile: [share("smile", talking) <= 0.1, `речь в ${pct(share("smile", talking))} кадров`],
+  };
+  const mouth = (id) => by(id).map((f) => f.mouth_activity).filter((v) => v != null);
+  const quiet = quant([...mouth("silent"), ...mouth("smile")], 0.95), loud = quant(mouth("speak"), 0.3);
+  const suggest = quiet != null && loud != null ? (loud > quiet ? `${pct((quiet + loud) / 2)} (сейчас 40 %)` : "молчание и речь пересекаются – порог не разделит их, пришлите файл") : "мало кадров";
+  const rows = PROBE.map((s) => `<tr><td>${s.text}</td><td>${s.expect}</td><td>${checks[s.id][1]}</td><td>${checks[s.id][0] ? "✓" : "✗"}</td></tr>`).join("");
+  const ok = PROBE.filter((s) => checks[s.id][0]).length;
+  $("probe-result").innerHTML = `<div style="margin-top:10px;font-weight:600">Пройдено ${ok} из ${PROBE.length}</div>` +
+    `<table class="grid-table"><thead><tr><th>Шаг</th><th>Ожидали</th><th>Получили</th><th></th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<div class="note">Движение рта: молчание ≤ ${pct(quiet)} (95 % кадров), речь ≥ ${pct(loud)} (70 % кадров). Рекомендуемый порог «говорит»: ${suggest}.</div>`;
+}
+
 // Шаги «Как начать» и режимы.
 $("step1-btn").onclick = () => startCamera().catch((e) => setStatus("нет доступа к камере: " + e.message, "warn"));
 $("step2-btn").onclick = () => $("calibrate").onclick();

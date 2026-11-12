@@ -522,3 +522,45 @@ def test_pipeline_reports_groups_and_behavior() -> None:
     assert result.groups["discontent"] == pytest.approx(0.3, abs=1e-3)
     assert result.dominant == "sad" and result.dominant_group == "tension"
     assert result.behavior is None  # без сетки лица поведение не оценивается
+
+
+def test_auto_calibration_uses_only_calm_frames() -> None:
+    from emotion_service.calibration import NeutralCalibrator, is_calm
+
+    calm = {"mouthSmileLeft": 0.05, "jawOpen": 0.05}
+    assert is_calm(calm, 3.0, -4.0)
+    assert not is_calm({"mouthSmileLeft": 0.7}, 0.0, 0.0)  # улыбка – не нейтральное лицо
+    assert not is_calm(calm, 30.0, 0.0)  # отвернулся
+
+    calibrator = NeutralCalibrator(auto=True, auto_s=2.0, min_samples=3)
+    resting = np.array([0.05, 0.02, 0.08, 0.05, 0.55, 0.05, 0.20])
+    happy = np.array([0.02, 0.01, 0.02, 0.85, 0.03, 0.02, 0.05])
+    # 3 с улыбки без спокойных кадров – калибровки нет и улыбка не стала «нейтральной».
+    for k in range(12):
+        out, done = calibrator.apply("p", happy, k / 4, calm=False)
+        assert not done and out is happy
+    assert calibrator.status("p", 3.0).state == "collecting" and calibrator.status("p", 3.0).auto
+    # Спокойствие с перерывом больше max_gap_s начинает сбор заново.
+    calibrator.apply("p", resting, 3.0, calm=True)
+    calibrator.apply("p", resting, 3.5, calm=True)
+    calibrator.apply("p", happy, 5.5, calm=False)
+    finished = [calibrator.apply("p", resting, 6.0 + k / 4, calm=True)[1] for k in range(10)]
+    assert finished.index(True) == 8  # ровно через 2 с спокойных кадров после перерыва
+    assert calibrator.status("p", 9.0).state == "ready"
+    after, _ = calibrator.apply("p", resting, 9.0)
+    assert LABELS[int(after.argmax())] == "neutral"
+    smile, _ = calibrator.apply("p", happy, 9.2, calm=False)
+    assert LABELS[int(smile.argmax())] == "happy"
+
+
+def test_beard_hysteresis_needs_confident_start() -> None:
+    from emotion_service.attributes import hysteresis
+
+    on, off = np.array([0.17, 0.9]), np.array([0.17, 0.44])
+    first = hysteresis(np.array([0.5, 0.6]), on, off, None)
+    assert first.tolist() == [True, False]  # 0,6 – выше порога карточки, но борода еще не уверена
+    turned_on = hysteresis(np.array([0.5, 0.95]), on, off, first)
+    assert turned_on.tolist() == [True, True]
+    held = hysteresis(np.array([0.5, 0.6]), on, off, turned_on)
+    assert held.tolist() == [True, True]  # включенная держится до порога карточки
+    assert hysteresis(np.array([0.1, 0.3]), on, off, held).tolist() == [False, False]

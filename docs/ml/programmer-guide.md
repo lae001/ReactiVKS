@@ -110,7 +110,7 @@ uv run python scripts/eval_own.py --card ../models/emotion/model_card.json      
 | `ML_ONNX_THREADS` / `ML_FACE_WORKERS` | 4 / 4 | Потоки ONNX Runtime на модель / потоки обработки лиц такта |
 | `ML_IDLE_PROCESSES` | 1 | Прогретые процессы заданий (процесс на встречу, ≈ 1,3 ГБ) |
 | `ML_LOAD_THRESHOLD` | 0,7 | Загрузка CPU, выше которой воркер не берет новые встречи |
-| `ML_AUTO_NEUTRAL_S` | 0 | Автокалибровка по первым N секундам (выключена) |
+| `ML_AUTO_NEUTRAL_S` | 5 | Автокалибровка: N секунд спокойного лица (без улыбки, открытого рта, движения бровей, голова к камере); 0 – выключена |
 
 Контейнер: `ml/emotion_service/Dockerfile` (контекст – корень репозитория), сервис `emotion-ml-service` в
 `deploy/docker-compose.yml`, модели монтируются в `/models`. Локально: `uv run emotion-agent start`; проверка

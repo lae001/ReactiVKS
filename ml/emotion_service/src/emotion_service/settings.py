@@ -63,6 +63,6 @@ class Settings:
             max_side=int(_env("ML_MAX_SIDE", "640")),
             worker_id=_env("ML_WORKER_ID", socket.gethostname()),
             load_threshold=float(_env("ML_LOAD_THRESHOLD", "0.7")),
-            auto_neutral_s=float(_env("ML_AUTO_NEUTRAL_S", "0")),
+            auto_neutral_s=float(_env("ML_AUTO_NEUTRAL_S", "5")),
             kafka_bootstrap=_env("ML_KAFKA_BOOTSTRAP", ""),
         )

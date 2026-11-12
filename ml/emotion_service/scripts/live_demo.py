@@ -13,6 +13,7 @@ import argparse
 import base64
 import json
 import logging
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ import numpy as np
 from aiohttp import WSMsgType, web
 
 from emotion_service.attributes import AttributeDetector
+from emotion_service.calibration import NeutralCalibrator
 from emotion_service.classifier import OnnxEmotionClassifier, RoutedClassifier
 from emotion_service.detection import YuNetDetector
 from emotion_service.events import attention_payload, behavior_model
@@ -53,28 +55,93 @@ def build_pipeline(card: Path, alpha: float) -> EmotionPipeline:
         mesh=FaceMeshAnalyzer(mesh_model) if mesh_model.exists() else None,
         blendshape_head=BlendshapeHead.load(head_path) if head_path.exists() else None,
         attribute_detector=AttributeDetector(attributes_card) if attributes_card.exists() else None,
+        calibrator=NeutralCalibrator(auto=True),  # калибруется сам по 5 с спокойного лица; кнопка – вручную
     )
+
+
+PERSON_CODE = re.compile(r"^[A-Za-z0-9_]{1,16}$")  # «-» – разделитель в имени файла
+LEGACY_PERSON = "P01"  # записи до появления кода участника – автор выборки
+CONSENT_NOTICE = "own-dataset-v1"
+TARGET_PEOPLE = 10
+TARGET_PER_EMOTION = 30
 
 
 class Recorder:
     """Сбор собственной выборки (EMO-92): кадры с меткой «какую эмоцию я сейчас изображаю».
 
     Сохраняются только входы моделей – кроп 48×48 (PNG), коэффициенты мимики и вероятности очков / бороды
-    (JSON); полные кадры не пишутся. Папка – --record-dir, по умолчанию ml/training/data/own (в .gitignore).
-    Оценка – ml/training/scripts/eval_own.py.
+    (JSON); полные кадры не пишутся. Папка – --record-dir, по умолчанию ml/training/data/own (в .gitignore):
+    own/<эмоция>/<код участника>-<время>.png|json. Участник – анонимный код (P01, P02 …), не имя; запись
+    возможна только после его согласия (own/consent.jsonl), по коду его данные удаляются целиком.
+    Цель – не меньше TARGET_PEOPLE человек по TARGET_PER_EMOTION кадров каждой эмоции. Оценка и дообучение –
+    ml/training/scripts/eval_own.py и finetune_own.py (разбиение по людям).
     """
 
     def __init__(self, root: Path) -> None:
         self.root = root
         self.label: str | None = None
+        self.person = LEGACY_PERSON
         self.until = 0.0
         self.saved: dict[str, int] = {}
         self.recording_id = ""
 
-    def start(self, label: str, seconds: float) -> None:
-        if label in LABELS:
-            self.label, self.until = label, time.monotonic() + seconds
-            self.recording_id = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+    def consent(self, person: str) -> bool:
+        if not PERSON_CODE.match(person):
+            return False
+        self.root.mkdir(parents=True, exist_ok=True)
+        record = {"person": person, "notice": CONSENT_NOTICE, "at": datetime.now().astimezone().isoformat()}
+        with (self.root / "consent.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        return True
+
+    def consented(self) -> set[str]:
+        path = self.root / "consent.jsonl"
+        if not path.exists():
+            return set()
+        return {json.loads(line)["person"] for line in path.read_text(encoding="utf-8").splitlines() if line}
+
+    def start(self, label: str, seconds: float, person: str) -> bool:
+        if label not in LABELS or not PERSON_CODE.match(person) or person not in self.consented():
+            return False
+        self.label, self.person, self.until = label, person, time.monotonic() + seconds
+        self.recording_id = f"{person}-" + datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+        return True
+
+    @staticmethod
+    def _person_of(png: Path) -> str:
+        head = png.stem.split("-", 1)[0]
+        return head if PERSON_CODE.match(head) and not head.isdigit() else LEGACY_PERSON
+
+    def stats(self) -> dict[str, object]:
+        counts: dict[str, dict[str, int]] = {}
+        for png in self.root.glob("*/*.png"):
+            label = png.parent.name
+            if label in LABELS:
+                person = counts.setdefault(self._person_of(png), {})
+                person[label] = person.get(label, 0) + 1
+        complete = [p for p, c in counts.items() if all(c.get(label, 0) >= TARGET_PER_EMOTION for label in LABELS)]
+        return {
+            "people": counts,
+            "complete": sorted(complete),
+            "target_people": TARGET_PEOPLE,
+            "target_per_emotion": TARGET_PER_EMOTION,
+            "labels": list(LABELS),
+        }
+
+    def delete(self, person: str) -> int:
+        """Удалить все кадры участника (отзыв согласия); запись о согласии помечается отозванной."""
+        removed = 0
+        for png in list(self.root.glob("*/*.png")):
+            if self._person_of(png) == person:
+                for path in (png, png.with_suffix(".json")):
+                    if path.exists():
+                        path.unlink()
+                removed += 1
+        if PERSON_CODE.match(person) and (self.root / "consent.jsonl").exists():
+            lines = (self.root / "consent.jsonl").read_text(encoding="utf-8").splitlines()
+            kept = [line for line in lines if line and json.loads(line)["person"] != person]
+            (self.root / "consent.jsonl").write_text("".join(line + "\n" for line in kept), encoding="utf-8")
+        return removed
 
     def maybe_save(self, result: FaceResult) -> None:
         if self.label is None:
@@ -86,10 +153,11 @@ class Recorder:
             return
         folder = self.root / self.label
         folder.mkdir(parents=True, exist_ok=True)
-        stem = folder / datetime.now().astimezone().strftime("%Y%m%d-%H%M%S-%f")
+        stem = folder / (f"{self.person}-" + datetime.now().astimezone().strftime("%Y%m%d-%H%M%S-%f"))
         cv2.imwrite(str(stem.with_suffix(".png")), result.crop)
         meta = {
             "label": self.label,
+            "person": self.person,
             "recording_id": self.recording_id,
             "blendshapes": result.mesh.blendshapes if result.mesh is not None else None,
             "attributes": (
@@ -100,6 +168,46 @@ class Recorder:
         }
         stem.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
         self.saved[self.label] = self.saved.get(self.label, 0) + 1
+
+
+class ProbeLog:
+    """Проверка порогов речи и жестов на живой камере: страница ведет участника по шагам («молчите», «говорите»,
+    «кивните», «покачайте головой», «отверните голову и верните»), сервер пишет по каждому кадру метку шага и сырые
+    сигналы поведения. Файл – ml/training/data/probe/<время>.json (только числа, без изображений); разбор –
+    ml/training/scripts/analyze_probe.py."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.step: str | None = None
+        self.rows: list[dict[str, object]] = []
+
+    def add(self, result: FaceResult) -> None:
+        if self.step is None:
+            return
+        b, mesh = result.behavior, result.mesh
+        self.rows.append(
+            {
+                "t": round(time.monotonic(), 3),
+                "step": self.step,
+                "face": result.state == "analyzing",
+                "mouth_activity": b.mouth_activity if b else None,
+                "speech": b.speech if b else None,
+                "agreement": b.agreement if b else None,
+                "nod_score": b.nod_score if b else None,
+                "shake_score": b.shake_score if b else None,
+                "yaw": round(mesh.yaw_deg, 2) if mesh else None,
+                "pitch": round(mesh.pitch_deg, 2) if mesh else None,
+            }
+        )
+
+    def save(self) -> str | None:
+        if not self.rows:
+            return None
+        self.root.mkdir(parents=True, exist_ok=True)
+        path = self.root / (datetime.now().astimezone().strftime("%Y%m%d-%H%M%S") + ".json")
+        path.write_text(json.dumps(self.rows, ensure_ascii=False), "utf-8")
+        self.rows = []
+        return str(path)
 
 
 # Мимические коэффициенты, которые показывает страница: (название, коэффициенты MediaPipe для усреднения).
@@ -146,19 +254,35 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     # Свое сглаживание на каждое подключение: новая вкладка начинает с чистого состояния.
     pipeline = build_pipeline(request.app["card_path"], request.app["alpha"])
     recorder: Recorder = request.app["recorder"]
+    probe = ProbeLog(request.app["probe_dir"])
     async for msg in ws:
         if msg.type == WSMsgType.TEXT:
-            command = json.loads(msg.data).get("cmd")
+            data = json.loads(msg.data)
+            command = data.get("cmd")
             if command == "calibrate":
                 pipeline.calibrator.start("me")
             elif command == "reset_calibration":
                 pipeline.calibrator.reset("me")
                 pipeline.smoother.reset("me")
             elif command == "mic":  # только флаг «микрофон включен», звук сюда не передается
-                pipeline.mic["me"] = bool(json.loads(msg.data).get("on"))
+                pipeline.mic["me"] = bool(data.get("on"))
+            elif command == "consent":
+                ok = recorder.consent(str(data.get("person", "")))
+                await ws.send_str(json.dumps({"reply": "consent", "ok": ok, "dataset": recorder.stats()}))
             elif command == "record":
-                data = json.loads(msg.data)
-                recorder.start(str(data.get("label")), float(data.get("seconds", 3)))
+                ok = recorder.start(str(data.get("label")), float(data.get("seconds", 3)), str(data.get("person", "")))
+                if not ok:
+                    await ws.send_str(json.dumps({"reply": "record", "ok": False}))
+            elif command == "dataset":
+                await ws.send_str(json.dumps({"reply": "dataset", "dataset": recorder.stats()}))
+            elif command == "delete_person":
+                removed = recorder.delete(str(data.get("person", "")))
+                await ws.send_str(json.dumps({"reply": "deleted", "removed": removed, "dataset": recorder.stats()}))
+            elif command == "probe":
+                probe.step = data.get("step")
+            elif command == "probe_save":
+                probe.step = None
+                await ws.send_str(json.dumps({"reply": "probe_saved", "path": probe.save()}))
             continue
         if msg.type != WSMsgType.BINARY:
             continue
@@ -171,6 +295,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
         (result,) = pipeline.process([("me", rgb)], time.monotonic())
         processed = time.perf_counter()
         recorder.maybe_save(result)
+        probe.add(result)
         payload: dict[str, object] = {
             "state": result.state,
             "frame": [rgb.shape[1], rgb.shape[0]],
@@ -180,7 +305,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
             },
         }
         status = pipeline.calibrator.status("me", time.monotonic())
-        payload["calibration"] = {"state": status.state, "progress": round(status.progress, 2)}
+        payload["calibration"] = {"state": status.state, "progress": round(status.progress, 2), "auto": status.auto}
         if result.attention is not None:
             payload["attention"] = attention_payload(result.attention)
         payload["recording"] = {"label": recorder.label, "saved": recorder.saved}
@@ -246,6 +371,7 @@ def main() -> None:
     app["alpha"] = args.alpha
     app["pipeline"] = build_pipeline(card_path, args.alpha)
     app["recorder"] = Recorder(Path(args.record_dir))
+    app["probe_dir"] = Path(args.record_dir).parent / "probe"
     app.add_routes([web.get("/", index), web.get("/info", info), web.get("/ws", ws_handler)])
     # Только localhost: камера и лицо не уходят с машины.
     web.run_app(app, host="127.0.0.1", port=args.port)
