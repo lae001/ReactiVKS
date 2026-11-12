@@ -70,7 +70,7 @@ test('настоящий бэкенд: организатор создает и 
   await expect.poll(() => served).toContain('/api/v1/meetings');
 
   // 2. создание встречи: настройки по умолчанию из GET /settings
-  await org.goto('/meetings/new');
+  await org.getByRole('link', { name: /Запланировать/ }).click();
   await org.getByLabel('Название').fill('E2E: настоящий бэкенд');
   await org.getByRole('button', { name: 'Создать и получить ссылку' }).click();
   await expect(org.getByText('Встреча создана')).toBeVisible();
@@ -84,6 +84,14 @@ test('настоящий бэкенд: организатор создает и 
   await expect(
     guest.getByRole('heading', { level: 1, name: 'E2E: настоящий бэкенд' }),
   ).toBeVisible();
+  for (const name of ['Камера', 'Микрофон']) {
+    const select = guest.getByRole('combobox', { name, exact: true });
+    await expect(select).toBeEnabled();
+    const value = await select.locator('option').first().getAttribute('value');
+    expect(value).toBeTruthy();
+    await select.selectOption(value!);
+    await expect(select).toHaveValue(value!);
+  }
   await guest.getByLabel('Как вас представить').fill('Анна Гостева');
   await guest.getByRole('radio', { name: /Разрешаю анализ/ }).check();
   await guest.getByRole('button', { name: 'Войти во встречу' }).click();
