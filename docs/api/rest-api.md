@@ -325,9 +325,12 @@ cookie очищается. Выданный access-токен действует
 
 ### Внутренний API
 
+Оба запроса требуют заголовок `X-Service-Token` со значением `SERVICE_TOKEN`.
+
 - `GET /internal/meetings/{meeting_id}/access?user_id=` →
-  `200 {"allowed": true, "meeting_status": "active", "analysis_enabled": true}`.
+  `200 {"allowed": true, "meeting_status": "active", "analysis_enabled": true}`. При отказе `allowed = false`.
 - `GET /internal/meetings/{meeting_id}` → `200 Meeting + {"owner_id", "participants": Participant[]}`; `404`.
+  У участников дополнительно передаются `last_joined_at` и `updated_at`.
 
 ## 4. analytics-service
 

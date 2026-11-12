@@ -21,6 +21,7 @@ COPY libs/vks_common/pyproject.toml libs/vks_common/pyproject.toml
 COPY libs/vks_contracts/pyproject.toml libs/vks_contracts/pyproject.toml
 COPY services/auth_service/pyproject.toml services/auth_service/pyproject.toml
 COPY services/meeting_service/pyproject.toml services/meeting_service/pyproject.toml
+COPY services/realtime_service/pyproject.toml services/realtime_service/pyproject.toml
 RUN uv sync --no-dev --no-install-workspace --package "${PACKAGE}"
 
 # Исходники ставятся редактируемо: сервис находит свой alembic.ini рядом с пакетом (settings.ALEMBIC_INI).

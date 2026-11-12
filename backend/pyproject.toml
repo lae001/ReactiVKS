@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "ReactiVKS backend: корень uv workspace"
 requires-python = ">=3.12,<3.13"
 # Все пакеты workspace: тогда `uv sync` и `uv run` в свежем клоне ставят их без --all-packages.
-dependencies = ["vks-common", "vks-contracts", "auth-service", "meeting-service"]
+dependencies = ["vks-common", "vks-contracts", "auth-service", "meeting-service", "realtime-service"]
 
 [dependency-groups]
 dev = [
@@ -29,6 +29,7 @@ vks-common = { workspace = true }
 vks-contracts = { workspace = true }
 auth-service = { workspace = true }
 meeting-service = { workspace = true }
+realtime-service = { workspace = true }
 
 # ---------------------------------------------------------------------------
 # ruff
@@ -56,7 +57,7 @@ ignore = ["N818"]
 "scripts/**" = ["T201"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["vks_common", "vks_contracts", "auth_service", "meeting_service"]
+known-first-party = ["vks_common", "vks_contracts", "auth_service", "meeting_service", "realtime_service"]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -106,7 +107,7 @@ exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
 # ---------------------------------------------------------------------------
 
 [tool.importlinter]
-root_packages = ["vks_common", "vks_contracts", "auth_service", "meeting_service"]
+root_packages = ["vks_common", "vks_contracts", "auth_service", "meeting_service", "realtime_service"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -243,3 +244,21 @@ type = "forbidden"
 source_modules = ["meeting_service.api", "meeting_service.consumers"]
 forbidden_modules = ["meeting_service.repositories", "meeting_service.models", "meeting_service.adapters"]
 allow_indirect_imports = true
+
+
+[[tool.importlinter.contracts]]
+name = "realtime-service: слои сверху вниз"
+type = "layers"
+containers = ["realtime_service"]
+layers = [
+    "main",
+    "api | consumers",
+    "schemas | services",
+    "clients",
+    "domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "realtime-service: сервисы общаются через HTTP и события"
+type = "independence"
+modules = ["realtime_service", "meeting_service", "auth_service"]

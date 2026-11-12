@@ -6,7 +6,7 @@ UV ?= uv
 PACKAGES := $(wildcard libs/*) $(wildcard services/*)
 
 .PHONY: help sync lint format type imports test test-unit cov check migrate migrate-auth migrate-meeting jwt-key run-auth \
-	run-meeting contracts-snapshot
+	run-meeting run-realtime contracts-snapshot
 
 help: ## Список команд
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -79,3 +79,11 @@ run-meeting: ## meeting-service на http://127.0.0.1:$(MEETING_PORT) (нужн�
 	@test -f $(MEETING_ENV_FILE) || { echo "нет $(MEETING_ENV_FILE): cp services/meeting_service/.env.example $(MEETING_ENV_FILE)"; exit 1; }
 	$(UV) run --env-file $(MEETING_ENV_FILE) uvicorn meeting_service.main:create_application --factory \
 		--host 127.0.0.1 --port $(MEETING_PORT)
+
+REALTIME_ENV_FILE ?= services/realtime_service/.env
+REALTIME_PORT ?= 8080
+
+run-realtime: ## realtime-service на http://127.0.0.1:$(REALTIME_PORT) (нужны meeting-service, auth-service, Kafka, Redis)
+	@test -f $(REALTIME_ENV_FILE) || { echo "нет $(REALTIME_ENV_FILE): cp services/realtime_service/.env.example $(REALTIME_ENV_FILE)"; exit 1; }
+	$(UV) run --env-file $(REALTIME_ENV_FILE) uvicorn realtime_service.main:create_application --factory \
+		--host 127.0.0.1 --port $(REALTIME_PORT) --ws-max-size 8192
