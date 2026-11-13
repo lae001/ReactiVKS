@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { guestErrorMessage, meetingErrorMessage } from '@/features/meetings/errors';
+import { joinOrganizer } from '@/features/meetings/join-organizer';
 import { meetingsApi } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
 import type { RoomEntry } from '@/shared/lib/room-entry';
@@ -24,14 +25,7 @@ async function fetchConnection(meeting: LiveKitMeeting, entry: RoomEntry): Promi
   const result =
     entry.role === 'guest'
       ? await meetingsApi.rejoin()
-      : await meetingsApi.joinAsOrganizer(
-          meeting.id,
-          meeting.analysis_enabled
-            ? entry.consent === 'granted'
-              ? 'granted'
-              : 'denied'
-            : undefined,
-        );
+      : await joinOrganizer(meeting, entry.consent);
   return { url: result.livekit_url, token: result.livekit_token };
 }
 

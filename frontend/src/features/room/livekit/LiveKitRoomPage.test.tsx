@@ -55,6 +55,8 @@ function renderPage(entry: RoomEntry) {
   );
 }
 
+beforeEach(() => vi.spyOn(meetingsApi, 'listParticipants').mockResolvedValue([]));
+
 const fail = (status: number, code: string) =>
   new ApiError({ status, code, message: code, requestId: 'r' });
 

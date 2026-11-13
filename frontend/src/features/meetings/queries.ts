@@ -7,6 +7,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
+import { joinOrganizer } from './join-organizer';
+
 import {
   type CreateMeetingRequest,
   type Meeting,
@@ -120,8 +122,7 @@ export function useDeleteMeeting(id: string) {
 export function useStartMeeting(meeting: Pick<Meeting, 'id' | 'analysis_enabled'>) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      meetingsApi.joinAsOrganizer(meeting.id, meeting.analysis_enabled ? 'denied' : undefined),
+    mutationFn: () => joinOrganizer(meeting),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: meetingKeys.all });
     },
