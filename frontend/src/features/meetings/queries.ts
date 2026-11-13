@@ -32,6 +32,8 @@ export const meetingKeys = {
 export interface MeetingsFilters {
   status?: MeetingStatus[];
   q?: string;
+  from?: string;
+  to?: string;
 }
 
 export function useMeetingsList(filters: MeetingsFilters) {

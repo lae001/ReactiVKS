@@ -7,6 +7,7 @@ import { meetingErrorMessage } from '@/features/meetings/errors';
 import { MeetingEditForm } from '@/features/meetings/MeetingEditForm';
 import { useDeleteMeeting, useEndMeeting, useMeeting } from '@/features/meetings/queries';
 import { StartMeetingButton } from '@/features/meetings/StartMeetingButton';
+import { ReportExport } from '@/features/reports/ReportExport';
 import { RemoteReport } from '@/features/reports/RemoteReport';
 import { MeetingReport } from '@/features/reports/MeetingReport';
 import type { Meeting } from '@/shared/api/meetings';
@@ -216,10 +217,20 @@ function MeetingDetails({ meeting }: { meeting: Meeting }) {
       </section>
 
       {meeting.status === 'ended' &&
+        !meeting.analysis_enabled &&
+        import.meta.env.VITE_API_MODE === 'http' && (
+          <ReportExport meetingId={meeting.id} ended reportReady={false} />
+        )}
+      {meeting.status === 'ended' &&
         (import.meta.env.VITE_API_MODE === 'http' && meeting.analysis_enabled ? (
           <RemoteReport key={meeting.id} meetingId={meeting.id} />
         ) : data ? (
-          <MeetingReport report={data.report} series={data.series} />
+          <section className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              Демонстрационный отчёт. Серверный экспорт доступен на стенде с API.
+            </p>
+            <MeetingReport report={data.report} series={data.series} />
+          </section>
         ) : (
           <p className="max-w-prose rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
             {meeting.analysis_enabled

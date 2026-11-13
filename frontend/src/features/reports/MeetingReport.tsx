@@ -1,10 +1,7 @@
-import { Download, FileText } from 'lucide-react';
-
 import { EmotionLegend } from '@/features/reports/EmotionLegend';
 import type { Report, Series } from '@/shared/api/types';
 import { EMOTION_LABELS } from '@/shared/config/emotions';
 import { formatDateTime, formatDuration, formatPercent } from '@/shared/lib/format';
-import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { EmotionTag } from '@/shared/ui/emotion-icon';
 
@@ -35,16 +32,6 @@ export function MeetingReport({ report, series }: { report: Report; series: Seri
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold">Отчет по эмоциям</h2>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" disabled title="Экспорт появится в спринте 5">
-            <Download aria-hidden />
-            CSV
-          </Button>
-          <Button variant="outline" size="sm" disabled title="Экспорт появится в спринте 5">
-            <FileText aria-hidden />
-            PDF
-          </Button>
-        </div>
       </div>
 
       <dl className="grid gap-3 sm:grid-cols-3">

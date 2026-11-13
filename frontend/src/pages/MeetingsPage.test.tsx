@@ -195,3 +195,50 @@ describe('главная организатора', () => {
     });
   });
 });
+
+it('фильтры дат применяются к обоим разделам, статус — к своему; сброс возвращает все статусы', async () => {
+  const spy = vi.spyOn(meetingsApi, 'listMeetings');
+  const user = userEvent.setup();
+  renderHome();
+  await within(await upcoming()).findByText('Еженедельная планерка команды');
+  await user.type(screen.getByLabelText('С даты (UTC)'), '2026-01-01');
+  await user.type(screen.getByLabelText('По дату (UTC)'), '2026-12-31');
+  await user.selectOptions(screen.getByLabelText('Статус — Прошедшие'), 'ended');
+  await waitFor(() =>
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: ['ended'],
+        from: '2026-01-01',
+        to: '2026-12-31',
+        cursor: undefined,
+      }),
+      expect.any(AbortSignal),
+    ),
+  );
+  expect(spy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      status: ['scheduled', 'active'],
+      from: '2026-01-01',
+      to: '2026-12-31',
+    }),
+    expect.any(AbortSignal),
+  );
+  await user.click(screen.getByText('Сбросить фильтры'));
+  expect(screen.getByLabelText('С даты (UTC)')).toHaveValue('');
+  expect(screen.getByLabelText('Статус — Прошедшие')).toHaveValue('');
+  await within(await past()).findByText('Ретроспектива спринта 1');
+  spy.mockRestore();
+});
+
+it('обратный интервал дат объясняется без некорректного запроса', async () => {
+  const spy = vi.spyOn(meetingsApi, 'listMeetings');
+  renderHome();
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText('С даты (UTC)'), '2026-12-31');
+  await user.type(screen.getByLabelText('По дату (UTC)'), '2026-01-01');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Начальная дата');
+  expect(
+    spy.mock.calls.some(([params]) => params?.from && params.to && params.from > params.to),
+  ).toBe(false);
+  spy.mockRestore();
+});
