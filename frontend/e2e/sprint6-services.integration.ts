@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { TRACK_PEER_CONNECTIONS, measureRemoteVideo, inboundAudioBytes } from './media-helpers';
+import {
+  TRACK_PEER_CONNECTIONS,
+  measureRemoteVideo,
+  inboundAudioBytes,
+  selectedIcePairs,
+} from './media-helpers';
 
 // Настоящие auth/meeting/realtime/analytics/LiveKit. Никаких page.route/routeWebSocket.
 // При отсутствии Kafka проверяется доступная часть, включая сохранение звонка при unavailable.
@@ -11,11 +16,11 @@ test('реальные сервисы: согласие в комнате, snaps
     'Нужна тестовая учётная запись',
   );
   const orgContext = await browser.newContext({
-    permissions: ['camera', 'microphone'],
+    permissions: browser.browserType().name() === 'chromium' ? ['camera', 'microphone'] : [],
     locale: 'ru-RU',
   });
   const guestContext = await browser.newContext({
-    permissions: ['camera', 'microphone'],
+    permissions: browser.browserType().name() === 'chromium' ? ['camera', 'microphone'] : [],
     locale: 'ru-RU',
   });
   const org = await orgContext.newPage();
@@ -171,6 +176,7 @@ test('реальные сервисы: согласие в комнате, snaps
       organizer: [audioBefore.org, await inboundAudioBytes(org)],
       guest: [audioBefore.guest, await inboundAudioBytes(guest)],
     };
+    evidence.ice = { organizer: await selectedIcePairs(org), guest: await selectedIcePairs(guest) };
     await org.getByLabel('Название отметки').fill('Интеграционный момент');
     await org.getByRole('button', { name: 'Отметить момент' }).click();
     await expect(org.getByRole('tabpanel')).toContainText('Не удалось сохранить отметку');

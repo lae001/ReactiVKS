@@ -107,3 +107,28 @@ export async function measureRemoteVideo(page: Page, identity: string) {
   expect(result.framesDecodedAfter).toBeGreaterThan(result.framesDecodedBefore);
   return result;
 }
+
+/** Типы кандидатов именно выбранных transport-пар, без IP и учётных данных TURN. */
+export async function selectedIcePairs(page: Page) {
+  return page.evaluate(async () => {
+    const pcs = (window as unknown as { __pcs: RTCPeerConnection[] }).__pcs;
+    const pairs: { local: string; remote: string; protocol: string; state: string }[] = [];
+    for (const pc of pcs) {
+      const report = await pc.getStats();
+      report.forEach((stat) => {
+        if (stat.type !== 'transport' || !stat.selectedCandidatePairId) return;
+        const pair = report.get(stat.selectedCandidatePairId);
+        if (!pair) return;
+        const local = report.get(pair.localCandidateId);
+        const remote = report.get(pair.remoteCandidateId);
+        pairs.push({
+          local: local?.candidateType ?? 'unknown',
+          remote: remote?.candidateType ?? 'unknown',
+          protocol: local?.protocol ?? 'unknown',
+          state: pair.state,
+        });
+      });
+    }
+    return pairs;
+  });
+}

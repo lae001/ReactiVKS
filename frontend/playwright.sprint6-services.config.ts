@@ -15,7 +15,26 @@ export default defineConfig({
       args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
     },
   },
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'chrome', use: { browserName: 'chromium', channel: 'chrome' } },
+    {
+      name: 'firefox',
+      use: {
+        browserName: 'firefox',
+        launchOptions: {
+          args: [],
+          firefoxUserPrefs: {
+            'media.navigator.streams.fake': true,
+            'media.navigator.permission.disabled': true,
+            // Локальный стенд LiveKit слушает loopback; разрешено только в тестовом профиле.
+            'media.peerconnection.ice.loopback': true,
+            'media.autoplay.default': 0,
+          },
+        },
+      },
+    },
+  ],
   webServer: {
     command: 'pnpm dev --port 5184 --strictPort',
     url: 'http://localhost:5184',
