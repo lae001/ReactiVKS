@@ -17,14 +17,13 @@ import { EmotionTag } from '@/shared/ui/emotion-icon';
 
 import { secondsFromStart } from './time';
 
-type Row = { t: number } & Record<(typeof EMOTION_LABELS)[number], number>;
+type Row = { t: number } & Record<(typeof EMOTION_LABELS)[number], number | null>;
 
 function toRows(series: Series, startedAt: string): Row[] {
   return series.points.flatMap((pt) => {
-    if (!pt.p) return [];
     const row = { t: secondsFromStart(pt.ts, startedAt) } as Row;
     EMOTION_LABELS.forEach((e, i) => {
-      row[e] = pt.p?.[i] ?? 0;
+      row[e] = pt.p?.[i] ?? null;
     });
     return [row];
   });

@@ -39,19 +39,54 @@ function MeetingsSection({
   status,
   q,
   empty,
+  from,
+  to,
+  selectedStatus,
+  onStatus,
 }: {
   title: string;
   status: MeetingStatus[];
   q: string;
   empty: string;
+  from: string;
+  to: string;
+  selectedStatus: MeetingStatus | '';
+  onStatus: (value: MeetingStatus | '') => void;
 }) {
-  const list = useMeetingsList({ status, q: q || undefined });
+  const list = useMeetingsList({
+    status: selectedStatus ? [selectedStatus] : status,
+    q: q || undefined,
+    from: from || undefined,
+    to: to || undefined,
+  });
   const titleId = `meetings-${status.join('-')}`;
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-4">
       <h2 id={titleId} className="text-lg font-semibold">
         {title}
       </h2>
+      <label className="flex items-center gap-3 text-sm">
+        Статус — {title}
+        <select
+          className="rounded-md border bg-background p-2"
+          value={selectedStatus}
+          onChange={(e) => onStatus(e.target.value as MeetingStatus | '')}
+        >
+          <option value="">Все</option>
+          {status.map((value) => (
+            <option key={value} value={value}>
+              {
+                {
+                  scheduled: 'Запланирована',
+                  active: 'Идет',
+                  ended: 'Завершена',
+                  cancelled: 'Отменена',
+                }[value]
+              }
+            </option>
+          ))}
+        </select>
+      </label>
       {list.isPending ? (
         <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" aria-hidden /> Загружаем встречи…
@@ -67,13 +102,17 @@ function MeetingsSection({
         <>
           <MeetingList
             meetings={flattenPages(list.data)}
-            empty={q ? 'Ничего не найдено. Измените поиск.' : empty}
+            empty={
+              q || from || to || selectedStatus
+                ? 'Ничего не найдено. Измените поиск или фильтры.'
+                : empty
+            }
           />
           {list.hasNextPage && (
             <Button
               variant="outline"
               className="self-center"
-              disabled={list.isFetchingNextPage}
+              disabled={list.isFetchingNextPage || list.isPlaceholderData}
               onClick={() => void list.fetchNextPage()}
             >
               {list.isFetchingNextPage ? 'Загружаем…' : 'Ещё'}
@@ -103,6 +142,10 @@ export function MeetingsPage() {
   const [invite, setInvite] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [statuses, setStatuses] = useState<Record<string, MeetingStatus | ''>>({});
+  const invalidDates = Boolean(from && to && from > to);
 
   const q = useDebounced(search.trim(), SEARCH_DEBOUNCE_MS);
   const instant = useStartInstantMeeting();
@@ -218,9 +261,44 @@ export function MeetingsPage() {
         />
       </div>
 
-      {SECTIONS.map((section) => (
-        <MeetingsSection key={section.id} {...section} q={q} />
-      ))}
+      <div className="flex flex-wrap items-end gap-3" role="group" aria-label="Фильтры истории">
+        <label className="flex flex-col gap-2 text-sm">
+          С даты (UTC)
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-2 text-sm">
+          По дату (UTC)
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </label>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setSearch('');
+            setFrom('');
+            setTo('');
+            setStatuses({});
+          }}
+        >
+          Сбросить фильтры
+        </Button>
+      </div>
+      {invalidDates ? (
+        <p role="alert" className="text-destructive">
+          Начальная дата должна быть не позже конечной.
+        </p>
+      ) : (
+        SECTIONS.map((section) => (
+          <MeetingsSection
+            key={section.id}
+            {...section}
+            q={q}
+            from={from}
+            to={to}
+            selectedStatus={statuses[section.id] ?? ''}
+            onStatus={(value) => setStatuses((previous) => ({ ...previous, [section.id]: value }))}
+          />
+        ))
+      )}
     </div>
   );
 }

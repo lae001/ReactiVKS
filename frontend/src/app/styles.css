@@ -158,3 +158,28 @@
     }
   }
 }
+
+/* Реакции в комнате: эмодзи всплывает снизу вверх и гаснет (только transform и opacity); --vks-dx – случайный
+   сдвиг по горизонтали не больше 12 px. */
+@keyframes vks-reaction-float {
+  from {
+    opacity: 1;
+    transform: translate(var(--vks-dx, 0px), 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--vks-dx, 0px), -45vh);
+  }
+}
+
+.vks-reaction {
+  animation: vks-reaction-float 2.8s ease-out forwards;
+}
+
+/* Без движения: эмодзи просто стоит на месте и исчезает по таймеру */
+@media (prefers-reduced-motion: reduce) {
+  .vks-reaction {
+    animation: none;
+    transform: translate(var(--vks-dx, 0px), 0);
+  }
+}

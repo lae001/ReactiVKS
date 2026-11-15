@@ -9,6 +9,8 @@ import { EmotionIndicator } from '@/features/emotions/EmotionIndicator';
 import { EmotionPanel } from '@/features/emotions/EmotionPanel';
 import { type ChatMessage, ChatPanel } from '@/features/room/ChatPanel';
 import { ConfirmDialog } from '@/features/room/ConfirmDialog';
+import { CancelLink } from '@/features/room/CancelLink';
+import { exitLink } from '@/features/room/livekit/exit-link';
 import { RoomMessage } from '@/features/room/RoomMessage';
 import { ControlBar } from '@/features/room/ControlBar';
 import { ParticipantsPanel } from '@/features/room/ParticipantsPanel';
@@ -20,6 +22,7 @@ import { API_MODE, type Meeting, type Participant } from '@/shared/api/meetings'
 import { useSessionStore } from '@/shared/api/session';
 import type { ConsentState, SnapshotParticipant } from '@/shared/api/types';
 import { paths } from '@/shared/config/routes';
+import { usePageScrollLock } from '@/shared/hooks/use-page-scroll-lock';
 import { useLocalMedia } from '@/shared/hooks/use-local-media';
 import { formatDuration } from '@/shared/lib/format';
 import { readRoomEntry, type RoomEntry } from '@/shared/lib/room-entry';
@@ -62,7 +65,7 @@ function useElapsed(): number {
 
 /** Что комнате нужно знать о встрече: организатору приходит полная карточка, гостю – JoinResult.meeting. */
 type RoomMeeting = Pick<Meeting, 'id' | 'title' | 'status' | 'analysis_enabled'> &
-  Partial<Pick<Meeting, 'invite_url' | 'invite_code'>>;
+  Partial<Pick<Meeting, 'invite_url' | 'invite_code' | 'started_at'>>;
 
 /**
  * UC-4. Комната встречи (docs/frontend/site-structure.md, 4.3): галерея, боковая панель
@@ -93,7 +96,7 @@ export default function RoomPage() {
           title={notFound ? 'Встреча не найдена' : 'Не удалось открыть комнату'}
           text={
             notFound
-              ? 'Возможно, ее удалили или ссылка введена с ошибкой.'
+              ? 'Встреча не найдена или у вас нет к ней доступа.'
               : meetingErrorMessage(meetingQuery.error, 'открыть комнату')
           }
           action={
@@ -104,10 +107,22 @@ export default function RoomPage() {
         />
       );
     }
-    return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
+    return (
+      <RoomMessage
+        title="Входим во встречу…"
+        text="Подготавливаем комнату."
+        action={<CancelLink role={fromLobby?.role ?? 'organizer'} />}
+      />
+    );
   }
   if (API_MODE === 'mock' && participantsQuery.isPending) {
-    return <RoomMessage title="Входим во встречу…" text="Подготавливаем комнату." action={null} />;
+    return (
+      <RoomMessage
+        title="Входим во встречу…"
+        text="Подготавливаем комнату."
+        action={<CancelLink role={fromLobby?.role ?? 'organizer'} />}
+      />
+    );
   }
 
   // Без state из лобби считаем, что вошел организатор (с главной или из карточки встречи).
@@ -130,9 +145,16 @@ export default function RoomPage() {
         title="Встреча завершена"
         text={`Встреча «${meeting.title}» уже закончилась.`}
         action={
-          <Button asChild variant="room">
-            <Link to={paths.meeting(meeting.id)}>К карточке встречи</Link>
-          </Button>
+          entry.role === 'organizer' ? (
+            <Button asChild variant="room">
+              <Link to={paths.meeting(meeting.id)}>К карточке встречи</Link>
+            </Button>
+          ) : (
+            // карточка встречи только для владельца: гостю – на главную
+            <Button asChild variant="room">
+              <Link to={exitLink(entry).to}>{exitLink(entry).label}</Link>
+            </Button>
+          )
         }
       />
     );
@@ -148,6 +170,11 @@ export default function RoomPage() {
             <Link to={paths.join(entry.inviteCode ?? meeting.invite_code ?? '')}>
               Вернуться во встречу
             </Link>
+          </Button>
+        }
+        secondary={
+          <Button asChild variant="room">
+            <Link to={exitLink(entry).to}>{exitLink(entry).label}</Link>
           </Button>
         }
       />
@@ -170,6 +197,7 @@ function Room({
   onLeave: () => void;
 }) {
   const navigate = useNavigate();
+  usePageScrollLock();
   const isOrganizer = entry.role === 'organizer';
   const elapsed = useElapsed();
   const media = useLocalMedia({ initialCamera: entry.cameraOn, initialMic: entry.micOn });
@@ -244,7 +272,7 @@ function Room({
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-room text-room-foreground">
+    <div className="fixed inset-0 flex flex-col overflow-clip bg-room text-room-foreground">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-room-border px-4">
         <div className="flex min-w-0 flex-1 items-baseline gap-3">
           <h1 className="truncate text-sm font-medium">{meeting.title}</h1>

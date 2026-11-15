@@ -1,0 +1,312 @@
+{
+  "date": "2026-11-13",
+  "chrome": {
+    "browser": "157.0.8103.51",
+    "services": "real",
+    "devices": "virtual",
+    "snapshot": {
+      "analysis": {
+        "state": "unavailable"
+      },
+      "guestWithoutConsent": true
+    },
+    "organizerConsent": [
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      }
+    ],
+    "guestConsent": [
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      }
+    ],
+    "consentSurvivesReload": true,
+    "organizerToGuest": {
+      "width": 640,
+      "height": 480,
+      "presentedFrames": 5,
+      "framesDecodedBefore": 2,
+      "framesDecodedAfter": 8
+    },
+    "guestToOrganizer": {
+      "width": 640,
+      "height": 480,
+      "presentedFrames": 5,
+      "framesDecodedBefore": 14,
+      "framesDecodedAfter": 20
+    },
+    "audio": {
+      "organizer": [
+        527,
+        9223
+      ],
+      "guest": [
+        344,
+        4420
+      ]
+    },
+    "ice": {
+      "organizer": [
+        {
+          "local": "host",
+          "remote": "host",
+          "protocol": "udp",
+          "state": "succeeded"
+        }
+      ],
+      "guest": [
+        {
+          "local": "host",
+          "remote": "host",
+          "protocol": "udp",
+          "state": "succeeded"
+        }
+      ]
+    },
+    "guestEmotionConnections": 0
+  },
+  "firefox": {
+    "browser": "Playwright Firefox 157.0",
+    "result": "failed",
+    "first_failure": "ICE connection failed before media reception",
+    "samples": [
+      {
+        "sample": 0,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 1,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 2,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 3,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 4,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 5,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 6,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 7,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 8,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 9,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 10,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 11,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 12,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 13,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      },
+      {
+        "sample": 14,
+        "ui": "connecting",
+        "rtc": [
+          {
+            "connection": "failed",
+            "ice": "failed",
+            "signaling": "stable",
+            "candidates": [],
+            "pairs": []
+          }
+        ]
+      }
+    ],
+    "sdk_timeout_seconds": 15,
+    "loopback_preference_retry": "did not resolve"
+  },
+  "safari": {
+    "version": "26.6.2 (21624.5.1.11.3)",
+    "result": "session not created",
+    "reason": "Allow remote automation is disabled",
+    "scenario_executed": false
+  }
+}

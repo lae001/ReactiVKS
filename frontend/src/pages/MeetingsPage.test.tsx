@@ -126,4 +126,119 @@ describe('главная организатора', () => {
     await user.click(screen.getByRole('button', { name: 'Перейти в лобби' }));
     expect(router.state.location.pathname).toBe('/j/demoactive');
   });
+
+  describe('«Завершить» в строке идущей встречи', () => {
+    const row = (title: string) => screen.getByText(title).closest('li') as HTMLElement;
+
+    it('есть у идущей встречи, нет у запланированной и завершенной', async () => {
+      renderHome();
+      await within(await upcoming()).findByText('Еженедельная планерка команды');
+      expect(
+        within(row('Еженедельная планерка команды')).getByRole('button', { name: 'Завершить' }),
+      ).toBeVisible();
+      // «Интервью…» запланировано, «Ретроспектива…» завершена: завершать нечего
+      expect(
+        within(row('Интервью: frontend-разработчик')).queryByRole('button', { name: 'Завершить' }),
+      ).not.toBeInTheDocument();
+      await within(await past()).findByText('Ретроспектива спринта 1');
+      expect(
+        within(row('Ретроспектива спринта 1')).queryByRole('button', { name: 'Завершить' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('подтверждение вызывает API, список обновляется и встреча уходит в «Прошедшие»', async () => {
+      const end = vi.spyOn(meetingsApi, 'endMeeting');
+      const user = userEvent.setup();
+      renderHome();
+      await within(await upcoming()).findByText('Еженедельная планерка команды');
+
+      await user.click(
+        within(row('Еженедельная планерка команды')).getByRole('button', { name: 'Завершить' }),
+      );
+      // без подтверждения встреча не завершается
+      expect(end).not.toHaveBeenCalled();
+      const confirm = screen.getByRole('alertdialog');
+      expect(confirm).toHaveTextContent('закончится для всех участников');
+      await user.click(within(confirm).getByRole('button', { name: 'Завершить встречу' }));
+
+      expect(end).toHaveBeenCalledWith('m-active');
+      await waitFor(() =>
+        expect(screen.getByRole('region', { name: 'Ближайшие' })).not.toHaveTextContent(
+          'Еженедельная планерка команды',
+        ),
+      );
+      expect(await within(await past()).findByText('Еженедельная планерка команды')).toBeVisible();
+    });
+
+    it('отмена подтверждения не завершает встречу; сбой API – сообщение', async () => {
+      const end = vi
+        .spyOn(meetingsApi, 'endMeeting')
+        .mockRejectedValue(new ApiError({ status: 0, code: 'network_error', message: 'x' }));
+      const user = userEvent.setup();
+      renderHome();
+      await within(await upcoming()).findByText('Еженедельная планерка команды');
+      const open = () =>
+        user.click(
+          within(row('Еженедельная планерка команды')).getByRole('button', { name: 'Завершить' }),
+        );
+
+      await open();
+      await user.click(screen.getByRole('button', { name: 'Отмена' }));
+      expect(end).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+      await open();
+      await user.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Завершить встречу' }),
+      );
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Не удалось связаться с сервером/);
+    });
+  });
+});
+
+it('фильтры дат применяются к обоим разделам, статус — к своему; сброс возвращает все статусы', async () => {
+  const spy = vi.spyOn(meetingsApi, 'listMeetings');
+  const user = userEvent.setup();
+  renderHome();
+  await within(await upcoming()).findByText('Еженедельная планерка команды');
+  await user.type(screen.getByLabelText('С даты (UTC)'), '2026-01-01');
+  await user.type(screen.getByLabelText('По дату (UTC)'), '2026-12-31');
+  await user.selectOptions(screen.getByLabelText('Статус — Прошедшие'), 'ended');
+  await waitFor(() =>
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: ['ended'],
+        from: '2026-01-01',
+        to: '2026-12-31',
+        cursor: undefined,
+      }),
+      expect.any(AbortSignal),
+    ),
+  );
+  expect(spy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      status: ['scheduled', 'active'],
+      from: '2026-01-01',
+      to: '2026-12-31',
+    }),
+    expect.any(AbortSignal),
+  );
+  await user.click(screen.getByText('Сбросить фильтры'));
+  expect(screen.getByLabelText('С даты (UTC)')).toHaveValue('');
+  expect(screen.getByLabelText('Статус — Прошедшие')).toHaveValue('');
+  await within(await past()).findByText('Ретроспектива спринта 1');
+  spy.mockRestore();
+});
+
+it('обратный интервал дат объясняется без некорректного запроса', async () => {
+  const spy = vi.spyOn(meetingsApi, 'listMeetings');
+  renderHome();
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText('С даты (UTC)'), '2026-12-31');
+  await user.type(screen.getByLabelText('По дату (UTC)'), '2026-01-01');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Начальная дата');
+  expect(
+    spy.mock.calls.some(([params]) => params?.from && params.to && params.from > params.to),
+  ).toBe(false);
+  spy.mockRestore();
 });

@@ -29,10 +29,20 @@ export default defineConfig(({ mode }) => {
           target: meetingTarget,
           changeOrigin: true,
         },
+        '^/api/v1/reports': {
+          target:
+            loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_ANALYTICS_API_TARGET ||
+            'http://127.0.0.1:8003',
+          changeOrigin: true,
+        },
         // Один origin для SPA и API: так работает cookie vks_refresh (SameSite=Strict, Path=/api/v1/auth)
-        '/api/v1/reports': { target: 'http://127.0.0.1:8003', changeOrigin: true },
         '/api': { target: apiTarget, changeOrigin: true },
-        '/ws': { target: 'ws://localhost:8080', ws: true },
+        '/ws': {
+          target:
+            loadEnv(mode, import.meta.dirname, 'VITE_').VITE_DEV_REALTIME_TARGET ||
+            'ws://127.0.0.1:8080',
+          ws: true,
+        },
       },
     },
     test: {

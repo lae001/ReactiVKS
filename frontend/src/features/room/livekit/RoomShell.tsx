@@ -1,13 +1,17 @@
+import { useEmotions } from '@/features/emotions/use-emotions';
+import { LiveEmotionPanel } from '@/features/emotions/LiveEmotionPanel';
 import {
   RoomAudioRenderer,
   useChat,
+  useConnectionState,
+  useDataChannel,
   useLocalParticipant,
   useParticipants,
   useRoomContext,
 } from '@livekit/components-react';
-import { MediaDeviceFailure } from 'livekit-client';
+import { ConnectionState, MediaDeviceFailure } from 'livekit-client';
 import { X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { meetingErrorMessage } from '@/features/meetings/errors';
@@ -27,13 +31,21 @@ import { ControlBar } from '../ControlBar';
 import { ParticipantsPanel } from '../ParticipantsPanel';
 import type { SidePanelTab } from '../types';
 
+import { CHAT_SYNC_TOPIC } from './chat-history';
+import { useChatNotifications, useUnreadTitle } from './chat-notifications';
+import { ChatToasts } from './ChatToasts';
+import { useMeetingElapsed } from './meeting-timer';
 import { ConnectionBanner } from './ConnectionBanner';
 import { useConsentToggle } from './consent';
-import { DevicesMenu } from './DevicesMenu';
+import { DevicesPanel } from './DevicesMenu';
 import { EMOTIONS_MOCK_NOTICE, mockEmotionSnapshot } from './emotions-mock';
 import { confirmText, type PendingAction, useModeration } from './moderation';
 import { deviceFailureText } from './notice';
-import { isAgent, roomParticipants } from './participants';
+import { isAgent, isService, roomParticipants } from './participants';
+import { ReactionsOverlay } from './ReactionsOverlay';
+import { type PublishData, REACTION_TOPIC, useReactions } from './reactions';
+import { clearRoomState, saveDevices } from './room-state';
+import { useRoomChat } from './use-room-chat';
 import { RoomGallery } from './RoomGallery';
 import type { LiveKitMeeting } from './LiveKitRoomView';
 
@@ -42,15 +54,6 @@ const TAB_TITLE: Record<SidePanelTab, string> = {
   emotions: 'Эмоции',
   chat: 'Чат',
 };
-
-function useElapsed(): number {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return seconds;
-}
 
 const clock = (timestamp: number) =>
   new Date(timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -71,22 +74,65 @@ export function RoomShell({
 }) {
   const room = useRoomContext();
   const navigate = useNavigate();
-  const elapsed = useElapsed();
+  const connectionState = useConnectionState();
   const live = useParticipants();
+  const humans = live.filter((p) => !isService(p));
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
   // Чат на LiveKit (тема lk.chat): история живет, пока открыта вкладка, и нигде не сохраняется
   const chat = useChat();
-  const moderation = useModeration(meeting.id, {
-    onEnded: () => navigate(paths.meeting(meeting.id)),
+  // Реакции (эмодзи) идут по каналу данных, без гарантии доставки; в чат они не попадают
+  const publish = useCallback<PublishData>(
+    (data, options) => localParticipant.publishData(data as Uint8Array<ArrayBuffer>, options),
+    [localParticipant],
+  );
+  const reactions = useReactions(publish);
+  useDataChannel(REACTION_TOPIC, reactions.receive);
+  // История чата: своя во вкладке плюс синхронизация с теми, кто уже в комнате (vks.chat.sync)
+  const selfIdentity = localParticipant.identity ?? '';
+  const roomChat = useRoomChat({
+    meetingId: meeting.id,
+    live: chat.chatMessages,
+    selfIdentity,
+    humans: humans.map((p) => p.identity),
+    connected: connectionState === ConnectionState.Connected,
+    publish,
   });
-  const [panel, setPanel] = useState<SidePanelTab | null>(null);
+  useDataChannel(CHAT_SYNC_TOPIC, roomChat.receive);
+  const moderation = useModeration(meeting.id, {
+    onEnded: () => {
+      clearRoomState(meeting.id);
+      navigate(paths.meeting(meeting.id));
+    },
+  });
+  const [panel, setPanelState] = useState<SidePanelTab | null>(null);
+  const notifications = useChatNotifications(chat.chatMessages, panel === 'chat');
+  useUnreadTitle(notifications.unread);
+  // Открытие чата обнуляет счетчик и убирает уведомления
+  function setPanel(
+    next: SidePanelTab | null | ((current: SidePanelTab | null) => SidePanelTab | null),
+  ) {
+    const value = typeof next === 'function' ? next(panel) : next;
+    if (value === 'chat') notifications.markRead();
+    setPanelState(value);
+  }
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [chatError, setChatError] = useState(false);
   const isOrganizer = entry.role === 'organizer';
+  const realEmotions = import.meta.env.VITE_API_MODE === 'http';
+  const emotions = useEmotions(meeting.id, realEmotions && isOrganizer && meeting.analysis_enabled);
 
+  // Время встречи – от ее начала (а не от открытия страницы): переживает обновление
+  const elapsed = useMeetingElapsed(
+    meeting.id,
+    meeting.started_at,
+    humans.map((p) => p.joinedAt),
+  );
   const people = roomParticipants(live);
-  // Индикатор виден всем, пока в комнате есть ML-агент (vks.kind = agent)
-  const analysisRunning = live.some(isAgent);
+  // Организатор знает состояние обработки по heartbeat realtime; гостю доступен только факт присутствия агента.
+  const analysisRunning =
+    realEmotions && isOrganizer
+      ? emotions.data.analysis === 'active' || emotions.data.analysis === 'degraded'
+      : live.some(isAgent);
   const self = people.find((p) => p.isSelf);
   const consent = useConsentToggle({ meeting, entry, current: self?.consent ?? 'not_required' });
   const analysisOn = meeting.analysis_enabled && !consent.disabled;
@@ -100,6 +146,11 @@ export function RoomShell({
     try {
       if (kind === 'mic') await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
       else await localParticipant.setCameraEnabled(!isCameraEnabled);
+      // запоминаем состояние во вкладке: после обновления страницы выключенное остается выключенным
+      saveDevices(meeting.id, {
+        mic: kind === 'mic' ? !isMicrophoneEnabled : isMicrophoneEnabled,
+        camera: kind === 'camera' ? !isCameraEnabled : isCameraEnabled,
+      });
     } catch (e) {
       const name = e instanceof Error ? e.name : '';
       const failure =
@@ -160,7 +211,9 @@ export function RoomShell({
         {analysisRunning && (
           <Badge variant="signal">
             <span className="size-1.5 rounded-full bg-signal-foreground" aria-hidden />
-            Идет анализ эмоций
+            {realEmotions && !isOrganizer
+              ? 'К встрече подключён анализ эмоций'
+              : 'Идет анализ эмоций'}
           </Badge>
         )}
         {isOrganizer && meeting.invite_url && (
@@ -199,7 +252,13 @@ export function RoomShell({
       )}
 
       <div className="relative flex min-h-0 flex-1">
-        <RoomGallery />
+        <RoomGallery emotions={isOrganizer && realEmotions ? emotions.data.participants : []} />
+        <ReactionsOverlay items={reactions.floating} onExpire={reactions.expire} />
+        <ChatToasts
+          toasts={notifications.toasts}
+          onOpen={() => setPanel('chat')}
+          onExpire={notifications.dismissToast}
+        />
         {panel && (
           <aside
             aria-label={TAB_TITLE[panel]}
@@ -269,24 +328,27 @@ export function RoomShell({
                   }
                 />
               )}
-              {panel === 'emotions' && (
-                <div className="flex flex-col gap-4">
-                  <p
-                    role="note"
-                    className="rounded-md border border-signal/50 bg-signal/10 px-3 py-2 text-xs"
-                  >
-                    {EMOTIONS_MOCK_NOTICE}
-                  </p>
-                  <EmotionPanel participants={mockEmotionSnapshot(people)} elapsed={elapsed} />
-                </div>
-              )}
+              {panel === 'emotions' &&
+                (realEmotions ? (
+                  <LiveEmotionPanel key={meeting.id} {...emotions} />
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <p
+                      role="note"
+                      className="rounded-md border border-signal/50 bg-signal/10 px-3 py-2 text-xs"
+                    >
+                      {EMOTIONS_MOCK_NOTICE}
+                    </p>
+                    <EmotionPanel participants={mockEmotionSnapshot(people)} elapsed={elapsed} />
+                  </div>
+                ))}
               {panel === 'chat' && (
                 <ChatPanel
-                  messages={chat.chatMessages.map((m) => ({
+                  messages={roomChat.messages.map((m) => ({
                     id: m.id,
-                    author: m.from?.isLocal ? 'Вы' : (m.from?.name ?? 'Участник'),
-                    text: m.message,
-                    at: clock(m.timestamp),
+                    author: m.from === selfIdentity ? 'Вы' : m.name,
+                    text: m.text,
+                    at: clock(m.at),
                   }))}
                   onSend={(text) => {
                     setChatError(false);
@@ -331,12 +393,22 @@ export function RoomShell({
         cameraOn={isCameraEnabled}
         consent={consent.consent}
         panel={panel}
-        devices={<DevicesMenu />}
+        devicesPanel={<DevicesPanel />}
+        reactions={{
+          onPick: (emoji) => void reactions.send(emoji),
+          blockedUntil: reactions.blockedUntil,
+          tooFrequent: reactions.tooFrequent,
+        }}
         onToggleMic={() => void toggle('mic')}
         onToggleCamera={() => void toggle('camera')}
         onToggleConsent={() => void consent.toggle()}
+        unreadChat={notifications.unread}
         onTogglePanel={(tab) => setPanel((current) => (current === tab ? null : tab))}
-        onLeave={() => void room.disconnect()}
+        onLeave={() => {
+          // явный выход: история чата и состояние устройств этой вкладки больше не нужны
+          clearRoomState(meeting.id);
+          void room.disconnect();
+        }}
         onEnd={isOrganizer ? () => ask({ kind: 'end' }) : undefined}
       />
     </>

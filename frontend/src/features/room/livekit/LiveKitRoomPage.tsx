@@ -3,14 +3,16 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { guestErrorMessage, meetingErrorMessage } from '@/features/meetings/errors';
+import { joinOrganizer } from '@/features/meetings/join-organizer';
 import { meetingsApi } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
-import { paths } from '@/shared/config/routes';
 import type { RoomEntry } from '@/shared/lib/room-entry';
 import { Button } from '@/shared/ui/button';
 
+import { CancelLink } from '../CancelLink';
 import { RoomMessage } from '../RoomMessage';
 
+import { exitLink } from './exit-link';
 import { type LiveKitMeeting, LiveKitRoomView, type RoomConnection } from './LiveKitRoomView';
 
 /**
@@ -23,14 +25,7 @@ async function fetchConnection(meeting: LiveKitMeeting, entry: RoomEntry): Promi
   const result =
     entry.role === 'guest'
       ? await meetingsApi.rejoin()
-      : await meetingsApi.joinAsOrganizer(
-          meeting.id,
-          meeting.analysis_enabled
-            ? entry.consent === 'granted'
-              ? 'granted'
-              : 'denied'
-            : undefined,
-        );
+      : await joinOrganizer(meeting, entry.consent);
   return { url: result.livekit_url, token: result.livekit_token };
 }
 
@@ -51,7 +46,15 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
     const code = error instanceof ApiError ? error.code : '';
     const removed = code === 'participant_removed';
     const ended = code === 'meeting_ended' || code === 'meeting_cancelled';
-    const retryable = !removed && !ended && code !== 'unauthorized';
+    // встреча чужая или удалена: `not_found` (контракт не различает эти случаи) – повтор не поможет
+    const noAccess = entry.role === 'organizer' && (code === 'not_found' || code === 'forbidden');
+    const retryable = !removed && !ended && !noAccess && code !== 'unauthorized';
+    const exit = exitLink(entry);
+    const exitButton = (
+      <Button asChild variant="room">
+        <Link to={exit.to}>{exit.label}</Link>
+      </Button>
+    );
     return (
       <RoomMessage
         title={
@@ -59,12 +62,16 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
             ? 'Вас удалили из встречи'
             : ended
               ? 'Встреча завершена'
-              : 'Не удалось подключиться к встрече'
+              : noAccess
+                ? 'Встреча не найдена'
+                : 'Не удалось подключиться к встрече'
         }
         text={
-          entry.role === 'guest'
-            ? guestErrorMessage(error, 'подключиться к встрече')
-            : meetingErrorMessage(error, 'подключиться к встрече')
+          noAccess
+            ? 'Встреча не найдена или у вас нет к ней доступа.'
+            : entry.role === 'guest'
+              ? guestErrorMessage(error, 'подключиться к встрече')
+              : meetingErrorMessage(error, 'подключиться к встрече')
         }
         action={
           retryable ? (
@@ -72,21 +79,20 @@ export function LiveKitRoomPage({ meeting, entry }: { meeting: LiveKitMeeting; e
               Повторить
             </Button>
           ) : (
-            <Button asChild variant="room">
-              <Link
-                to={entry.role === 'guest' ? paths.join(entry.inviteCode ?? '') : paths.meetings}
-              >
-                {entry.role === 'guest' ? 'К приглашению' : 'К встречам'}
-              </Link>
-            </Button>
+            exitButton
           )
         }
+        secondary={retryable ? exitButton : undefined}
       />
     );
   }
   if (!query.data) {
     return (
-      <RoomMessage title="Входим во встречу…" text="Подключаемся к видеосерверу." action={null} />
+      <RoomMessage
+        title="Входим во встречу…"
+        text="Подключаемся к видеосерверу."
+        action={<CancelLink role={entry.role} />}
+      />
     );
   }
   return (

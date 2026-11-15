@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MEETING_ERROR_CODES, meetingsApi } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
 import { getParticipantToken } from '@/shared/lib/participant-session';
-import { mockNoSession } from '@/test/api-mocks';
+import { mockNoSession, organizer } from '@/test/api-mocks';
 import { installFakeMediaDevices } from '@/test/fake-media';
 import { renderApp } from '@/test/render';
 
@@ -453,5 +453,141 @@ describe('лобби участника', () => {
       expect(screen.getByText(/свяжитесь с организатором/)).toBeInTheDocument();
       vi.restoreAllMocks();
     });
+  });
+});
+
+describe('лобби: выход без тупика', () => {
+  beforeEach(() => void installFakeMediaDevices());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('вошедший организатор: «К встречам» на форме и на экранах-заглушках', async () => {
+    const user = userEvent.setup();
+    const router = renderApp('/j/demoactive', { user: organizer });
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+
+    // завершенная встреча (экран-заглушка), отмененная и несуществующее приглашение
+    for (const [code, title] of [
+      ['demoended2', 'Встреча завершена'],
+      ['democancel', 'Встреча отменена'],
+      ['zzzzzzzzzz', 'Приглашение не найдено'],
+    ] as const) {
+      await act(() => router.navigate(`/j/${code}`));
+      await screen.findByRole('heading', { level: 1, name: title });
+      expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+    }
+    await user.click(screen.getByRole('link', { name: 'К встречам' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/meetings'));
+  });
+
+  it('гость, пришедший по прямой ссылке: кнопки «Назад» нет', async () => {
+    renderLobby('demoactive');
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    expect(screen.queryByRole('button', { name: /Назад/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'К встречам' })).not.toBeInTheDocument();
+  });
+
+  it('гость с историей приложения: «Назад» возвращает на предыдущую страницу, в том числе с заглушки', async () => {
+    const user = userEvent.setup();
+    const router = renderLobby('demoactive');
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    await act(() => router.navigate('/j/demoended2'));
+    await screen.findByRole('heading', { level: 1, name: 'Встреча завершена' });
+
+    await user.click(screen.getByRole('button', { name: /Назад/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/j/demoactive'));
+    // вернулись на первую запись истории – дальше возвращаться некуда
+    await screen.findByRole('heading', { level: 1, name: 'Еженедельная планерка команды' });
+    expect(screen.queryByRole('button', { name: /Назад/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('лобби: повторный вход в той же вкладке не создает второго участника', () => {
+  beforeEach(() => void installFakeMediaDevices());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function enter(router: ReturnType<typeof renderLobby>, name = 'Анна') {
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('Как вас представить'), name);
+    await user.click(screen.getByRole('radio', { name: /Разрешаю анализ/ }));
+    await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/room/m-active'));
+  }
+
+  it('первый вход – POST /join; возврат на ссылку в той же вкладке – rejoin тем же участником, имя и согласие прежние', async () => {
+    const join = vi.spyOn(meetingsApi, 'joinMeeting');
+    const rejoin = vi.spyOn(meetingsApi, 'rejoin');
+    const router = renderLobby('demoactive');
+    await enter(router, 'Анна');
+    const first = (router.state.location.state as { participantId: string }).participantId;
+    expect(join).toHaveBeenCalledTimes(1);
+    expect(rejoin).not.toHaveBeenCalled();
+
+    // «вышел и снова вошел по ссылке» – та же вкладка (sessionStorage сохранился)
+    await act(() => router.navigate('/j/demoactive'));
+    await enter(router, 'Совсем другое имя');
+    expect(join).toHaveBeenCalledTimes(1);
+    expect(rejoin).toHaveBeenCalledTimes(1);
+    expect(router.state.location.state).toMatchObject({
+      participantId: first,
+      displayName: 'Анна',
+      consent: 'granted',
+    });
+    // на сервере (в моке) участников не прибавилось
+    const people = await meetingsApi.listParticipants('m-active');
+    expect(people.filter((p) => p.display_name === 'Анна')).toHaveLength(1);
+    expect(people.some((p) => p.display_name === 'Совсем другое имя')).toBe(false);
+  });
+
+  it('удаленный участник так не возвращается: экран «Вас удалили», новая запись не создается', async () => {
+    const join = vi.spyOn(meetingsApi, 'joinMeeting');
+    const router = renderLobby('demoactive');
+    await enter(router);
+    const id = (router.state.location.state as { participantId: string }).participantId;
+    await meetingsApi.removeParticipant('m-active', id);
+
+    await act(() => router.navigate('/j/demoactive'));
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('Как вас представить'), 'Анна');
+    await user.click(screen.getByRole('radio', { name: /Разрешаю анализ/ }));
+    await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+    expect(await screen.findByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
+    // текст не обещает больше, чем гарантирует контракт: блокируется токен этого устройства, а не ссылка
+    expect(
+      screen.getByText(
+        /Вернуться с этого устройства нельзя\. Если это ошибка, свяжитесь с организатором\./,
+      ),
+    ).toBeVisible();
+    expect(document.body).not.toHaveTextContent('по этой ссылке');
+    expect(join).toHaveBeenCalledTimes(1);
+  });
+
+  it('токен, неизвестный серверу (401), забывается, и вход идет обычным путем', async () => {
+    const join = vi.spyOn(meetingsApi, 'joinMeeting');
+    const router = renderLobby('demoactive');
+    await enter(router);
+    vi.spyOn(meetingsApi, 'rejoin').mockRejectedValueOnce(
+      new ApiError({ status: 401, code: 'unauthorized', message: 'x' }),
+    );
+    await act(() => router.navigate('/j/demoactive'));
+    await enter(router);
+    expect(join).toHaveBeenCalledTimes(2);
+  });
+
+  it('вход в другую встречу в той же вкладке – обычный POST /join', async () => {
+    const join = vi.spyOn(meetingsApi, 'joinMeeting');
+    const rejoin = vi.spyOn(meetingsApi, 'rejoin');
+    const router = renderLobby('demoactive');
+    await enter(router);
+    await act(() => router.navigate('/j/demonoanal'));
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('Как вас представить'), 'Анна');
+    await user.click(screen.getByRole('button', { name: 'Войти во встречу' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/room/m-noanal'));
+    expect(join).toHaveBeenCalledTimes(2);
+    expect(rejoin).not.toHaveBeenCalled();
   });
 });
