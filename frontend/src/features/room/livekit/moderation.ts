@@ -51,7 +51,7 @@ export function confirmText(action: PendingAction): {
     case 'remove':
       return {
         title: `Удалить из встречи: ${action.name}?`,
-        text: 'Участник будет отключен и не сможет вернуться по этой ссылке.',
+        text: 'Участник будет отключен и не сможет вернуться с этого устройства.',
         confirmLabel: 'Удалить из встречи',
       };
     case 'end':

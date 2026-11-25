@@ -16,6 +16,7 @@ ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 
 class MeetingSettings(DatabaseServiceSettings):
     service_name: str = "meeting-service"
+    service_token: SecretStr | None = Field(default=None, min_length=32)
 
     # Публичные ключи auth-service: access-токены организаторов сервис проверяет сам (ADR-005).
     jwks_url: str = "http://127.0.0.1:8001/api/v1/auth/.well-known/jwks.json"

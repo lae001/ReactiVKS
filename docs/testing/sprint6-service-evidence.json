@@ -1,0 +1,274 @@
+{
+  "date": "2026-11-13",
+  "frontend_base": "e943299 + рабочие изменения EMO-106",
+  "backend_origin": "7aa0892",
+  "api": [
+    {
+      "operation": "auth login",
+      "status": 200
+    },
+    {
+      "operation": "GET settings",
+      "status": 200
+    },
+    {
+      "operation": "PUT settings",
+      "status": 200
+    },
+    {
+      "operation": "settings persisted",
+      "match": true
+    },
+    {
+      "operation": "PUT settings invalid",
+      "status": 422,
+      "response_code": "validation_error"
+    },
+    {
+      "operation": "POST meeting",
+      "status": 201,
+      "response_status": "scheduled"
+    },
+    {
+      "operation": "POST organizer join",
+      "status": 200
+    },
+    {
+      "operation": "PUT consent granted",
+      "status": 200,
+      "response_consent_state": "granted",
+      "response_synced": true
+    },
+    {
+      "operation": "PUT consent revoked",
+      "status": 200,
+      "response_consent_state": "revoked",
+      "response_synced": true
+    },
+    {
+      "operation": "PUT consent granted",
+      "status": 200,
+      "response_consent_state": "granted",
+      "response_synced": true
+    },
+    {
+      "operation": "PUT consent revoked",
+      "status": 200,
+      "response_consent_state": "revoked",
+      "response_synced": true
+    },
+    {
+      "operation": "WS auth",
+      "type": "welcome",
+      "subprotocol": "vks.v1"
+    },
+    {
+      "operation": "WS subscribe",
+      "type": "subscribed",
+      "analysis": {
+        "state": "unavailable"
+      },
+      "participants": [
+        {
+          "state": "left",
+          "last": null
+        }
+      ]
+    },
+    {
+      "operation": "WS auth.refresh",
+      "type": "welcome"
+    },
+    {
+      "operation": "analytics report",
+      "status": 404,
+      "response_code": "not_found"
+    },
+    {
+      "operation": "analytics /series",
+      "status": 404,
+      "response_code": "not_found"
+    },
+    {
+      "operation": "analytics /export.csv",
+      "status": 404,
+      "response_code": "not_found"
+    },
+    {
+      "operation": "analytics /export.pdf",
+      "status": 404,
+      "response_code": "not_found"
+    },
+    {
+      "operation": "analytics /markers",
+      "status": 404,
+      "response_code": "not_found"
+    },
+    {
+      "operation": "organizer GET admin/users",
+      "status": 403,
+      "response_code": "forbidden"
+    },
+    {
+      "operation": "organizer GET admin/meetings",
+      "status": 404,
+      "response_code": "not_found"
+    },
+    {
+      "operation": "organizer GET admin/health",
+      "status": 404,
+      "response_code": "not_found"
+    },
+    {
+      "operation": "POST end",
+      "status": 200,
+      "response_status": "ended"
+    },
+    {
+      "operation": "analytics report after end",
+      "status": 404,
+      "response_code": "not_found"
+    }
+  ],
+  "browser": {
+    "browser": "156.0.8078.4",
+    "services": "real",
+    "devices": "virtual",
+    "snapshot": {
+      "analysis": {
+        "state": "unavailable"
+      },
+      "guestWithoutConsent": true
+    },
+    "organizerConsent": [
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      }
+    ],
+    "guestConsent": [
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "granted",
+        "status": 200,
+        "synced": true
+      },
+      {
+        "decision": "revoked",
+        "status": 200,
+        "synced": true
+      }
+    ],
+    "organizerToGuest": {
+      "width": 640,
+      "height": 480,
+      "presentedFrames": 5,
+      "framesDecodedBefore": 33,
+      "framesDecodedAfter": 40
+    },
+    "guestToOrganizer": {
+      "width": 640,
+      "height": 480,
+      "presentedFrames": 5,
+      "framesDecodedBefore": 38,
+      "framesDecodedAfter": 44
+    },
+    "audio": {
+      "organizer": [
+        10261,
+        15905
+      ],
+      "guest": [
+        11689,
+        17605
+      ]
+    },
+    "guestEmotionConnections": 0
+  },
+  "legacy_regression_2026_11_13": [
+    {
+      "scenario": "настоящий бэкенд: организатор создает и начинает встречу, гость входит по /j/<код>",
+      "status": "expected",
+      "attachments": {
+        "media-evidence": {
+          "organizerToGuest": {
+            "width": 640,
+            "height": 480,
+            "presentedFrames": 5,
+            "framesDecodedBefore": 12,
+            "framesDecodedAfter": 18
+          },
+          "guestToOrganizer": {
+            "width": 240,
+            "height": 180,
+            "presentedFrames": 5,
+            "framesDecodedBefore": 13,
+            "framesDecodedAfter": 19
+          },
+          "audioBefore": {
+            "organizer": 7837,
+            "guest": 11746
+          },
+          "audioAfter": {
+            "organizer": 9256,
+            "guest": 14223
+          }
+        },
+        "camera-resumed": {
+          "width": 640,
+          "height": 480,
+          "presentedFrames": 6,
+          "framesDecodedBefore": 48,
+          "framesDecodedAfter": 56
+        },
+        "organizer-camera-resumed": {
+          "width": 640,
+          "height": 480,
+          "presentedFrames": 5,
+          "framesDecodedBefore": 16,
+          "framesDecodedAfter": 24
+        }
+      }
+    },
+    {
+      "scenario": "настоящий бэкенд: «Начать сейчас» – один клик от списка до комнаты",
+      "status": "expected",
+      "attachments": {}
+    },
+    {
+      "scenario": "настоящий бэкенд: смена пароля завершает сессию, старый пароль больше не подходит",
+      "status": "expected",
+      "attachments": {}
+    },
+    {
+      "scenario": "контракт UC-4–UC-5: эмоции, отметка, reconnect, отзыв и отчёт той же встречи",
+      "status": "expected",
+      "attachments": {}
+    }
+  ]
+}

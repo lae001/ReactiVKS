@@ -3,6 +3,7 @@
 from vks_common.errors import Conflict, DependencyUnavailable, Forbidden, NotFound, Unauthorized, ValidationFailed
 
 __all__ = [
+    "AnalysisDisabled",
     "ConsentRequired",
     "InvalidAnalysisFps",
     "InvalidDisplayName",
@@ -92,6 +93,11 @@ class OrganizerBlocked(Forbidden):
 
     code = "user_blocked"
     title = "User is blocked"
+
+
+class AnalysisDisabled(Conflict):
+    code = "analysis_disabled"
+    title = "Emotion analysis is disabled"
 
 
 class ConsentRequired(Conflict):

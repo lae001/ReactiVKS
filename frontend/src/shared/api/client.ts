@@ -55,7 +55,7 @@ async function isInvalidCredentials(response: Response): Promise<boolean> {
  * разбор problem+json в ApiError. На 401 один раз обновляет сессию и повторяет запрос;
  * параллельные 401 делят одно обновление (см. refreshSession).
  */
-export async function apiFetch<T = void>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function apiResponse(path: string, options: RequestOptions = {}): Promise<Response> {
   const useAuth = options.auth !== false;
   const sentToken = useAuth ? useSessionStore.getState().accessToken : null;
   let response = await send(path, options, sentToken);
@@ -70,6 +70,12 @@ export async function apiFetch<T = void>(path: string, options: RequestOptions =
   }
 
   if (!response.ok) throw await toApiError(response);
+  return response;
+}
+
+/** JSON-ответ с той же авторизацией и обработкой ошибок, что у скачивания файлов. */
+export async function apiFetch<T = void>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await apiResponse(path, options);
   if (response.status === 204 || response.headers.get('Content-Length') === '0') {
     return undefined as T;
   }

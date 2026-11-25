@@ -25,7 +25,15 @@ function listHandler(items: AdminUser[], next: string | null = null) {
   return http.get('/api/v1/admin/users', () => HttpResponse.json({ items, next_cursor: next }));
 }
 
-beforeEach(() => vi.stubEnv('VITE_API_MODE', 'http'));
+beforeEach(() => {
+  vi.stubEnv('VITE_API_MODE', 'http');
+  server.use(
+    http.get('/api/v1/admin/meetings', () => HttpResponse.json({ items: [], next_cursor: null })),
+    http.get('/api/v1/admin/health', () =>
+      HttpResponse.json({ status: 'ok', checked_at: '2026-11-12T00:00:00Z', components: {} }),
+    ),
+  );
+});
 afterEach(() => vi.unstubAllEnvs());
 
 describe('админка: пользователи (режим http)', () => {
@@ -193,13 +201,61 @@ describe('админка: пользователи (режим http)', () => {
     expect(requested).toBe(false);
   });
 
-  it('встречи и состояние сервисов помечены как «Скоро»', async () => {
-    server.use(listHandler([]));
-    renderApp('/admin', { user: admin });
-    expect(await screen.findByRole('heading', { name: /Активные встречи/ })).toHaveTextContent(
-      'Скоро',
+  it('недоступные операции EMO-101 показывают ответ сервера и позволяют повторить', async () => {
+    server.use(
+      listHandler([]),
+      http.get('/api/v1/admin/meetings', () => problem(404, 'not_found')),
+      http.get('/api/v1/admin/health', () => problem(404, 'not_found')),
     );
-    expect(screen.getByRole('heading', { name: /Состояние сервисов/ })).toHaveTextContent('Скоро');
+    renderApp('/admin', { user: admin });
+    await waitFor(() =>
+      expect(screen.getAllByText(/Сервис пока не предоставляет/)).toHaveLength(2),
+    );
+    server.use(
+      http.get('/api/v1/admin/health', () =>
+        HttpResponse.json({
+          status: 'degraded',
+          checked_at: '2026-11-12T00:00:00Z',
+          components: { 'emotion-ml-service': { status: 'down' } },
+        }),
+      ),
+    );
+    await u().click(screen.getByText('Обновить состояние'));
+    expect(await screen.findByText('emotion-ml-service')).toBeVisible();
+    expect(screen.getByText('Недоступен')).toBeVisible();
+  });
+
+  it('встречи используют независимый курсор и фильтр, не открывают аналитику чужих встреч', async () => {
+    server.use(listHandler([]));
+    const queries: string[] = [];
+    server.use(
+      http.get('/api/v1/admin/meetings', ({ request }) => {
+        const url = new URL(request.url);
+        queries.push(url.search);
+        return HttpResponse.json({
+          items: [
+            {
+              id: url.searchParams.get('cursor') ?? 'first',
+              title: url.searchParams.has('cursor') ? 'Вторая встреча' : 'Первая встреча',
+              status: 'active',
+              online_participants: 2,
+            },
+          ],
+          next_cursor: url.searchParams.has('cursor') ? null : 'page-2',
+        });
+      }),
+    );
+    renderApp('/admin', { user: admin });
+    await screen.findByText(/Первая встреча/);
+    await u().click(screen.getByText('Ещё встречи'));
+    await screen.findByText(/Вторая встреча/);
+    expect(queries.some((q) => q.includes('cursor=page-2') && q.includes('status=active'))).toBe(
+      true,
+    );
+    expect(screen.queryByRole('link', { name: /Первая встреча/ })).toBeNull();
+    await u().selectOptions(screen.getByLabelText('Статус встреч'), 'ended');
+    await waitFor(() => expect(queries.at(-1)).toContain('status=ended'));
+    expect(queries.at(-1)).not.toContain('cursor');
   });
 });
 

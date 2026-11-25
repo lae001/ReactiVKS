@@ -1,0 +1,16 @@
+[project]
+name = "analytics-service"
+version = "0.1.0"
+description = "ReactiVKS analytics-service: ряды эмоций и отчеты"
+requires-python = ">=3.12,<3.13"
+dependencies = ["vks-common", "uvicorn[standard]==0.52.4"]
+
+[tool.uv.sources]
+vks-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/analytics_service"]

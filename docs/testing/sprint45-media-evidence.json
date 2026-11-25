@@ -1,0 +1,40 @@
+{
+  "media-evidence": {
+    "organizerToGuest": {
+      "width": 640,
+      "height": 480,
+      "presentedFrames": 6,
+      "framesDecodedBefore": 12,
+      "framesDecodedAfter": 20
+    },
+    "guestToOrganizer": {
+      "width": 640,
+      "height": 480,
+      "presentedFrames": 5,
+      "framesDecodedBefore": 15,
+      "framesDecodedAfter": 21
+    },
+    "audioBefore": {
+      "organizer": 7161,
+      "guest": 12724
+    },
+    "audioAfter": {
+      "organizer": 8661,
+      "guest": 14379
+    }
+  },
+  "camera-resumed": {
+    "width": 640,
+    "height": 480,
+    "presentedFrames": 5,
+    "framesDecodedBefore": 40,
+    "framesDecodedAfter": 46
+  },
+  "organizer-camera-resumed": {
+    "width": 640,
+    "height": 480,
+    "presentedFrames": 5,
+    "framesDecodedBefore": 17,
+    "framesDecodedAfter": 22
+  }
+}

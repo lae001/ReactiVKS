@@ -7,6 +7,8 @@ import { meetingErrorMessage } from '@/features/meetings/errors';
 import { MeetingEditForm } from '@/features/meetings/MeetingEditForm';
 import { useDeleteMeeting, useEndMeeting, useMeeting } from '@/features/meetings/queries';
 import { StartMeetingButton } from '@/features/meetings/StartMeetingButton';
+import { ReportExport } from '@/features/reports/ReportExport';
+import { RemoteReport } from '@/features/reports/RemoteReport';
 import { MeetingReport } from '@/features/reports/MeetingReport';
 import type { Meeting } from '@/shared/api/meetings';
 import { ApiError } from '@/shared/api/problem';
@@ -58,7 +60,7 @@ export function MeetingPage() {
         </h1>
         <p className="text-muted-foreground">
           {notFound
-            ? 'Возможно, ее удалили или ссылка введена с ошибкой. Вернитесь к списку встреч.'
+            ? 'Встреча не найдена или у вас нет к ней доступа. Вернитесь к списку встреч.'
             : meetingErrorMessage(query.error, 'загрузить встречу')}
         </p>
         <div className="flex gap-2">
@@ -86,7 +88,10 @@ function MeetingDetails({ meeting }: { meeting: Meeting }) {
   const remove = useDeleteMeeting(meeting.id);
   const open = meeting.status === 'active' || meeting.status === 'scheduled';
 
-  const data = meeting.status === 'ended' ? getMockReport(meeting.id) : undefined;
+  const data =
+    import.meta.env.VITE_API_MODE !== 'http' && meeting.status === 'ended'
+      ? getMockReport(meeting.id)
+      : undefined;
   const duration =
     meeting.started_at && meeting.ended_at
       ? (Date.parse(meeting.ended_at) - Date.parse(meeting.started_at)) / 1000
@@ -212,8 +217,20 @@ function MeetingDetails({ meeting }: { meeting: Meeting }) {
       </section>
 
       {meeting.status === 'ended' &&
-        (data ? (
-          <MeetingReport report={data.report} series={data.series} />
+        !meeting.analysis_enabled &&
+        import.meta.env.VITE_API_MODE === 'http' && (
+          <ReportExport meetingId={meeting.id} ended reportReady={false} />
+        )}
+      {meeting.status === 'ended' &&
+        (import.meta.env.VITE_API_MODE === 'http' && meeting.analysis_enabled ? (
+          <RemoteReport key={meeting.id} meetingId={meeting.id} />
+        ) : data ? (
+          <section className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              Демонстрационный отчёт. Серверный экспорт доступен на стенде с API.
+            </p>
+            <MeetingReport report={data.report} series={data.series} />
+          </section>
         ) : (
           <p className="max-w-prose rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
             {meeting.analysis_enabled

@@ -1,11 +1,11 @@
-import { DisconnectReason } from 'livekit-client';
+import { ConnectionError, ConnectionErrorReason, DisconnectReason } from 'livekit-client';
 
 export type RoomEnd =
   | { kind: 'left' }
   | { kind: 'removed' }
   | { kind: 'meeting_ended' }
   | { kind: 'duplicate' }
-  | { kind: 'lost' };
+  | { kind: 'lost'; /** Техническая причина для экрана и журнала дефектов */ detail?: string };
 
 /**
  * Почему мы больше не в комнате. `lost` – обрыв, после которого LiveKit не смог переподключиться:
@@ -23,12 +23,46 @@ export function describeDisconnect(reason: DisconnectReason | undefined): RoomEn
     case DisconnectReason.DUPLICATE_IDENTITY:
       return { kind: 'duplicate' };
     default:
-      return { kind: 'lost' };
+      return { kind: 'lost', detail: reason === undefined ? undefined : DisconnectReason[reason] };
   }
 }
 
+/**
+ * Ошибка подключения, вызванная отменой самой попытки («Client initiated disconnect»): LiveKit отменяет
+ * подключение, когда компонент размонтируется до его завершения. В dev-режиме так делает `StrictMode`
+ * (монтирование – размонтирование – монтирование). Это не обрыв связи, показывать экран «Соединение
+ * потеряно» не нужно: следующая попытка подключения идет своим чередом.
+ */
+export function isCancelledConnect(error: unknown): boolean {
+  return error instanceof ConnectionError && error.reason === ConnectionErrorReason.Cancelled;
+}
+
+/**
+ * Ошибка из `onError` комнаты, после которой связи нет. LiveKit передает туда не только ошибки подключения,
+ * но и отказ устройств (`NotAllowedError: Permission denied`, камера занята и т. п.): с ними встреча
+ * продолжается без камеры или микрофона, а причину показывает `onMediaDeviceFailure`. Поэтому обрывом
+ * считается только настоящая ошибка подключения, кроме отмены самой попытки.
+ */
+export function isConnectionLost(error: unknown): boolean {
+  return error instanceof ConnectionError && !isCancelledConnect(error);
+}
+
+/**
+ * Отключение, которое пришло раньше, чем комната подключилась, по инициативе клиента: это отмена
+ * попытки (см. `isCancelledConnect`), а не выход пользователя.
+ */
+export function isAbortedBeforeConnect(
+  reason: DisconnectReason | undefined,
+  wasConnected: boolean,
+): boolean {
+  return !wasConnected && reason === DisconnectReason.CLIENT_INITIATED;
+}
+
 /** Заголовок и пояснение экрана по причине выхода (кнопки – у вызывающего). */
-export function roomEndText(end: RoomEnd, meetingTitle: string): { title: string; text: string } {
+export function roomEndText(
+  end: RoomEnd,
+  meetingTitle: string,
+): { title: string; text: string; detail?: string } {
   switch (end.kind) {
     case 'left':
       return {
@@ -38,7 +72,7 @@ export function roomEndText(end: RoomEnd, meetingTitle: string): { title: string
     case 'removed':
       return {
         title: 'Вас удалили из встречи',
-        text: `Организатор удалил вас из встречи «${meetingTitle}». Вернуться по этой ссылке нельзя.`,
+        text: `Организатор удалил вас из встречи «${meetingTitle}». Вернуться с этого устройства нельзя. Если это ошибка, свяжитесь с организатором.`,
       };
     case 'meeting_ended':
       return {
@@ -54,6 +88,7 @@ export function roomEndText(end: RoomEnd, meetingTitle: string): { title: string
       return {
         title: 'Соединение потеряно',
         text: 'Связь с видеосервером оборвалась, и восстановить ее автоматически не получилось. Проверьте интернет и подключитесь снова.',
+        detail: end.detail,
       };
   }
 }

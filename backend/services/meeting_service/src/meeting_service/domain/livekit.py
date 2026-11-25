@@ -66,8 +66,12 @@ class LiveKitGateway(Protocol):
         """Адрес сигнализации, к которому подключается браузер участника."""
         ...
 
-    async def ensure_room(self, room: str) -> None:
+    async def ensure_room(self, room: str, *, analysis_fps: int | None = None) -> None:
         """Создать комнату, если ее нет (``CreateRoom`` идемпотентна по имени). ``LiveKitUnavailable`` – недоступен."""
+        ...
+
+    async def update_attributes(self, room: str, identity: str, attributes: Mapping[str, str]) -> None:
+        """Обновить атрибуты подключенного участника."""
         ...
 
     async def delete_room(self, room: str) -> None:

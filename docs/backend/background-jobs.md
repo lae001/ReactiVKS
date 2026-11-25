@@ -29,7 +29,7 @@
 | Задача | Расписание | Действие |
 |---|---|---|
 | `outbox-relay` | непрерывно | Публикация `meeting.events` |
-| `livekit-sync` | каждую секунду | Обработка `livekit_sync_queue`: `UpdateParticipant`; при ошибке `next_attempt_at = now() + min(2^attempts, 60) с`; для отзыва согласия – не реже раза в секунду. Задача удаляется при успехе или если участник вышел/встреча завершена |
+| `livekit-sync` | непрерывно | Обработка `livekit_sync_queue`: `UpdateParticipant`; при ошибке `next_attempt_at = now() + min(2^attempts, 60) с`; для отзыва согласия – не реже раза в секунду. Задача удаляется при успехе или если участник вышел/встреча завершена |
 | `reconcile-rooms` | каждые 60 с | Сверка БД с `ListRooms`: встреча `active`, а комнаты нет дольше 2 мин → `ended` (`reason = empty_timeout`); комната есть, а встреча `ended`/`cancelled` → `DeleteRoom` (страховка от потерянных вебхуков) |
 | `cancel-stale-meetings` | ежечасно | `scheduled` с `scheduled_at` старше 24 ч → `cancelled` + `meeting.cancelled` |
 | `purge-deleted-meetings` | ежедневно 03:10 | Физическое удаление встреч с `deleted_at` старше 30 дней (каскадно – участники) |

@@ -24,6 +24,21 @@ emotion-ml-service. Клиентская часть использует офи�
 
 Участники не могут менять собственные атрибуты (`canUpdateOwnMetadata = false`).
 
+## Темы данных
+
+Клиент передает данные между участниками комнаты без участия бэкенда; права (`canPublishData`) есть у всех токенов
+meeting-service.
+
+| Тема | Назначение | Формат | Доставка |
+|---|---|---|---|
+| `lk.chat` | Чат ([ADR-008](../adr/ADR-008-chat-via-livekit-data.md)) | текстовый поток LiveKit | с гарантией |
+| `vks.chat.sync` | Синхронизация истории чата при входе участника ([ADR-008](../adr/ADR-008-chat-via-livekit-data.md)) | JSON `{"v": 1, "type": "history_request"}` и `{"v": 1, "type": "history", "part", "parts", "messages": [{id, from, name, text, at}]}`; до 50 сообщений, часть ≤ ~12 КБ | с гарантией |
+| `vks.reaction` | Реакция-эмодзи участника | JSON `{"v": 1, "emoji": "👍"}`, эмодзи только из списка 👍 ❤️ 😂 😮 👏 🎉 | без гарантии (`reliable: false`) |
+
+Получатель реакции доверяет только участнику LiveKit, приславшему данные (имя берется из него, а не из тела),
+проверяет тему, версию и эмодзи по белому списку, остальное молча отбрасывает и принимает от одного участника не чаще
+одной реакции в секунду и не больше пяти за 10 секунд. Реакции не сохраняются нигде.
+
 ## Токен доступа участника
 
 ```json
@@ -44,7 +59,7 @@ emotion-ml-service. Клиентская часть использует офи�
 | Операция | Когда |
 |---|---|
 | `CreateRoom(name, empty_timeout=300, departure_timeout=20, max_participants=11)` | Первый вход организатора |
-| `CreateDispatch(room, agent_name="emotion-agent", metadata={"fps": 3})` | После создания комнаты, если анализ включен |
+| `CreateRoom(agents=[{agent_name: "emotion-agent", metadata: "{\"fps\": 3}"}])` | Диспетчеризация при создании комнаты с анализом. В `fps` передается настройка встречи |
 | `UpdateParticipant(room, identity, attributes)` | Изменение согласия |
 | `GetParticipant(room, identity)`, `MutePublishedTrack(room, identity, track_sid, muted=true)` | Модерация (выключить микрофон/камеру): все невыключенные треки вида `audio` или `video` |
 | `RemoveParticipant(room, identity)` | Модерация (удалить); повторный вход того же участника блокируется флагом в БД |

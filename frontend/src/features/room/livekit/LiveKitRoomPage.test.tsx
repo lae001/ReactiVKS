@@ -55,6 +55,8 @@ function renderPage(entry: RoomEntry) {
   );
 }
 
+beforeEach(() => vi.spyOn(meetingsApi, 'listParticipants').mockResolvedValue([]));
+
 const fail = (status: number, code: string) =>
   new ApiError({ status, code, message: code, requestId: 'r' });
 
@@ -98,7 +100,7 @@ describe('ошибки получения токена', () => {
     renderPage(guest);
     expect(await screen.findByRole('heading', { name: 'Вас удалили из встречи' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Повторить' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'К приглашению' })).toHaveAttribute('href', '/j/abc');
+    expect(screen.getByRole('link', { name: 'На главную' })).toHaveAttribute('href', '/');
   });
 
   it('401 по Participant-токену – сообщение guestErrorMessage', async () => {
@@ -124,5 +126,43 @@ describe('ошибки получения токена', () => {
     expect(await screen.findByText(/Видеосервер сейчас недоступен/)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Повторить' }));
     expect(await screen.findByTestId('conn')).toHaveTextContent('tok-ok');
+  });
+  it.each(['not_found', 'forbidden'])(
+    'организатор, чужая или удаленная встреча (%s): понятное сообщение и «К встречам» без «Повторить»',
+    async (code) => {
+      vi.spyOn(meetingsApi, 'joinAsOrganizer').mockRejectedValue(
+        fail(code === 'forbidden' ? 403 : 404, code),
+      );
+      renderPage(organizer);
+      expect(await screen.findByRole('heading', { name: 'Встреча не найдена' })).toBeVisible();
+      expect(screen.getByText('Встреча не найдена или у вас нет к ней доступа.')).toBeVisible();
+      expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+      expect(screen.queryByRole('button', { name: 'Повторить' })).not.toBeInTheDocument();
+    },
+  );
+  it('ошибка с «Повторить»: рядом выход – гостю «На главную», организатору «К встречам»', async () => {
+    vi.spyOn(meetingsApi, 'rejoin').mockRejectedValue(fail(503, 'livekit_unavailable'));
+    vi.spyOn(meetingsApi, 'joinAsOrganizer').mockRejectedValue(fail(503, 'livekit_unavailable'));
+    const { unmount } = renderPage(guest);
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'На главную' })).toHaveAttribute('href', '/');
+    unmount();
+
+    renderPage(organizer);
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'К встречам' })).toHaveAttribute('href', '/meetings');
+  });
+  it('загрузочный экран «Входим во встречу…»: «Отмена» – организатору к встречам, гостю на главную', async () => {
+    const never = new Promise<never>(() => undefined);
+    vi.spyOn(meetingsApi, 'rejoin').mockReturnValue(never);
+    vi.spyOn(meetingsApi, 'joinAsOrganizer').mockReturnValue(never);
+    const { unmount } = renderPage(guest);
+    expect(await screen.findByRole('heading', { name: 'Входим во встречу…' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Отмена' })).toHaveAttribute('href', '/');
+    unmount();
+
+    renderPage(organizer);
+    expect(await screen.findByRole('heading', { name: 'Входим во встречу…' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Отмена' })).toHaveAttribute('href', '/meetings');
   });
 });
