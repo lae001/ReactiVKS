@@ -22,7 +22,7 @@ mesh = [
 agent = [
     "livekit-agents>=1.2",
     "livekit>=1.0",
-    "aiokafka>=0.12",
+    "aiokafka[lz4]>=0.12",
     "emotion-service[mesh]",
 ]
 
