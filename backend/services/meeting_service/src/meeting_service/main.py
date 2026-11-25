@@ -10,6 +10,7 @@ import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from functools import partial
 
 import httpx
 from fastapi import FastAPI
@@ -21,6 +22,7 @@ from meeting_service.api.v1 import join, meetings, moderation, organizer_setting
 from meeting_service.consumers.ml_status import MlHeartbeat
 from meeting_service.consumers.user_events import UserEventsHandler
 from meeting_service.models import OUTBOX
+from meeting_service.services.maintenance import maintain_meetings
 from meeting_service.settings import ALEMBIC_INI, MeetingSettings
 from meeting_service.workers.livekit_sync import run_livekit_sync
 from vks_common.app import HealthRegistry, create_app, use_database
@@ -28,6 +30,7 @@ from vks_common.auth import JwksKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
 from vks_common.db import Database, create_engine_from_settings
 from vks_common.db.migrations import check_schema_is_current, load_alembic_config
+from vks_common.jobs import run_periodic
 from vks_common.kafka import (
     OUTBOX_NOTIFY,
     EventConsumer,
@@ -135,9 +138,21 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
             )
             heartbeat_task = asyncio.create_task(run_consumer(heartbeat_consumer), name="meeting-ml-heartbeat")
             heartbeat_task.add_done_callback(log_unexpected_stop)
+        maintenance_task = asyncio.create_task(
+            run_periodic(
+                database.engine,
+                "meeting-maintenance",
+                partial(maintain_meetings, database.session_factory, clock, livekit),
+                app.state.job_metrics,
+                interval=60,
+            ),
+            name="meeting-maintenance",
+        )
         try:
             yield
         finally:
+            maintenance_task.cancel()
+            await asyncio.gather(maintenance_task, return_exceptions=True)
             if heartbeat_task is not None:
                 heartbeat_task.cancel()
                 await asyncio.gather(heartbeat_task, return_exceptions=True)

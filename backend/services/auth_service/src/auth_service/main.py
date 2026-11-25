@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 
 from fastapi import FastAPI
 
@@ -18,11 +19,13 @@ from auth_service.adapters.rsa_keys import RsaKeyRing
 from auth_service.api.v1 import admin, auth, password_reset, users
 from auth_service.models import OUTBOX
 from auth_service.settings import ALEMBIC_INI, AuthSettings
+from auth_service.workers.maintenance import maintain_auth
 from vks_common.app import HealthRegistry, create_app, use_database
 from vks_common.auth import StaticKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
 from vks_common.db import Database, create_engine_from_settings
 from vks_common.db.migrations import check_schema_is_current, load_alembic_config
+from vks_common.jobs import run_periodic
 from vks_common.kafka import OUTBOX_NOTIFY, EventProducer, OutboxRelay, log_unexpected_stop, run_outbox_relay
 from vks_common.logging import get_logger
 
@@ -79,9 +82,21 @@ def create_application(settings: AuthSettings | None = None) -> FastAPI:
             relay_task.add_done_callback(log_unexpected_stop)
         else:
             _logger.warning("kafka is not configured: events stay in outbox")
+        maintenance_task = asyncio.create_task(
+            run_periodic(
+                database.engine,
+                "auth-maintenance",
+                partial(maintain_auth, database.session_factory, clock),
+                app.state.job_metrics,
+                interval=3600,
+            ),
+            name="auth-maintenance",
+        )
         try:
             yield
         finally:
+            maintenance_task.cancel()
+            await asyncio.gather(maintenance_task, return_exceptions=True)
             if relay_task is not None:
                 relay_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):

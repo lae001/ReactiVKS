@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 
 import httpx
 from fastapi import FastAPI
@@ -14,12 +15,14 @@ from analytics_service.services.projections import ProjectEvents
 from analytics_service.services.reports import BuildReports
 from analytics_service.services.series import FlushSamples
 from analytics_service.settings import ALEMBIC_INI, AnalyticsSettings
+from analytics_service.workers.maintenance import maintain_analytics
 from analytics_service.workers.reports import run_reports
 from vks_common.app import HealthRegistry, create_app, use_database
 from vks_common.auth import JwksKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
 from vks_common.db import Database, create_engine_from_settings
 from vks_common.db.migrations import check_schema_is_current, load_alembic_config
+from vks_common.jobs import run_periodic
 from vks_common.kafka import (
     OUTBOX_NOTIFY,
     EventConsumer,
@@ -77,9 +80,21 @@ def create_application(settings: AnalyticsSettings | None = None) -> FastAPI:
         ]
         for task in tasks:
             task.add_done_callback(log_unexpected_stop)
+        maintenance_task = asyncio.create_task(
+            run_periodic(
+                database.engine,
+                "analytics-maintenance",
+                partial(maintain_analytics, database.session_factory, clock, resolved.analytics_retention_days),
+                app.state.job_metrics,
+                interval=3600,
+            ),
+            name="analytics-maintenance",
+        )
         try:
             yield
         finally:
+            maintenance_task.cancel()
+            await asyncio.gather(maintenance_task, return_exceptions=True)
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)

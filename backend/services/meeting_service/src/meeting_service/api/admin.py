@@ -12,6 +12,7 @@ from meeting_service.domain.meetings import InvalidCursor, MeetingCursor, Meetin
 from meeting_service.schemas.admin import AdminHealth, AdminMeeting, AdminMeetingPage
 from meeting_service.schemas.meetings import MeetingResponse, MeetingStatusValue
 from meeting_service.services.admin import list_admin_meetings
+from meeting_service.services.maintenance import RoomCatalog
 from vks_common.auth import CurrentAdmin
 from vks_common.errors import ValidationFailed
 
@@ -50,7 +51,7 @@ async def meetings(
 
 @router.get("/health", response_model_exclude_none=True)
 async def health(admin: CurrentAdmin, request: Request, settings: Settings, clock: CurrentClock) -> AdminHealth:
-    catalog = request.app.state.livekit
+    catalog: RoomCatalog = request.app.state.livekit
     try:
         rooms = await catalog.list_rooms()
     except LiveKitUnavailable:

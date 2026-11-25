@@ -4,12 +4,13 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import insert
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from analytics_service.adapters.export import render_csv, render_pdf
 from analytics_service.domain.report_jobs import ReportView
 from analytics_service.models import PROBABILITIES, meetings, participants, series
+from analytics_service.repositories.maintenance import purge_analytics
 from analytics_service.services.exports import MeetingInProgress, ReportExports, ReportNotReady
 from vks_common.clock import FixedClock
 from vks_common.errors import NotFound, ValidationFailed
@@ -67,7 +68,7 @@ async def test_marker_permissions_bounds_and_delete(
             await exports.unmark(meeting, owner, mark.id)
 
 
-async def test_export_state_and_csv(
+async def test_export_state_csv_and_retention(
     sessions: async_sessionmaker[AsyncSession], data: tuple[FixedClock, UUID, UUID, UUID]
 ) -> None:
     clock, owner, meeting, participant = data
@@ -97,6 +98,9 @@ async def test_export_state_and_csv(
         assert "'=SUM(1)" in content.decode("utf-8-sig")
         with pytest.raises(NotFound):
             await exports.csv_rows(meeting, uuid4())
+        async with session.begin():
+            await purge_analytics(session, clock.now() + timedelta(days=366), 365)
+        assert await session.scalar(select(series.c.meeting_id).where(series.c.meeting_id == meeting)) is None
 
 
 def test_pdf_has_signature_and_russian_text() -> None:
