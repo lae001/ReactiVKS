@@ -91,3 +91,14 @@ LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=dev-secret-change-me-0123456789abcdef 
 ```bash
 docker compose -f deploy/docker-compose.dev.yml logs kafka-init   # какие топики созданы
 ```
+
+
+## Monitoring для локального полного стенда (EMO-103)
+
+Linux: `docker compose -f deploy/docker-compose.dev.yml -f deploy/docker-compose.monitoring.yml --profile monitoring up -d`.
+Prometheus — http://localhost:9090, Grafana — http://localhost:3000 (анонимный доступ только на loopback),
+kafka-exporter — 127.0.0.1:9308. Datasource и dashboard backend добавляются автоматически.
+Backend-сервисы на хосте предоставляют `/metrics`; LiveKit — :6789. Этот override предназначен для
+локального dev-стенда; production-адреса и аутентификацию мониторинга нужно настроить отдельно.
+Показатели: HTTP latency/коды ответов, результаты/длительность фоновых задач, Kafka consumer lag и LiveKit.
+Полный протокол и воспроизведение: [спринт 6](../docs/testing/sprint6-backend-status.md).

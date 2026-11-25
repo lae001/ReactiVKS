@@ -60,6 +60,13 @@ services:
       DATABASE_URL: postgresql+asyncpg://auth_svc:${AUTH_DB_PASSWORD:?}@postgres:5432/vks
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private_key
       AUTH_REGISTRATION_ENABLED: ${AUTH_REGISTRATION_ENABLED:-true}
+      AUTH_PASSWORD_RESET_ENABLED: ${AUTH_PASSWORD_RESET_ENABLED:-false}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SENDER: ${SMTP_SENDER:-noreply@localhost}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     secrets: [jwt_private_key]
     depends_on:
@@ -95,6 +102,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://meeting_svc:${MEETING_DB_PASSWORD:?}@postgres:5432/vks
       JWKS_URL: http://auth-service:8001/api/v1/auth/.well-known/jwks.json
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      AUTH_SERVICE_URL: http://auth-service:8001
+      REALTIME_SERVICE_URL: http://realtime-service:8080
+      ANALYTICS_SERVICE_URL: http://analytics-service:8003
       LIVEKIT_URL: http://host.docker.internal:7880
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?}
