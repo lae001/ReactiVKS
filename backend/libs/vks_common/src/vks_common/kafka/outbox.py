@@ -174,6 +174,11 @@ class OutboxRelay:
         """Отправить одну пачку. Возвращает, сколько записей опубликовано; ошибка Kafka – 0, записи остаются."""
         table = self._table
         async with self._sessions() as session, transaction(session):
+            locked = await session.scalar(
+                select(func.pg_try_advisory_xact_lock(func.hashtextextended(f"{table.schema}.{table.name}.relay", 0)))
+            )
+            if not locked:
+                return 0
             rows = (
                 await session.execute(
                     select(table.c.id, table.c.topic, table.c.event_key, table.c.envelope)
