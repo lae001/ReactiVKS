@@ -3,7 +3,7 @@ name = "analytics-service"
 version = "0.1.0"
 description = "ReactiVKS analytics-service: ряды эмоций и отчеты"
 requires-python = ">=3.12,<3.13"
-dependencies = ["vks-common", "uvicorn[standard]==0.52.4"]
+dependencies = ["vks-common", "uvicorn[standard]==0.52.4", "weasyprint>=62", "matplotlib>=3.9"]
 
 [tool.uv.sources]
 vks-common = { workspace = true }

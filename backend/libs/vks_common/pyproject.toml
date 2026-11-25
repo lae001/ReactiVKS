@@ -22,6 +22,7 @@ dependencies = [
     "aiokafka[lz4]==0.14.0",
     # Конверт и разбор событий – из контрактов, общих для производителя и потребителя.
     "vks-contracts",
+    "prometheus-client>=0.21",
 ]
 
 [build-system]
