@@ -27,7 +27,7 @@ extra `agent`.
 ```bash
 cd ml/emotion_service
 uv sync --extra agent
-../models/fetch_models.sh   # детектор YuNet (запуск из ml/models)
+../models/fetch_models.sh   # детекторы, сетка лица и модели эмоций из Releases (запуск из ml/models)
 export LIVEKIT_URL=ws://localhost:7880 LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret
 export ML_MODEL_CARD=../models/emotion/model_card.json
 uv run emotion-agent start
