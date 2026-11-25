@@ -18,6 +18,9 @@ class DataConfig:
     fer2013: str = "data/fer2013"
     # Каталог RAF-DB (basic) в исходной раскладке: EmoLabel/list_patition_label.txt, Image/aligned/.
     rafdb: str | None = None
+    # FER+ (Microsoft): 10 разметчиков на изображение FER-2013 – метки обучения и валидации заменяются метками FER+,
+    # добавляется тест «ferplus»; тест «fer2013» с исходными метками остается для сравнения (data.ferplus_labels).
+    ferplus: str | None = None
     # Дополнительные датасеты в раскладке <root>/<split>/<класс>/*.jpg (например, AffectNet после конвертации).
     folders: list[str] = field(default_factory=list)
     val_fraction: float = 0.1

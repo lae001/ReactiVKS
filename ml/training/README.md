@@ -38,6 +38,7 @@ uv run fer-train prepare          # кеш data/fer2013/fer2013.npz + распр
 | `uv run python scripts/eval_own.py --card ../models/emotion/model_card.json` | Оценка на своей выборке (EMO-92): по кадрам, записям и участникам; предупреждение, если людей меньше 10 |
 | `uv run python scripts/finetune_own.py [--export 1.2.0]` | Дообучение на своей выборке: перекрестная проверка по людям, проверка FER-2013, выпуск при выполнении правила принятия |
 | `uv run python scripts/analyze_probe.py` | Разбор проверки порогов речи и жестов на живой камере (`data/probe`) и подбор порога «говорит» |
+| `uv run python scripts/eval_ferplus.py runs/<a>/best.pt …` | Сравнение моделей на тестах FER-2013 (исходные метки) и FER+ (10 разметчиков) |
 
 Каталог запуска: `config.yaml` (полная конфигурация), `history.csv` (метрики по эпохам), `best.pt` (лучшая эпоха
 по `train.select_metric` на валидации), `metrics.json` (val + все тестовые наборы), `confusion_*.png`.

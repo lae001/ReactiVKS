@@ -1,0 +1,28 @@
+# FER+ + синтетические очки и борода (как ft-occlusion → v1.1.0): устойчивая модель для участников в очках и с бородой.
+# Остальное – как в ferplus.yaml.
+name: ferplus-occlusion
+seed: 42
+data:
+  fer2013: data/fer2013
+  ferplus: data/ferplus/fer2013new.csv
+  rafdb: null
+  val_fraction: 0.1
+  drop_blank: true
+  dedup: true
+model:
+  arch: efficientnet_b0
+  pretrained: true
+  input_size: 224
+  drop_rate: 0.3
+train:
+  epochs: 15
+  batch_size: 128
+  lr: 1.0e-3
+  weight_decay: 0.05
+  warmup_epochs: 1
+  label_smoothing: 0.1
+  balance: weighted_loss
+  num_workers: 4
+augment:
+  level: vks
+  occlusion: 0.25

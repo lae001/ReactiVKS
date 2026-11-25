@@ -109,6 +109,35 @@ def load_fer2013(root: str | Path) -> dict[str, ImageSet]:
     return sets
 
 
+# Столбцы голосов FER+ в порядке LABELS; презрение (contempt) – к отвращению: в 5 группах это «недовольство».
+FERPLUS_COLUMNS = ("anger", "disgust", "fear", "happiness", "sadness", "surprise", "neutral")
+FERPLUS_USAGE = {"train": "Training", "public_test": "PublicTest", "private_test": "PrivateTest"}
+
+
+def ferplus_labels(csv_path: str | Path) -> dict[str, np.ndarray]:
+    """Метки FER+ для сплитов FER-2013 (строки в том же порядке, что в fer2013.csv): класс с наибольшим числом
+    голосов; −1 – изображение исключается (ничья между классами или «не лицо / непонятно» набрало не меньше голосов).
+    Проверка выравнивания: с исходными метками совпадает 65 % изображений, при сдвиге на одну строку – 18 %."""
+    frame = pd.read_csv(csv_path)
+    votes = frame[list(FERPLUS_COLUMNS)].to_numpy(dtype=np.int64)
+    votes[:, LABELS.index("disgust")] += frame["contempt"].to_numpy(dtype=np.int64)
+    other = (frame["unknown"] + frame["NF"]).to_numpy(dtype=np.int64)
+    top, best = votes.argmax(1), votes.max(1)
+    tie = (votes == best[:, None]).sum(1) > 1
+    labels = np.where((best > other) & ~tie & (best > 0), top, -1)
+    usage = frame["Usage"].to_numpy()
+    return {name: labels[usage == value] for name, value in FERPLUS_USAGE.items()}
+
+
+def relabel(data: ImageSet, labels: np.ndarray, source: str) -> ImageSet:
+    """Новые метки для того же набора; изображения с меткой −1 исключаются."""
+    if len(labels) != len(data):
+        raise ValueError(f"FER+: {len(labels)} меток на {len(data)} изображений {data.source}")
+    keep = np.flatnonzero(labels >= 0)
+    subset = data.subset(keep)
+    return ImageSet(subset.images, labels[keep].astype(np.int64), source, subset.landmarks)
+
+
 def is_blank(images: np.ndarray, threshold: float = BLANK_STD) -> np.ndarray:
     """Однотонные изображения (в FER-2013 есть пустые кадры без лица)."""
     return images.reshape(len(images), -1).std(axis=1) < threshold
@@ -217,6 +246,13 @@ def build_splits(cfg: DataConfig, seed: int, base_dir: Path | None = None) -> Sp
         "fer2013": concat([fer["public_test"], fer["private_test"]], "fer2013/test"),
         "fer2013_private": fer["private_test"],
     }
+    if cfg.ferplus:
+        plus = ferplus_labels(resolve(cfg.ferplus))
+        fer_train = relabel(fer_train, plus["train"], "ferplus/train")
+        tests["ferplus"] = concat(
+            [relabel(fer[n], plus[n], f"ferplus/{n}") for n in ("public_test", "private_test")], "ferplus/test"
+        )
+        log.info("FER+: обучение %d изображений, тест %d", len(fer_train), len(tests["ferplus"]))
     if cfg.drop_blank:
         keep = ~is_blank(fer_train.images)
         log.info("FER-2013: исключено однотонных изображений из обучения: %d", int((~keep).sum()))

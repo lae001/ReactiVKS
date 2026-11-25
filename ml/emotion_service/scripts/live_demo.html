@@ -197,7 +197,7 @@
         <div><div class="big" id="grp-dominant">—</div><div style="color:var(--muted)">преобладающая группа</div></div>
       </div>
       <div class="bars" id="groups"></div>
-      <div class="note">Недовольство = гнев + отвращение, напряжение = грусть + страх: эти классы модель путает между собой, а на встрече они значат одно и то же (точность 5 групп на тесте – 75 % против 70 % у 7 классов).</div>
+      <div class="note">Недовольство = гнев + отвращение, напряжение = грусть + страх: эти классы модель путает между собой, а на встрече они значат одно и то же (на тесте FER+ модель v1.2: 85 % по 5 группам и по 7 классам; до FER+ – 74 % и 69 %).</div>
     </div>
     <div class="card dev-only">
       <h2>Согласие, усталость, речь</h2>
@@ -290,7 +290,7 @@
       <h2>Конвейер</h2>
       <dl class="stats">
         <dt>Модель</dt><dd id="s-model">—</dd>
-        <dt>Accuracy на тесте FER-2013</dt><dd id="s-acc">—</dd>
+        <dt id="s-acc-name">Accuracy на тесте</dt><dd id="s-acc">—</dd>
         <dt>Кадр, отправленный серверу</dt><dd id="s-frame">—</dd>
         <dt>Фактическая частота</dt><dd id="s-fps">—</dd>
         <dt>Конвейер (детекция + модель), мс</dt><dd id="s-pipe">—</dd>
@@ -320,8 +320,10 @@ for (const l of LABELS) {
 
 fetch("/info").then((r) => r.json()).then((i) => {
   $("s-model").textContent = i.model_version;
-  const acc = i.metrics?.fer2013_test_accuracy;
-  $("s-acc").textContent = acc ? (acc * 100).toFixed(1) + " %" : "—";
+  // Модели на метках FER+ – точность на тесте FER+ (10 разметчиков); старые – на исходных метках FER-2013.
+  const plus = i.metrics?.ferplus_test_accuracy, acc = plus ?? i.metrics?.fer2013_test_accuracy;
+  $("s-acc-name").textContent = plus != null ? "Accuracy на тесте FER+ (5 групп)" : "Accuracy на тесте FER-2013";
+  $("s-acc").textContent = acc ? (acc * 100).toFixed(1) + " %" + (plus != null && i.metrics.ferplus_test_groups_accuracy ? ` (${(i.metrics.ferplus_test_groups_accuracy * 100).toFixed(1)} %)` : "") : "—";
   $("s-model").textContent += i.mesh ? " + сетка лица" + (i.fusion_weight ? ` (мимика, вес ${i.fusion_weight})` : "") : "";
 });
 

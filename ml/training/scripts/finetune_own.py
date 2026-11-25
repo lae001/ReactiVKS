@@ -39,7 +39,7 @@ from fer_training.data import FaceDataset, ImageSet, build_splits
 from fer_training.train import load_checkpoint, pick_device, predict, seed_everything
 
 log = logging.getLogger("finetune_own")
-BASE_CHECKPOINT = "runs/ft-balanceweighted_loss/20261014-200816/best.pt"  # = models/emotion v1.0.0
+BASE_CHECKPOINT = "runs/ferplus/20261125-125737/best.pt"  # = models/emotion v1.2.0 (метки FER+)
 PERSON = re.compile(r"^([A-Za-z0-9_]{1,16})-")
 LEGACY_PERSON = "P01"  # записи до появления кода участника
 
@@ -142,7 +142,8 @@ def main() -> None:
     base, cfg = load_checkpoint(Path(args.checkpoint), device)
     base = base.to(device)
     splits = build_splits(cfg.data, cfg.seed, base_dir)
-    fer_train, fer_test = splits.train, splits.tests["fer2013"]
+    # Тест для проверки «не забыла»: FER+ у моделей на метках FER+, иначе исходный FER-2013.
+    fer_train, fer_test = splits.train, splits.tests.get("ferplus", splits.tests["fer2013"])
     level = cfg.augment.level
 
     # Перекрестная проверка по людям: исходная модель и дообученная на одних и тех же новых людях.

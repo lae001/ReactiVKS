@@ -7,11 +7,13 @@ eval_occlusion.py) заново строится сетка лица MediaPipe �
 устойчивой модели; закрытые зоны отключаются (BlendshapeHead.mask). Вес выбирается по accuracy на валидации,
 тест – итоговые числа. Результат дописывается в blendshape_head.json (fusion_weights) и results/fusion_occlusion.json.
 
-Запуск из ml/training:  uv run python scripts/tune_fusion_occlusion.py
+Запуск из ml/training:  uv run python scripts/tune_fusion_occlusion.py [--ferplus data/ferplus/fer2013new.csv]
+(с --ferplus валидация и тест – с метками FER+, отчет – results/fusion_occlusion_ferplus.json)
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -24,7 +26,7 @@ from emotion_service.preprocessing import to_model_batch
 from sklearn.metrics import f1_score
 
 from fer_training.config import DataConfig
-from fer_training.data import FER_SPLITS, build_splits, image_hashes, load_fer2013
+from fer_training.data import FER_SPLITS, build_splits, ferplus_labels, image_hashes, load_fer2013
 from fer_training.occlusions import occlude_set
 
 MODELS = Path(__file__).absolute().parents[2] / "models"
@@ -52,6 +54,9 @@ def score(labels: np.ndarray, probs: np.ndarray) -> dict[str, float]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ferplus", help="метки FER+ вместо исходных меток FER-2013")
+    args = parser.parse_args()
     base = OnnxEmotionClassifier(MODELS / "emotion" / "model_card.json", threads=8)
     robust = OnnxEmotionClassifier(MODELS / "emotion-robust" / "model_card.json", threads=8)
     routed = RoutedClassifier(base, robust)
@@ -63,10 +68,15 @@ def main() -> None:
     raw = np.load("data/fer2013/blendshapes.npz")
     fer = load_fer2013(Path("data/fer2013"))
     table = {h: r for sp in FER_SPLITS for h, r in zip(image_hashes(fer[sp].images), raw[sp], strict=True)}
-    val = build_splits(DataConfig(), 42, Path.cwd()).val
+    val = build_splits(DataConfig(ferplus=args.ferplus), 42, Path.cwd()).val
     test_images = np.concatenate([fer["public_test"].images, fer["private_test"].images])
     test_labels = np.concatenate([fer["public_test"].labels, fer["private_test"].labels])
     test_points = np.concatenate([fer["public_test"].landmarks, fer["private_test"].landmarks])
+    if args.ferplus:
+        plus = ferplus_labels(args.ferplus)
+        test_labels = np.concatenate([plus["public_test"], plus["private_test"]])
+        keep = test_labels >= 0
+        test_images, test_labels, test_points = test_images[keep], test_labels[keep], test_points[keep]
     splits = {"val": (val.images, val.labels, val.landmarks, 11), "test": (test_images, test_labels, test_points, 7)}
 
     def predict(images: np.ndarray, occluded: bool) -> np.ndarray:
@@ -120,7 +130,8 @@ def main() -> None:
     card["occlusion_report"] = report
     head_path.write_text(json.dumps(card, ensure_ascii=False, indent=1), "utf-8")
     Path("results").mkdir(exist_ok=True)
-    Path("results/fusion_occlusion.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), "utf-8")
+    name = "fusion_occlusion_ferplus.json" if args.ferplus else "fusion_occlusion.json"
+    Path("results", name).write_text(json.dumps(report, ensure_ascii=False, indent=2), "utf-8")
 
 
 if __name__ == "__main__":

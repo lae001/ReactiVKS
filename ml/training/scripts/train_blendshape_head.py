@@ -46,6 +46,7 @@ def score(labels: np.ndarray, probs: np.ndarray) -> dict[str, float]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--card", required=True)
+    parser.add_argument("--ferplus", help="метки FER+ (data/ferplus/fer2013new.csv) вместо исходных меток FER-2013")
     args = parser.parse_args()
     card = Path(args.card)
 
@@ -57,8 +58,8 @@ def main() -> None:
             if not np.isnan(row[0]):
                 table[digest] = row
 
-    splits = build_splits(DataConfig(), 42, Path.cwd())
-    sets = {"train": splits.train, "val": splits.val, "test": splits.tests["fer2013"]}
+    splits = build_splits(DataConfig(ferplus=args.ferplus), 42, Path.cwd())
+    sets = {"train": splits.train, "val": splits.val, "test": splits.tests["ferplus" if args.ferplus else "fer2013"]}
     feats = {name: features_for(data, table) for name, data in sets.items()}
     found = {name: ~np.isnan(f[:, 0]) for name, f in feats.items()}
     for name in sets:

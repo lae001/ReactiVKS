@@ -4,6 +4,7 @@
 |---|---|---|
 | `fer2013/raw/*.parquet` | FER-2013, исходные сплиты Training / PublicTest / PrivateTest | см. ниже |
 | `fer2013/fer2013.npz` | Кеш в каноническом виде (48×48, uint8) | `fer-train prepare` |
+| `ferplus/fer2013new.csv` | FER+ – метки 10 разметчиков для изображений FER-2013 (MIT) | `curl -L -o data/ferplus/fer2013new.csv https://raw.githubusercontent.com/microsoft/FERPlus/master/fer2013new.csv` |
 | `rafdb/` | RAF-DB basic в исходной раскладке (`EmoLabel/`, `Image/aligned/`) | по запросу авторам ([docs/ml/datasets.md](../../../docs/ml/datasets.md)) |
 
 FER-2013 – зеркало `Aaryan333/fer2013_train_publicTest_privateTest` на Hugging Face, ревизия

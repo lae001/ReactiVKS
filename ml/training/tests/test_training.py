@@ -78,3 +78,26 @@ def test_metrics() -> None:
     assert metrics["accuracy"] == 0.75 and metrics["n"] == 4
     assert metrics["confusion"][3][4] == 1
     assert ExperimentConfig().train.select_metric == "accuracy"
+
+
+def test_ferplus_labels_majority_contempt_and_exclusions(tmp_path) -> None:
+    import numpy as np
+
+    from fer_training.data import ImageSet, ferplus_labels, relabel
+
+    header = "Usage,Image name,neutral,happiness,surprise,sadness,anger,disgust,fear,contempt,unknown,NF\n"
+    rows = [
+        "Training,a.png,1,8,0,0,1,0,0,0,0,0",  # радость
+        "Training,b.png,0,0,0,0,2,1,0,3,0,0",  # презрение + отвращение (4) > гнев (2) → отвращение
+        "Training,c.png,5,5,0,0,0,0,0,0,0,0",  # ничья – исключается
+        "PublicTest,d.png,0,0,0,0,0,0,0,0,0,10",  # не лицо – исключается
+        "PrivateTest,e.png,2,0,6,0,0,0,0,0,2,0",  # удивление
+    ]
+    path = tmp_path / "fer2013new.csv"
+    path.write_text(header + "\n".join(rows) + "\n", encoding="utf-8")
+    labels = ferplus_labels(path)
+    assert labels["train"].tolist() == [3, 1, -1]
+    assert labels["public_test"].tolist() == [-1] and labels["private_test"].tolist() == [5]
+    data = ImageSet(np.zeros((3, 48, 48), np.uint8), np.array([0, 0, 0]), "fer2013/train")
+    relabeled = relabel(data, labels["train"], "ferplus/train")
+    assert len(relabeled) == 2 and relabeled.labels.tolist() == [3, 1]
