@@ -13,8 +13,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from auth_service.adapters.argon2_hasher import Argon2Hasher
+from auth_service.adapters.reset_mail import PasswordResetMailer
 from auth_service.adapters.rsa_keys import RsaKeyRing
-from auth_service.api.v1 import admin, auth, users
+from auth_service.api.v1 import admin, auth, password_reset, users
 from auth_service.models import OUTBOX
 from auth_service.settings import ALEMBIC_INI, AuthSettings
 from vks_common.app import HealthRegistry, create_app, use_database
@@ -90,7 +91,7 @@ def create_application(settings: AuthSettings | None = None) -> FastAPI:
 
     app = create_app(
         resolved,
-        routers=[auth.router, users.router, admin.router],
+        routers=[auth.router, users.router, admin.router, password_reset.router],
         lifespan=lifespan,
         title="ReactiVKS auth-service",
     )
@@ -101,6 +102,7 @@ def create_application(settings: AuthSettings | None = None) -> FastAPI:
     )
     app.state.token_signer = key_ring
     app.state.clock = clock
+    app.state.reset_mailer = PasswordResetMailer(resolved)
     # Свои токены auth-service проверяет своими же публичными ключами, без HTTP-запроса к собственному JWKS.
     use_authentication(
         app,

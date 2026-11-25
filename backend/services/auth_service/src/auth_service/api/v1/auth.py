@@ -131,8 +131,7 @@ async def read_config(settings: Settings) -> AuthConfigResponse:
     """Что включено: фронтенд по флагам прячет регистрацию и ссылку «Забыли пароль?»."""
     return AuthConfigResponse(
         registration_enabled=settings.auth_registration_enabled,
-        # Восстановление пароля – дополнительная функция, требует SMTP; пока не реализовано.
-        password_reset_enabled=False,
+        password_reset_enabled=settings.auth_password_reset_enabled,
     )
 
 
