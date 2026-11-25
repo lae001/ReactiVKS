@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field
 
-DISCLAIMER = "Результаты отражают внешнее выражение лица и носят рекомендательный характер."
+from analytics_service.domain.report import DISCLAIMER
 
 
 class ReportMeeting(BaseModel):

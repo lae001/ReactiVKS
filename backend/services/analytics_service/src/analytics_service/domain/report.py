@@ -9,6 +9,8 @@ from uuid import UUID
 
 from analytics_service.domain.series import PROBABILITY_COUNT, Bucket
 
+DISCLAIMER = "Результаты отражают внешнее выражение лица и носят рекомендательный характер."
+
 _NEGATIVE = (0, 1, 2, 4)
 
 
