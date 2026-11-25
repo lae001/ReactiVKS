@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from socket import gethostname
 
 from pydantic import Field, SecretStr
 
@@ -16,6 +17,7 @@ ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 
 class MeetingSettings(DatabaseServiceSettings):
     service_name: str = "meeting-service"
+    instance: str = Field(default_factory=gethostname, min_length=1)
     service_token: SecretStr | None = Field(default=None, min_length=32)
 
     # Публичные ключи auth-service: access-токены организаторов сервис проверяет сам (ADR-005).
@@ -42,6 +44,10 @@ class MeetingSettings(DatabaseServiceSettings):
     kafka_bootstrap_servers: str | None = None
     # Как часто релей outbox проверяет таблицу без сигнала о новой транзакции.
     outbox_poll_interval_seconds: float = Field(default=1.0, gt=0)
+
+    auth_service_url: str = "http://127.0.0.1:8001"
+    realtime_service_url: str = "http://127.0.0.1:8080"
+    analytics_service_url: str = "http://127.0.0.1:8003"
 
     def invite_url(self, invite_code: str) -> str:
         return f"{self.public_base_url.rstrip('/')}/j/{invite_code}"

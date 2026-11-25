@@ -156,6 +156,10 @@ class LiveKitServerGateway:
         )
         return token.to_jwt()
 
+    async def list_rooms(self) -> Mapping[str, int]:
+        response = await self._call("ListRooms", lambda: self._api.room.list_rooms(api.ListRoomsRequest()))
+        return {room.name: room.num_participants for room in response.rooms}
+
     async def check(self) -> None:
         """Проверка для ``/ready``: Server API отвечает на ``ListRooms``."""
         await self._api.room.list_rooms(api.ListRoomsRequest())

@@ -16,8 +16,9 @@ from fastapi import FastAPI
 
 from meeting_service.adapters.livekit_server import LiveKitServerGateway
 from meeting_service.adapters.livekit_webhooks import LiveKitWebhookVerifier
-from meeting_service.api import internal, webhooks
+from meeting_service.api import admin, internal, webhooks
 from meeting_service.api.v1 import join, meetings, moderation, organizer_settings, participants
+from meeting_service.consumers.ml_status import MlHeartbeat
 from meeting_service.consumers.user_events import UserEventsHandler
 from meeting_service.models import OUTBOX
 from meeting_service.settings import ALEMBIC_INI, MeetingSettings
@@ -121,9 +122,25 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
             _logger.warning("kafka is not configured: events stay in outbox")
         for task in tasks:
             task.add_done_callback(log_unexpected_stop)
+        heartbeat_task = None
+        if producer is not None:
+            heartbeat_consumer = EventConsumer(
+                bootstrap_servers=resolved.kafka_bootstrap_servers or "",
+                topics=[Topic.ML_STATUS],
+                group_id=f"meeting-health-{resolved.instance}",
+                client_id=resolved.service_name,
+                handler=app.state.ml_heartbeat.execute,
+                dead_letters=producer,
+                clock=clock,
+            )
+            heartbeat_task = asyncio.create_task(run_consumer(heartbeat_consumer), name="meeting-ml-heartbeat")
+            heartbeat_task.add_done_callback(log_unexpected_stop)
         try:
             yield
         finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                await asyncio.gather(heartbeat_task, return_exceptions=True)
             for task in tasks:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -136,6 +153,7 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
     app = create_app(
         resolved,
         routers=[
+            admin.router,
             meetings.router,
             moderation.router,
             join.router,
@@ -148,6 +166,8 @@ def create_application(settings: MeetingSettings | None = None) -> FastAPI:
         title="ReactiVKS meeting-service",
     )
     app.state.clock = clock
+    app.state.health_client = jwks_client
+    app.state.ml_heartbeat = MlHeartbeat()
     # Проверка подписи вебхуков локальная, без сети: создается при сборке, а не в lifespan.
     app.state.webhook_verifier = LiveKitWebhookVerifier(
         api_key=resolved.livekit_api_key, api_secret=resolved.livekit_api_secret.get_secret_value()
