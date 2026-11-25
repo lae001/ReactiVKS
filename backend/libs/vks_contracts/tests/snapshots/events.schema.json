@@ -109,6 +109,275 @@
     "emotion.sample.v1": {
       "payload": {
         "$defs": {
+          "Attention": {
+            "description": "Внимание участника по позе головы, взгляду и времени (не эмоция): engaged – смотрит в камеру ≈ 5 с,\ndistracted – отвернулся, отвел взгляд или вышел из кадра ≈ 2,5 с (ml/emotion_service/.../attention.py).",
+            "properties": {
+              "gaze_x": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Положение радужки в глазу: −1 … 1, 0 – по центру",
+                "title": "Gaze X"
+              },
+              "interest": {
+                "description": "Заинтересованность; отвлеченность = 1 − interest",
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Interest",
+                "type": "number"
+              },
+              "looking": {
+                "description": "Голова и взгляд направлены в камеру на этом кадре",
+                "title": "Looking",
+                "type": "boolean"
+              },
+              "pitch_deg": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Pitch Deg"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "mesh",
+                      "landmarks5"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source"
+              },
+              "state": {
+                "enum": [
+                  "engaged",
+                  "attentive",
+                  "distracted"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "yaw_deg": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Yaw Deg"
+              }
+            },
+            "required": [
+              "state",
+              "interest",
+              "looking"
+            ],
+            "title": "Attention",
+            "type": "object"
+          },
+          "Behavior": {
+            "description": "Поведенческие сигналы по сетке лица (не эмоции): кивки и покачивания головой, усталость (ADR-013).",
+            "properties": {
+              "agreement": {
+                "description": "Кивает / качает головой / нет жеста",
+                "enum": [
+                  "agree",
+                  "disagree",
+                  "none"
+                ],
+                "title": "Agreement",
+                "type": "string"
+              },
+              "fatigue": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "alert",
+                      "tired"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "None – мало данных (< 10 с)",
+                "title": "Fatigue"
+              },
+              "fatigue_score": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Fatigue Score"
+              },
+              "mic_on": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Микрофон включен (LiveKit); None – неизвестно",
+                "title": "Mic On"
+              },
+              "mouth_activity": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Активность рта за 2 с",
+                "title": "Mouth Activity"
+              },
+              "nod_score": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Nod Score",
+                "type": "number"
+              },
+              "perclos": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Доля времени с прикрытыми глазами за 30 с",
+                "title": "Perclos"
+              },
+              "shake_score": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Shake Score",
+                "type": "number"
+              },
+              "speech": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "speaking",
+                      "silent",
+                      "side_talk"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "По движению губ и уголков рта (звук не анализируется): speaking – говорит при включенном микрофоне, side_talk – говорит при выключенном микрофоне (с кем-то в комнате), silent – молчит; None – мало кадров",
+                "title": "Speech"
+              },
+              "yawns_per_min": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Yawns Per Min"
+              }
+            },
+            "required": [
+              "agreement",
+              "nod_score",
+              "shake_score"
+            ],
+            "title": "Behavior",
+            "type": "object"
+          },
+          "EmotionGroupProbabilities": {
+            "description": "Вероятности 5 групп – суммы вероятностей их классов (сглаженные).",
+            "properties": {
+              "discontent": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Discontent",
+                "type": "number"
+              },
+              "joy": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Joy",
+                "type": "number"
+              },
+              "neutral": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Neutral",
+                "type": "number"
+              },
+              "surprise": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Surprise",
+                "type": "number"
+              },
+              "tension": {
+                "maximum": 1,
+                "minimum": 0,
+                "title": "Tension",
+                "type": "number"
+              }
+            },
+            "required": [
+              "joy",
+              "surprise",
+              "neutral",
+              "discontent",
+              "tension"
+            ],
+            "title": "EmotionGroupProbabilities",
+            "type": "object"
+          },
           "EmotionProbabilities": {
             "description": "Сглаженные вероятности 7 классов.",
             "properties": {
@@ -170,6 +439,30 @@
         },
         "description": "Отсчет распознавания по одному участнику. Без координат лица и без кадров (ADR-009).",
         "properties": {
+          "attention": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Attention"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Необязательное (без смены version); null у no_consent и camera_off"
+          },
+          "behavior": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Behavior"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Необязательное: нужна сетка лица"
+          },
           "confidence": {
             "anyOf": [
               {
@@ -205,6 +498,25 @@
             "default": null,
             "title": "Dominant"
           },
+          "dominant_group": {
+            "anyOf": [
+              {
+                "enum": [
+                  "joy",
+                  "surprise",
+                  "neutral",
+                  "discontent",
+                  "tension"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dominant Group"
+          },
           "face_box_area": {
             "anyOf": [
               {
@@ -219,6 +531,18 @@
             "default": null,
             "description": "Доля площади кадра",
             "title": "Face Box Area"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EmotionGroupProbabilities"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Необязательное: 5 групп для панели (ADR-013); есть, когда есть probs"
           },
           "meeting_id": {
             "format": "uuid",

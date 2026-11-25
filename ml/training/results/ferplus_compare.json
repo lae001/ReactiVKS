@@ -1,0 +1,66 @@
+{
+  "runs/ferplus/20261125-125737/best.pt": {
+    "fer2013": {
+      "n": 7178,
+      "accuracy": 0.6016,
+      "macro_f1": 0.5276,
+      "groups_accuracy": 0.6489,
+      "recall": {
+        "angry": 0.466,
+        "disgust": 0.396,
+        "fear": 0.11,
+        "happy": 0.901,
+        "sad": 0.358,
+        "surprise": 0.785,
+        "neutral": 0.826
+      }
+    },
+    "ferplus": {
+      "n": 6778,
+      "accuracy": 0.8461,
+      "macro_f1": 0.7545,
+      "groups_accuracy": 0.8538,
+      "recall": {
+        "angry": 0.803,
+        "disgust": 0.492,
+        "fear": 0.545,
+        "happy": 0.944,
+        "sad": 0.705,
+        "surprise": 0.872,
+        "neutral": 0.862
+      }
+    }
+  },
+  "runs/ferplus-occlusion/20261125-131843/best.pt": {
+    "fer2013": {
+      "n": 7178,
+      "accuracy": 0.6046,
+      "macro_f1": 0.5246,
+      "groups_accuracy": 0.6552,
+      "recall": {
+        "angry": 0.465,
+        "disgust": 0.333,
+        "fear": 0.116,
+        "happy": 0.897,
+        "sad": 0.374,
+        "surprise": 0.8,
+        "neutral": 0.824
+      }
+    },
+    "ferplus": {
+      "n": 6778,
+      "accuracy": 0.846,
+      "macro_f1": 0.7494,
+      "groups_accuracy": 0.8538,
+      "recall": {
+        "angry": 0.796,
+        "disgust": 0.434,
+        "fear": 0.552,
+        "happy": 0.937,
+        "sad": 0.733,
+        "surprise": 0.893,
+        "neutral": 0.854
+      }
+    }
+  }
+}

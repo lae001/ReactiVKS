@@ -1,0 +1,20 @@
+# Данные, веса и результаты запусков в git не попадают (docs/ml/datasets.md, «Ограничения использования»).
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+training/data/*
+!training/data/README.md
+training/runs/
+training/logs/
+
+# Модели скачиваются скриптом fetch_models.sh / публикуются в GitHub Releases; в git – только карточки.
+models/**/*.onnx
+models/**/*.tflite
+models/**/latency.json
+models/**/*.task
+training/data/own/

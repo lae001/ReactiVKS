@@ -21,10 +21,15 @@
 | AffectNet | ≈ 280 тыс. (8 классов), цветные | Класс `contempt` исключается; сильный дисбаланс | Обучение (по доступности); валидация 7 классов |
 | Собственная выборка | 3–5 ч записей встреч команды (с согласия) | Условия ВКС: сжатие, освещение, ракурсы | Только тест (и, возможно, калибровка) |
 
-- Все изображения приводятся к единому препроцессингу **того же кода**, что и в сервисе (детекция YuNet → выравнивание →
-  кроп 224×224, RGB; для FER-2013 – повторение канала). Код препроцессинга вынесен в общий модуль
-  `ml/emotion_service/src/emotion_service/preprocessing.py` и используется обучением, чтобы исключить расхождение
+- Все изображения приводятся к единому препроцессингу **того же кода**, что и в сервисе: каноническое лицо – кроп
+  **48×48 в оттенках серого**, вырезанный по рамке YuNet (`yunet-crop-gray48-v2`, параметры кропа откалиброваны – [experiments.md](../../ml/training/experiments.md#7-путь-агента-калибровка-кропа-и-мимика-сетки-лица)). Это родной формат FER-2013
+  (основной датасет и тест целевой метрики), поэтому кадр ВКС приводится к виду обучающих изображений, а не
+  наоборот; RAF-DB и AffectNet уменьшаются до того же вида. Увеличение до входа сети (например, 224×224),
+  повтор канала и нормализация ImageNet встроены в модель и экспортируются в ONNX. Код препроцессинга – общий модуль
+  `ml/emotion_service/src/emotion_service/preprocessing.py`, обучение импортирует его, чтобы исключить расхождение
   «обучение ↔ инференс».
+- Обучающая часть FER-2013 очищается (EDA, EMO-6): однотонные кадры без лица, копии тестовых изображений (утечка)
+  и копии с противоречивыми метками – см. [experiments.md](../../ml/training/experiments.md#3-разбиение-данных-emo-27).
 - Дисбаланс классов (особенно `disgust`) – взвешенная функция потерь или сэмплер.
 - Разметка собственной выборки – 3 разметчика (команда), итоговая метка большинством, кадры с разногласием
   исключаются. Кадры собственной выборки хранятся только локально у команды и не публикуются.
@@ -56,21 +61,29 @@ JPEG/WebP-компрессия с низким качеством (имитац�
 1. `fer-train export --checkpoint … --opset 17` → `emotion-<arch>-v<N>.onnx`.
 2. Проверка эквивалентности PyTorch ↔ ONNX Runtime (макс. отклонение вероятностей < 1e-3 на 500 изображениях).
 3. Опционально – динамическая INT8-квантизация; принимается, если accuracy падает ≤ 1 п. п.
-4. `fer-train evaluate` – отчет: accuracy, macro-F1, матрица ошибок, время инференса (CPU/GPU).
+4. `fer-train bench` – время инференса на CPU; качество (accuracy, macro-F1, матрицы ошибок) считает `fer-train train` по лучшей эпохе (`metrics.json`).
 5. Карточка `model_card.json`:
 
 ```json
 {
-  "name": "emotion-effnetb0",
+  "name": "emotion-efficientnetb0",
   "version": "1.0.0",
+  "model_version": "emotion-efficientnetb0@1.0.0",
+  "arch": "efficientnet_b0",
   "labels": ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"],
-  "input": {"size": [224, 224], "color": "RGB", "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]},
-  "preprocessing": "yunet-align-v1",
-  "metrics": {"fer2013_test_accuracy": 0.0, "fer2013_test_macro_f1": 0.0, "own_test_accuracy": 0.0},
-  "datasets": ["FER-2013", "RAF-DB"],
+  "input": {"name": "face", "shape": [1, 48, 48], "color": "gray", "dtype": "float32", "range": [0.0, 1.0]},
+  "output": {"name": "probs", "kind": "softmax"},
+  "preprocessing": "yunet-crop-gray48-v2",
+  "metrics": {"fer2013_test_accuracy": 0.0, "fer2013_test_macro_f1": 0.0, "fer2013_private_accuracy": 0.0,
+              "own_test_accuracy": null},
+  "onnx": {"file": "emotion-efficientnetb0-v1.0.0.onnx", "sha256": "…", "opset": 17, "max_abs_diff_vs_torch": 0.0},
+  "datasets": ["FER-2013"],
   "license_note": "Только некоммерческое учебное использование"
 }
 ```
+
+Сервис отказывается загружать модель, если порядок `labels` или `preprocessing` не совпадает с его собственными
+(`emotion_service.classifier.OnnxEmotionClassifier`).
 
 6. Веса публикуются в GitHub Releases (и зеркале); `deploy/scripts/fetch-models.sh` скачивает нужную версию.
    Версия модели попадает в каждое событие `emotion.samples` и в отчет (`reports.model_version`).

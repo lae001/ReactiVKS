@@ -1,5 +1,5 @@
 # Система целиком в контейнерах (EMO-71; 06-deployment.md, раздел 6.4): nginx со статикой SPA, auth- и
-# meeting-service, PostgreSQL, Redis, Kafka, LiveKit. Секреты – deploy/.env (шаблон – .env.example) и
+# meeting-service, emotion-ml-service, PostgreSQL, Redis, Kafka, LiveKit. Секреты – deploy/.env (шаблон – .env.example) и
 # deploy/secrets/jwt-private.pem.
 #
 #   cp deploy/.env.example deploy/.env      # заполнить пароли и ключи
@@ -165,6 +165,36 @@ services:
     healthcheck:
       <<: *ready
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/ready', timeout=2)"]
+
+  # Анализ эмоций (ADR-007): агент LiveKit, отсчеты – в Kafka. Модели монтируются из ml/models (ml/models/README).
+  emotion-ml-service:
+    <<: *backend
+    build:
+      context: ..
+      dockerfile: ml/emotion_service/Dockerfile
+    image: vks/emotion-ml-service
+    environment:
+      LIVEKIT_URL: ws://host.docker.internal:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?}
+      ML_KAFKA_BOOTSTRAP: kafka:9092
+      ML_TARGET_FPS: ${ML_TARGET_FPS:-3}
+      ML_ONNX_THREADS: ${ML_ONNX_THREADS:-4}
+      ML_FACE_WORKERS: ${ML_FACE_WORKERS:-4}
+      ML_IDLE_PROCESSES: ${ML_IDLE_PROCESSES:-1}
+      # Нагрузочный замер (docs/ml/load-test.md): анализ – основная нагрузка узла, порог занятости выше умолчания.
+      ML_LOAD_THRESHOLD: ${ML_LOAD_THRESHOLD:-0.85}
+    volumes:
+      - ../ml/models:/models:ro
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   # Миграции выполняет роль сервиса, а не суперпользователь (database.md): однократно перед стартом сервиса.
   migrate-auth:

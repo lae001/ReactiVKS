@@ -1,0 +1,27 @@
+# EMO-61 (в отчете спринта 4 – EMO-57): дообучение выбранной архитектуры – балансировка классов и подбор
+# гиперпараметров. Архитектура задается при запуске (model.arch=…), сетка – в fer-train sweep --grid.
+# При получении RAF-DB: data.rafdb=data/rafdb (сплит test RAF-DB добавится в отчет отдельным набором).
+name: ft
+seed: 42
+data:
+  fer2013: data/fer2013
+  rafdb: null
+  val_fraction: 0.1
+  drop_blank: true
+  dedup: true
+model:
+  arch: resnet18
+  pretrained: true
+  input_size: 224
+  drop_rate: 0.3
+train:
+  epochs: 15
+  batch_size: 128
+  lr: 5.0e-4
+  weight_decay: 0.05
+  warmup_epochs: 1
+  label_smoothing: 0.1
+  balance: none
+  num_workers: 4
+augment:
+  level: vks

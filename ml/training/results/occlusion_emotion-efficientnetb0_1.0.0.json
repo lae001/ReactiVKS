@@ -1,0 +1,142 @@
+{
+  "clean": {
+    "n": 7178,
+    "accuracy": 0.6882,
+    "macro_f1": 0.6678,
+    "recall": {
+      "angry": 0.646,
+      "disgust": 0.658,
+      "fear": 0.517,
+      "happy": 0.888,
+      "sad": 0.553,
+      "surprise": 0.776,
+      "neutral": 0.655
+    }
+  },
+  "glasses": {
+    "n": 7178,
+    "accuracy": 0.5821,
+    "macro_f1": 0.537,
+    "recall": {
+      "angry": 0.511,
+      "disgust": 0.613,
+      "fear": 0.4,
+      "happy": 0.864,
+      "sad": 0.321,
+      "surprise": 0.751,
+      "neutral": 0.53
+    }
+  },
+  "sunglasses": {
+    "n": 7178,
+    "accuracy": 0.5676,
+    "macro_f1": 0.522,
+    "recall": {
+      "angry": 0.501,
+      "disgust": 0.505,
+      "fear": 0.315,
+      "happy": 0.883,
+      "sad": 0.331,
+      "surprise": 0.526,
+      "neutral": 0.647
+    }
+  },
+  "beard": {
+    "n": 7178,
+    "accuracy": 0.5099,
+    "macro_f1": 0.4566,
+    "recall": {
+      "angry": 0.48,
+      "disgust": 0.324,
+      "fear": 0.356,
+      "happy": 0.91,
+      "sad": 0.34,
+      "surprise": 0.381,
+      "neutral": 0.36
+    }
+  },
+  "stubble": {
+    "n": 7178,
+    "accuracy": 0.6566,
+    "macro_f1": 0.6282,
+    "recall": {
+      "angry": 0.589,
+      "disgust": 0.586,
+      "fear": 0.466,
+      "happy": 0.905,
+      "sad": 0.511,
+      "surprise": 0.767,
+      "neutral": 0.59
+    }
+  },
+  "mustache_goatee": {
+    "n": 7178,
+    "accuracy": 0.6063,
+    "macro_f1": 0.5662,
+    "recall": {
+      "angry": 0.603,
+      "disgust": 0.468,
+      "fear": 0.503,
+      "happy": 0.866,
+      "sad": 0.431,
+      "surprise": 0.631,
+      "neutral": 0.494
+    }
+  },
+  "glasses_beard": {
+    "n": 7178,
+    "accuracy": 0.4032,
+    "macro_f1": 0.3339,
+    "recall": {
+      "angry": 0.27,
+      "disgust": 0.225,
+      "fear": 0.309,
+      "happy": 0.827,
+      "sad": 0.144,
+      "surprise": 0.341,
+      "neutral": 0.295
+    }
+  },
+  "real_glasses": {
+    "n": 406,
+    "accuracy": 0.6773,
+    "macro_f1": 0.6616,
+    "recall": {
+      "angry": 0.629,
+      "disgust": 0.812,
+      "fear": 0.608,
+      "happy": 0.873,
+      "sad": 0.453,
+      "surprise": 0.694,
+      "neutral": 0.565
+    }
+  },
+  "real_beard": {
+    "n": 263,
+    "accuracy": 0.6654,
+    "macro_f1": 0.6649,
+    "recall": {
+      "angry": 0.652,
+      "disgust": 0.571,
+      "fear": 0.429,
+      "happy": 0.9,
+      "sad": 0.583,
+      "surprise": 0.8,
+      "neutral": 0.677
+    }
+  },
+  "real_none": {
+    "n": 6551,
+    "accuracy": 0.6889,
+    "macro_f1": 0.665,
+    "recall": {
+      "angry": 0.646,
+      "disgust": 0.64,
+      "fear": 0.513,
+      "happy": 0.889,
+      "sad": 0.556,
+      "surprise": 0.781,
+      "neutral": 0.657
+    }
+  }
+}

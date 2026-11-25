@@ -1,0 +1,51 @@
+{
+  "name": "emotion-efficientnetb0",
+  "version": "1.1.0",
+  "model_version": "emotion-efficientnetb0@1.1.0",
+  "arch": "efficientnet_b0",
+  "labels": [
+    "angry",
+    "disgust",
+    "fear",
+    "happy",
+    "sad",
+    "surprise",
+    "neutral"
+  ],
+  "input": {
+    "name": "face",
+    "shape": [
+      1,
+      48,
+      48
+    ],
+    "color": "gray",
+    "dtype": "float32",
+    "range": [
+      0.0,
+      1.0
+    ],
+    "note": "увеличение до входа сети и нормализация – внутри графа"
+  },
+  "output": {
+    "name": "probs",
+    "kind": "softmax"
+  },
+  "preprocessing": "yunet-crop-gray48-v2",
+  "metrics": {
+    "fer2013_test_accuracy": 0.6937865700752298,
+    "fer2013_test_macro_f1": 0.6674052611078182,
+    "fer2013_private_accuracy": 0.7027027027027027,
+    "own_test_accuracy": null
+  },
+  "onnx": {
+    "file": "emotion-efficientnetb0-v1.1.0.onnx",
+    "sha256": "8293c8efb9efda1159d0bcc5057be666c1cc13e55f1ef6ba0d9a5c2074e21938",
+    "opset": 17,
+    "max_abs_diff_vs_torch": 5.9604644775390625e-06
+  },
+  "datasets": [
+    "FER-2013"
+  ],
+  "license_note": "Только некоммерческое учебное использование (лицензии FER-2013 / RAF-DB / AffectNet)"
+}

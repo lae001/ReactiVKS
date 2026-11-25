@@ -1,0 +1,110 @@
+{
+  "none": {
+    "weight": 0.3,
+    "val": {
+      "cnn": {
+        "accuracy": 0.7088,
+        "macro_f1": 0.6914,
+        "surprise_recall": 0.776
+      },
+      "fused": {
+        "accuracy": 0.7151,
+        "macro_f1": 0.7074,
+        "surprise_recall": 0.768
+      }
+    },
+    "test": {
+      "cnn": {
+        "accuracy": 0.701,
+        "macro_f1": 0.6769,
+        "surprise_recall": 0.806
+      },
+      "fused": {
+        "accuracy": 0.7044,
+        "macro_f1": 0.6882,
+        "surprise_recall": 0.8
+      }
+    }
+  },
+  "glasses": {
+    "weight": 0.2,
+    "val": {
+      "cnn": {
+        "accuracy": 0.6616,
+        "macro_f1": 0.6315,
+        "surprise_recall": 0.756
+      },
+      "fused": {
+        "accuracy": 0.6694,
+        "macro_f1": 0.6459,
+        "surprise_recall": 0.72
+      }
+    },
+    "test": {
+      "cnn": {
+        "accuracy": 0.6638,
+        "macro_f1": 0.635,
+        "surprise_recall": 0.805
+      },
+      "fused": {
+        "accuracy": 0.6647,
+        "macro_f1": 0.637,
+        "surprise_recall": 0.774
+      }
+    }
+  },
+  "beard": {
+    "weight": 0.3,
+    "val": {
+      "cnn": {
+        "accuracy": 0.6363,
+        "macro_f1": 0.6017,
+        "surprise_recall": 0.797
+      },
+      "fused": {
+        "accuracy": 0.6386,
+        "macro_f1": 0.5979,
+        "surprise_recall": 0.789
+      }
+    },
+    "test": {
+      "cnn": {
+        "accuracy": 0.6396,
+        "macro_f1": 0.605,
+        "surprise_recall": 0.787
+      },
+      "fused": {
+        "accuracy": 0.6414,
+        "macro_f1": 0.6135,
+        "surprise_recall": 0.783
+      }
+    }
+  },
+  "glasses_beard": {
+    "weight": 0.3,
+    "val": {
+      "cnn": {
+        "accuracy": 0.5936,
+        "macro_f1": 0.5448,
+        "surprise_recall": 0.715
+      },
+      "fused": {
+        "accuracy": 0.6003,
+        "macro_f1": 0.5503,
+        "surprise_recall": 0.675
+      }
+    },
+    "test": {
+      "cnn": {
+        "accuracy": 0.597,
+        "macro_f1": 0.5547,
+        "surprise_recall": 0.75
+      },
+      "fused": {
+        "accuracy": 0.5979,
+        "macro_f1": 0.5546,
+        "surprise_recall": 0.716
+      }
+    }
+  }
+}

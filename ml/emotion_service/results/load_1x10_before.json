@@ -1,0 +1,28 @@
+{
+  "meetings": 1,
+  "participants_per_meeting": 10,
+  "target_fps": 3,
+  "seconds": 60.0,
+  "logical_cpus": 24,
+  "agent_cpu_percent": {
+    "mean": 525.0,
+    "max": 696.7
+  },
+  "agent_rss_mb_max": 1273.7,
+  "samples_per_participant_per_s": {
+    "37894726": 1.76
+  },
+  "face_ratio": {
+    "37894726": 1.0
+  },
+  "effective_fps_mean": {
+    "37894726": null
+  },
+  "delay_ms": {
+    "p50": 516.5,
+    "p95": 598.2,
+    "max": 632.3,
+    "n": 1143
+  },
+  "degraded_status_events": 11
+}

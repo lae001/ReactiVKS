@@ -212,3 +212,14 @@ def test_naive_time_is_refused() -> None:
         MeetingEnded.model_validate(
             {"meeting_id": str(MEETING_ID), "ended_at": "2026-11-20T07:00:00", "reason": "admin"}
         )
+
+
+def test_emotion_groups_cover_each_emotion_once_and_sum_to_one() -> None:
+    from vks_contracts.ml_events import EMOTION_GROUPS, EMOTIONS, EmotionProbabilities, group_probabilities
+
+    members = [emotion for group in EMOTION_GROUPS.values() for emotion in group]
+    assert sorted(members) == sorted(EMOTIONS)
+    probs = EmotionProbabilities(angry=0.1, disgust=0.05, fear=0.15, happy=0.3, sad=0.2, surprise=0.1, neutral=0.1)
+    groups = group_probabilities(probs)
+    assert groups.discontent == pytest.approx(0.15) and groups.tension == pytest.approx(0.35)
+    assert sum(groups.model_dump().values()) == pytest.approx(1.0)

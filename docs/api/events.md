@@ -87,9 +87,40 @@ realtime-service использует **отдельную группу на э�
   "dominant": "neutral",
   "confidence": 0.58,
   "face_box_area": 0.12,                 // доля площади кадра, для оценки качества (без координат)
-  "model_version": "emotion-effnetb0@1.0.0"
+  "model_version": "emotion-effnetb0@1.0.0",
+  "attention": {                         // необязательное; null у no_consent и camera_off
+    "state": "engaged",                  // engaged (заинтересован) | attentive | distracted (отвлечен)
+    "interest": 0.86,                    // 0..1; отвлеченность = 1 − interest
+    "looking": true,                     // голова повернута к камере в этом кадре
+    "yaw_deg": 4.1,                      // оценка поворота головы; null при no_face
+    "pitch": 0.57                        // положение носа между глазами и ртом (≈ 0,56 – прямо); null при no_face
+  }
 }
 ```
+
+Еще три необязательных поля (без смены `version`, [ADR-013](../adr/ADR-013-emotion-groups-and-behavior.md)):
+
+```json
+  "groups": {"joy": 0.21, "surprise": 0.08, "neutral": 0.58, "discontent": 0.04, "tension": 0.09},
+  "dominant_group": "neutral",          // 5 групп для панели: суммы вероятностей классов (EMOTION_GROUPS)
+  "behavior": {
+    "agreement": "agree",               // agree – кивает, disagree – качает головой, none
+    "nod_score": 0.62, "shake_score": 0.0,
+    "fatigue": "alert",                 // alert | tired | null (меньше 10 с данных или нет сетки лица)
+    "fatigue_score": 0.12, "perclos": 0.04, "yawns_per_min": 0.0,
+    "speech": "side_talk",              // speaking – говорит (микрофон вкл.), side_talk – говорит при выкл.
+                                        // микрофоне (с кем-то в комнате), silent – молчит; null – мало кадров
+    "mouth_activity": 0.71,             // движение губ и уголков рта за 2 с, 0–1 (речь – от 0,4)
+    "mic_on": false                     // микрофон участника по LiveKit; null – неизвестно
+  }
+```
+
+`groups` и `dominant_group` есть, когда есть `probs`; `behavior` – когда построена сетка лица. Речь определяется
+только по видео (движение рта) и признаку «микрофон включен» из LiveKit: звук сервис не получает и не анализирует.
+
+`attention` – оценка внимания по позе головы и времени (не по направлению взгляда): заинтересован – смотрит в камеру
+≈ 5 с, отвлечен – отвернулся или вышел из кадра ≈ 2,5 с. Алгоритм – `ml/emotion_service/src/emotion_service/attention.py`.
+Поле добавлено без смены `version` (необязательное), потребители, не знающие его, игнорируют.
 
 Для экономии трафика `no_consent` и `camera_off` публикуются только при смене состояния, `no_face` – не чаще 1 раза в секунду.
 Производитель ML-сервиса отправляет пакетами (`linger.ms=20`, сжатие `lz4`): задержка добавляется незначительная,

@@ -1,0 +1,56 @@
+{
+  "name": "emotion-efficientnetb0",
+  "version": "1.2.0",
+  "model_version": "emotion-efficientnetb0@1.2.0",
+  "arch": "efficientnet_b0",
+  "labels": [
+    "angry",
+    "disgust",
+    "fear",
+    "happy",
+    "sad",
+    "surprise",
+    "neutral"
+  ],
+  "input": {
+    "name": "face",
+    "shape": [
+      1,
+      48,
+      48
+    ],
+    "color": "gray",
+    "dtype": "float32",
+    "range": [
+      0.0,
+      1.0
+    ],
+    "note": "увеличение до входа сети и нормализация – внутри графа"
+  },
+  "output": {
+    "name": "probs",
+    "kind": "softmax"
+  },
+  "preprocessing": "yunet-crop-gray48-v2",
+  "metrics": {
+    "fer2013_test_accuracy": 0.6023962106436334,
+    "fer2013_test_macro_f1": 0.5243673405163091,
+    "fer2013_private_accuracy": 0.6051825020897186,
+    "own_test_accuracy": null,
+    "ferplus_test_accuracy": 0.8461,
+    "ferplus_test_macro_f1": 0.7545,
+    "ferplus_test_groups_accuracy": 0.8538
+  },
+  "onnx": {
+    "file": "emotion-efficientnetb0-v1.2.0.onnx",
+    "sha256": "f83deb9dff374986ba03718b5c07d3ff50c5744fbefec1a19fb54cfee24da215",
+    "opset": 17,
+    "max_abs_diff_vs_torch": 5.990266799926758e-06
+  },
+  "datasets": [
+    "FER-2013 (изображения)",
+    "FER+ (метки)"
+  ],
+  "license_note": "Только некоммерческое учебное использование (лицензии FER-2013 / RAF-DB / AffectNet)",
+  "labels_source": "FER+ (Microsoft, 10 разметчиков на изображение, MIT): метка – класс с наибольшим числом голосов, презрение – к отвращению; ничьи и «не лицо» исключены. fer2013_test_* – по исходным меткам FER-2013, которые расходятся с FER+ в 35 % изображений, поэтому ниже, чем у v1.0/v1.1 (experiments.md, §12)"
+}
