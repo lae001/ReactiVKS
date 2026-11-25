@@ -33,3 +33,7 @@
 2. auth-service → meeting-service (без согласия) → интеграция с LiveKit – видеовстреча работает.
 3. Kafka в compose + `vks_common.kafka` (производитель, потребитель, outbox-релей) → события и согласие в meeting-service.
 4. realtime-service → analytics-service (ряды) → отчет → экспорт.
+
+## Спринт 6
+
+Реализация, полный стенд, сквозной прогон и ограничения 5×10 — [протокол backend](../testing/sprint6-backend-status.md).
