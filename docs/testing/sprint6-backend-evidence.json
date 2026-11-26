@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-25",
+  "timezone": "Asia/Krasnoyarsk",
+  "backend_tests_passed": 496,
+  "backend_coverage_percent": 84.50068399452805,
+  "ml_unit_tests_passed": 42,
+  "browser_tests_passed": 2,
+  "browser_ml_updates": 7,
+  "ml_failure": {
+    "meetingId": "01a2121b-173f-7213-afd6-27ec9ac9a497",
+    "media": {
+      "width": 640,
+      "height": 480,
+      "presentedFrames": 5,
+      "framesDecodedBefore": 124,
+      "framesDecodedAfter": 130
+    },
+    "unavailable": true
+  },
+  "load_5x10": {
+    "date": "2026-11-25T09:39:50.615241+00:00",
+    "meetings": [
+      "01a2120f-6441-7554-8137-b54844cf2e24",
+      "01a2120f-7ee2-756e-9215-93ff808e62d3",
+      "01a2120f-be5a-7748-aab1-391f1f933e78",
+      "01a21210-19f4-75b0-abef-bf94cce2cb96",
+      "01a21210-afa3-737a-94a8-2efba4dda956"
+    ],
+    "participants": 50,
+    "seconds": 60,
+    "analyzing_samples": 990,
+    "participants_analyzed": 10,
+    "fps_per_participant": {
+      "01a2120f-6481-79d6-895e-ea326066a224": 1.6833333333333333,
+      "01a2120f-64b0-74d1-9c2d-7bfbc6b86396": 1.7166666666666666,
+      "01a2120f-64a0-7165-b452-787eac1d34c2": 1.6833333333333333,
+      "01a2120f-64c0-7c78-81f5-5f3201e83d3f": 1.5666666666666667,
+      "01a2120f-64ce-7155-ad86-85ba9f545f12": 1.65,
+      "01a2120f-64db-7cd4-8e34-876a861a4c5c": 1.6333333333333333,
+      "01a2120f-6463-7a25-8a50-d2c043e5bbf8": 1.6,
+      "01a2120f-6458-70dd-9be9-7179a68ee7cc": 1.6666666666666667,
+      "01a2120f-6473-78ff-9c99-c6d24e3501e1": 1.6333333333333333,
+      "01a2120f-6490-73ac-a169-7f241edf7b01": 1.6666666666666667
+    },
+    "websocket_updates": 69,
+    "latency_p50_s": 1.4612798690795898,
+    "latency_p95_s": 2.0573008060455322,
+    "cpu_mean_percent": 98.13833333333334,
+    "cpu_peak_percent": 99.4,
+    "reports": [
+      "ready",
+      "ready",
+      "ready",
+      "ready",
+      "ready"
+    ],
+    "reports_wait_s": 8.330369891000373
+  },
+  "load_analytics_rows": [
+    {
+      "meeting_id": "01a2120f-6441-7554-8137-b54844cf2e24",
+      "seconds_rows": 2393,
+      "participants_with_rows": 10
+    },
+    {
+      "meeting_id": "01a2120f-7ee2-756e-9215-93ff808e62d3",
+      "seconds_rows": 0,
+      "participants_with_rows": 0
+    },
+    {
+      "meeting_id": "01a2120f-be5a-7748-aab1-391f1f933e78",
+      "seconds_rows": 0,
+      "participants_with_rows": 0
+    },
+    {
+      "meeting_id": "01a21210-19f4-75b0-abef-bf94cce2cb96",
+      "seconds_rows": 0,
+      "participants_with_rows": 0
+    },
+    {
+      "meeting_id": "01a21210-afa3-737a-94a8-2efba4dda956",
+      "seconds_rows": 0,
+      "participants_with_rows": 0
+    }
+  ],
+  "monitoring_targets_up": [
+    "8001",
+    "8002",
+    "8003",
+    "8080",
+    "6789",
+    "9308"
+  ],
+  "limitations": [
+    "CPU saturation: ML samples for only 10 of 50 publishers; 5x10 ML capacity not confirmed",
+    "The generator publishes video without subscribing to other participants",
+    "One-minute local test is not a production soak test"
+  ],
+  "browser_duration_s": 22.970968
+}

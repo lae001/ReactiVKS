@@ -161,6 +161,19 @@ class MeetingRepository:
             update(MeetingRow).where(MeetingRow.id == meeting_id).values(deleted_at=now, updated_at=now)
         )
 
+    async def online_counts(self, ids: list[MeetingId]) -> dict[MeetingId, int]:
+        rows = await self._session.execute(
+            select(ParticipantRow.meeting_id, func.count())
+            .where(
+                ParticipantRow.meeting_id.in_(ids),
+                ParticipantRow.last_joined_at.is_not(None),
+                (ParticipantRow.last_left_at.is_(None) | (ParticipantRow.last_joined_at > ParticipantRow.last_left_at)),
+                ParticipantRow.is_removed.is_(False),
+            )
+            .group_by(ParticipantRow.meeting_id)
+        )
+        return {MeetingId(row[0]): row[1] for row in rows}
+
     async def overview(self, meeting: Meeting) -> MeetingOverview:
         statement = select(func.count(ParticipantRow.id)).where(ParticipantRow.meeting_id == meeting.id)
         count = (await self._session.execute(statement)).scalar_one()
@@ -168,7 +181,7 @@ class MeetingRepository:
 
     async def list_owned(
         self,
-        owner_id: UserId,
+        owner_id: UserId | None,
         query: MeetingQuery,
         *,
         limit: int,
@@ -177,11 +190,13 @@ class MeetingRepository:
         """История организатора, новые сверху. Курсор – момент и ``id`` последней выданной встречи."""
         statement = (
             select(MeetingRow, _PARTICIPANTS_COUNT, _MOMENT)
-            .where(MeetingRow.owner_id == owner_id, MeetingRow.deleted_at.is_(None), *_filters(query))
+            .where(MeetingRow.deleted_at.is_(None), *_filters(query))
             .order_by(_MOMENT.desc(), MeetingRow.id.desc())
             # Лишняя строка показывает, есть ли следующая страница, без отдельного count.
             .limit(limit + 1)
         )
+        if owner_id is not None:
+            statement = statement.where(MeetingRow.owner_id == owner_id)
         if after is not None:
             position = tuple_(literal(after.sort_key, TIMESTAMP(timezone=True)), literal(after.meeting_id, Uuid()))
             statement = statement.where(tuple_(_MOMENT, MeetingRow.id) < position)

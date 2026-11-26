@@ -23,3 +23,5 @@ webhook:
     - http://127.0.0.1:8002/webhooks/livekit
 logging:
   level: info
+
+prometheus_port: 6789

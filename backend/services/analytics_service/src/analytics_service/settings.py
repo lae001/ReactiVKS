@@ -13,4 +13,5 @@ class AnalyticsSettings(DatabaseServiceSettings):
     service_name: str = "analytics-service"
     jwks_url: str = "http://127.0.0.1:8001/api/v1/auth/.well-known/jwks.json"
     kafka_bootstrap_servers: str = "127.0.0.1:9092"
+    analytics_retention_days: int = Field(default=365, ge=1)
     report_shift_threshold: float = Field(default=0.3, gt=0, le=2)

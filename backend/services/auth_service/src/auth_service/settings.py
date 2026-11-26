@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 
 from vks_common.config import ConfigurationError, DatabaseServiceSettings
 
@@ -39,6 +39,14 @@ class AuthSettings(PasswordHashingSettings):
     auth_refresh_token_ttl_days: int = Field(default=30, ge=1, le=90)
     auth_refresh_cookie_secure: bool = True
     auth_registration_enabled: bool = True
+    auth_password_reset_enabled: bool = False
+    public_base_url: str = "http://localhost:5173"
+    reset_mail_directory: Path | None = None
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_sender: str = "noreply@localhost"
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
 
     # Брокер Kafka для user.events. Не задан – события копятся в outbox и уйдут, когда брокер появится в настройках.
     kafka_bootstrap_servers: str | None = None
@@ -50,6 +58,11 @@ class AuthSettings(PasswordHashingSettings):
         """Refresh-cookie без ``Secure`` в production ушла бы по открытому HTTP – это не настройка, а утечка."""
         if self.is_production and not self.auth_refresh_cookie_secure:
             raise ValueError("AUTH_REFRESH_COOKIE_SECURE=false запрещено при ENV=production")
+        if self.auth_password_reset_enabled:
+            if self.is_production and self.reset_mail_directory is not None:
+                raise ValueError("Local reset mail directory is forbidden in production")
+            if self.reset_mail_directory is None and not self.smtp_host:
+                raise ValueError("Password reset requires SMTP or a local mail directory")
         return self
 
     def read_private_key_pem(self) -> str:

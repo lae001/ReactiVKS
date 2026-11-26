@@ -13,7 +13,7 @@ from realtime_service.clients.meeting import MeetingClient
 from realtime_service.consumers.events import consume_events
 from realtime_service.services.live_rooms import LiveRooms
 from realtime_service.settings import RealtimeSettings
-from vks_common.app import create_app
+from vks_common.app import HealthRegistry, create_app
 from vks_common.auth import JwksKeys, TokenVerifier, use_authentication
 from vks_common.clock import SystemClock
 from vks_common.kafka import log_unexpected_stop
@@ -36,6 +36,13 @@ def create_application(settings: RealtimeSettings | None = None) -> FastAPI:
             if resolved.redis_url
             else None
         )
+        if redis is not None:
+
+            async def check_redis() -> None:
+                await redis.ping()
+
+            health: HealthRegistry = app.state.health
+            health.register("redis", check_redis, critical=False)
         async with httpx.AsyncClient(
             base_url=resolved.meeting_url,
             headers={"X-Service-Token": resolved.service_token.get_secret_value()},

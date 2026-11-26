@@ -113,6 +113,9 @@ class EventConsumer:
                 delay = min(self._retry_base_delay * 2 ** (attempt - 1), 30.0)
                 _logger.warning("event handling failed, retrying", event_type=parsed.envelope.type, attempt=attempt)
                 await asyncio.sleep(delay)
+            except (ValueError, TypeError) as error:
+                await self._send_to_dead_letters(record, reason=str(error))
+                return
             else:
                 return
 

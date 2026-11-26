@@ -78,3 +78,7 @@ backend/
     ├── auth_service/    # учетные записи, вход, JWT RS256 и JWKS
     └── meeting_service/ # встречи, участники, согласия, токены LiveKit
 ```
+
+## Спринт 6
+
+Реализация, полный стенд, сквозной прогон и ограничения 5×10 — [протокол backend](../docs/testing/sprint6-backend-status.md).

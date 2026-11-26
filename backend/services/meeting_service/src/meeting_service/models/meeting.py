@@ -37,6 +37,7 @@ class MeetingRow(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
     deleted_at: Mapped[datetime | None]
+    room_missing_since: Mapped[datetime | None]
 
     __table_args__ = (
         UniqueConstraint("invite_code"),

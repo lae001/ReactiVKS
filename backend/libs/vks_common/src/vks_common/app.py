@@ -15,11 +15,14 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, generate_latest
 
 from vks_common.config import BaseServiceSettings
 from vks_common.db.session import Database
+from vks_common.jobs import JobMetrics
 from vks_common.logging import configure_logging, get_logger
+from vks_common.metrics import RequestMetrics
 from vks_common.middleware import AccessLogMiddleware, RequestIdMiddleware
 from vks_common.problem_details import document_problem_responses, install_error_handlers
 
@@ -106,6 +109,12 @@ def create_app(
     )
     app.state.settings = settings
     app.state.health = health
+    registry = CollectorRegistry()
+    app.state.job_metrics = JobMetrics(registry)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def metrics() -> Response:
+        return Response(generate_latest(registry), headers={"Content-Type": CONTENT_TYPE_LATEST})
 
     # Порядок важен: middleware, добавленный позже, оказывается снаружи. Снаружи внутрь: request_id → журнал
     # доступа → перехват непредвиденных ошибок (его добавляет install_error_handlers) → маршруты.
@@ -114,6 +123,7 @@ def create_app(
     app.include_router(_health_router(settings, health))
     for router in routers:
         app.include_router(router)
+    app.add_middleware(RequestMetrics, registry=registry)
     app.add_middleware(AccessLogMiddleware)
     app.add_middleware(RequestIdMiddleware)
     return app
